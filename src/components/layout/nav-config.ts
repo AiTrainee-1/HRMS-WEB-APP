@@ -1,0 +1,59 @@
+import {
+  LayoutDashboard,
+  CalendarCheck,
+  Send,
+  Timer,
+  CalendarClock,
+  ClipboardCheck,
+  Wallet,
+  Clock,
+  BadgeCheck,
+  PartyPopper,
+  FileStack,
+  MessageCircle,
+  Bell,
+  UserRound,
+  Building2,
+  type LucideIcon,
+} from 'lucide-react'
+
+export interface NavItem {
+  label: string
+  href: string
+  icon: LucideIcon
+  managerOnly?: boolean
+}
+
+export interface NavGroup {
+  items: NavItem[]
+}
+
+export const navGroups: NavGroup[] = [
+  {
+    items: [
+      { label: 'Home', href: '/employee/dashboard', icon: LayoutDashboard },
+      { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck },
+      { label: 'Leave', href: '/employee/leave', icon: Send },
+      { label: 'Permission', href: '/employee/permissions', icon: Timer },
+      { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
+      { label: 'Approvals', href: '/employee/approvals', icon: ClipboardCheck, managerOnly: true },
+    ],
+  },
+  {
+    items: [
+      { label: 'Salary Slip', href: '/employee/salary', icon: Wallet },
+      { label: 'My Shift', href: '/employee/shift', icon: Clock },
+      { label: 'ID Card', href: '/employee/id-card', icon: BadgeCheck },
+      { label: 'Holidays', href: '/employee/holidays', icon: PartyPopper },
+      { label: 'Settlement', href: '/employee/settlement', icon: FileStack },
+    ],
+  },
+  {
+    items: [
+      { label: 'Chat', href: '/employee/chat', icon: MessageCircle },
+      { label: 'Alerts', href: '/employee/notifications', icon: Bell },
+      { label: 'Profile', href: '/employee/profile', icon: UserRound },
+      { label: 'Company', href: '/employee/company', icon: Building2 },
+    ],
+  },
+]
