@@ -6,7 +6,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/employee/EmptyState'
@@ -21,23 +20,35 @@ const QUICK_EMOJI = ['👍', '❤️', '😂', '🎉', '👏', '🙏']
 
 function MessageBubble({ msg, onReply, onReact, isMine }: { msg: ChatMessage; onReply: () => void; onReact: (emoji: string) => void; isMine: boolean }) {
   return (
-    <div className={cn('group flex flex-col gap-1', isMine && 'items-end')}>
+    <div className={cn('group flex min-w-0 flex-col gap-1', isMine && 'items-end')}>
       <span className="text-xs text-muted-foreground px-1">{msg.senderName}</span>
-      <div className={cn('relative max-w-[75%] rounded-lg px-3 py-2 text-sm', isMine ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-        {msg.replyTo && (
-          <div className={cn('mb-1 rounded border-l-2 px-2 py-1 text-xs opacity-80', isMine ? 'border-primary-foreground/50' : 'border-primary/50')}>
-            <p className="font-medium">{msg.replyTo.senderName}</p>
-            <p className="line-clamp-1">{msg.replyTo.text}</p>
-          </div>
-        )}
-        <p>{msg.text}</p>
-        <div className="absolute top-1 -right-16 hidden gap-1 group-hover:flex">
-          <Button variant="secondary" size="icon" className="size-7" onClick={onReply}>
+      <div className="relative flex min-w-0 max-w-[75%] items-start gap-1">
+        <div
+          className={cn(
+            'min-w-0 rounded-2xl px-3.5 py-2.5 text-sm shadow-clay-sm',
+            isMine ? 'bg-brand-gradient text-white' : 'bg-brand-blue-tint text-foreground',
+          )}
+        >
+          {msg.replyTo && (
+            <div
+              className={cn(
+                'mb-1.5 rounded-lg border-l-2 px-2 py-1 text-xs',
+                isMine ? 'border-white/60 bg-white/15' : 'border-brand-blue bg-white/70',
+              )}
+            >
+              <p className="font-semibold">{msg.replyTo.senderName}</p>
+              <p className="line-clamp-1 opacity-80">{msg.replyTo.text}</p>
+            </div>
+          )}
+          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.text}</p>
+        </div>
+        <div className="mt-1 hidden shrink-0 gap-1 group-hover:flex">
+          <Button variant="secondary" size="icon" className="size-7 rounded-full" onClick={onReply}>
             <Reply className="size-3.5" />
           </Button>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="secondary" size="icon" className="size-7">
+              <Button variant="secondary" size="icon" className="size-7 rounded-full">
                 <Smile className="size-3.5" />
               </Button>
             </PopoverTrigger>
@@ -54,14 +65,14 @@ function MessageBubble({ msg, onReply, onReact, isMine }: { msg: ChatMessage; on
         </div>
       </div>
       {msg.reactions.length > 0 && (
-        <div className="flex gap-1 px-1">
+        <div className="flex flex-wrap gap-1 px-1">
           {msg.reactions.map((r) => (
             <button
               key={r.emoji}
               onClick={() => onReact(r.emoji)}
               className={cn(
                 'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs',
-                r.reactedByMe ? 'border-primary bg-primary/10' : 'border-border bg-background',
+                r.reactedByMe ? 'border-brand-blue bg-brand-blue-tint' : 'border-border bg-background',
               )}
             >
               {r.emoji} {r.count}
@@ -79,6 +90,7 @@ function ChannelView({ channelId }: { channelId: string }) {
   const qc = useQueryClient()
   const [text, setText] = React.useState('')
   const [replyTo, setReplyTo] = React.useState<ChatMessage | null>(null)
+  const bottomRef = React.useRef<HTMLDivElement>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['chat-messages', channelId],
@@ -86,6 +98,14 @@ function ChannelView({ channelId }: { channelId: string }) {
     refetchInterval: 4000,
     refetchIntervalInBackground: false,
   })
+
+  const messages = React.useMemo(() => data ?? [], [data])
+
+  // Always land on the latest message — both on first load and as new
+  // messages arrive, matching every real chat app's default behavior.
+  React.useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages.length, channelId])
 
   const sendMutation = useMutation({
     mutationFn: () => chatApi.send(channelId, text, replyTo?.id),
@@ -109,14 +129,12 @@ function ChannelView({ channelId }: { channelId: string }) {
     sendMutation.mutate()
   }
 
-  const messages = data ?? []
-
   return (
-    <div className="flex h-[60vh] flex-col rounded-lg border bg-background">
-      <ScrollArea className="flex-1 p-4">
-        {isLoading && <Skeleton className="h-full w-full" />}
-        {!isLoading && messages.length === 0 && <EmptyState icon={MessageCircle} title="No messages yet" description="Start the conversation." />}
-        <div className="flex flex-col gap-4">
+    <div className="flex h-[70vh] min-h-0 flex-col overflow-hidden rounded-2xl border shadow-clay">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4">
+        <div className="flex min-h-full min-w-0 flex-col justify-end gap-4">
+          {isLoading && <Skeleton className="h-full w-full" />}
+          {!isLoading && messages.length === 0 && <EmptyState icon={MessageCircle} title="No messages yet" description="Start the conversation." />}
           {messages.map((m) => (
             <MessageBubble
               key={m.id}
@@ -129,19 +147,20 @@ function ChannelView({ channelId }: { channelId: string }) {
               }}
             />
           ))}
+          <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
       {replyTo && (
-        <div className="flex items-center justify-between border-t bg-muted/50 px-3 py-1.5 text-xs">
-          <span>
+        <div className="flex items-center justify-between border-t bg-brand-blue-tint px-3 py-1.5 text-xs">
+          <span className="min-w-0 truncate">
             Replying to <strong>{replyTo.senderName}</strong>: {replyTo.text.slice(0, 60)}
           </span>
-          <Button variant="ghost" size="icon" className="size-6" onClick={() => setReplyTo(null)}>
+          <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => setReplyTo(null)}>
             <X className="size-3.5" />
           </Button>
         </div>
       )}
-      <form onSubmit={handleSend} className="flex items-center gap-2 border-t p-3">
+      <form onSubmit={handleSend} className="flex items-center gap-2 border-t bg-background p-3">
         <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
         <Button type="submit" variant="gradient" size="icon" disabled={sendMutation.isPending || !text.trim()}>
           <Send className="size-4" />

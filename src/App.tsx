@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 const Login = lazy(() => import('@/pages/auth/Login'))
 const SetPassword = lazy(() => import('@/pages/auth/SetPassword'))
 const VerifyEmployee = lazy(() => import('@/pages/auth/VerifyEmployee'))
+const Deactivated = lazy(() => import('@/pages/auth/Deactivated'))
 
 const Dashboard = lazy(() => import('@/pages/employee/Dashboard'))
 const Attendance = lazy(() => import('@/pages/employee/Attendance'))
@@ -71,6 +72,7 @@ function AppRoutes() {
         <Route path="/employee-login" component={Login} />
         <Route path="/set-password" component={SetPassword} />
         <Route path="/verify/:code" component={VerifyEmployee} />
+        <Route path="/account-deactivated" component={Deactivated} />
 
         <Route path="/employee/dashboard">{() => <EmployeePage Component={Dashboard} />}</Route>
         <Route path="/employee/attendance">{() => <EmployeePage Component={Attendance} />}</Route>
