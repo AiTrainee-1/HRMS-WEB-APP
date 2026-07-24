@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   CalendarCheck,
+  MapPin,
   Send,
   Timer,
   CalendarClock,
@@ -10,6 +11,7 @@ import {
   BadgeCheck,
   PartyPopper,
   FileStack,
+  FolderOpen,
   MessageCircle,
   Bell,
   UserRound,
@@ -33,6 +35,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Home', href: '/employee/dashboard', icon: LayoutDashboard },
       { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck },
+      { label: 'Attendance Request', href: '/employee/attendance-request', icon: MapPin },
       { label: 'Leave', href: '/employee/leave', icon: Send },
       { label: 'Permission', href: '/employee/permissions', icon: Timer },
       { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
@@ -46,6 +49,7 @@ export const navGroups: NavGroup[] = [
       { label: 'ID Card', href: '/employee/id-card', icon: BadgeCheck },
       { label: 'Holidays', href: '/employee/holidays', icon: PartyPopper },
       { label: 'Settlement', href: '/employee/settlement', icon: FileStack },
+      { label: 'Documents', href: '/employee/documents', icon: FolderOpen },
     ],
   },
   {

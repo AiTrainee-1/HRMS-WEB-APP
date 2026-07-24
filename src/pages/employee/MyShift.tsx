@@ -87,6 +87,47 @@ export default function MyShift() {
         </div>
       )}
 
+      {/* Permission usage & deduction impact — every employee gets 3 free
+          lates/permissions a month (combined pool); each additional 3 beyond
+          that costs a ¼ shift. Same numbers HR sees on their Report Log. */}
+      {!isLoading && data?.deductions && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Permission Usage & Deductions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            <p className="text-xs text-muted-foreground">
+              You get 3 free lates/permissions per month (combined). Every 3 beyond that costs a
+              ¼ shift deduction from salary.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <p className="text-muted-foreground text-xs">Permissions Used</p>
+                <p className="text-xl font-bold">{data.deductions.permissionsUsed}/3</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Billable Late/Permissions</p>
+                <p className={`text-xl font-bold ${data.deductions.billableLateCount > 0 ? 'text-destructive' : ''}`}>
+                  {data.deductions.billableLateCount}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Shift Deductions</p>
+                <p className={`text-xl font-bold ${data.deductions.shiftDeductions > 0 ? 'text-destructive' : ''}`}>
+                  {data.deductions.shiftDeductions}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Salary Impact</p>
+                <p className={`text-xl font-bold ${data.deductions.salaryDeductionAmount > 0 ? 'text-destructive' : ''}`}>
+                  ₹{data.deductions.salaryDeductionAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Daily Log</CardTitle>

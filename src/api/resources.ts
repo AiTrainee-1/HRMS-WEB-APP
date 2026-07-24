@@ -7,7 +7,12 @@ import type {
   ChatChannel,
   ChatMessage,
   Employee,
+  EmployeeDocument,
   EmployeeShiftStats,
+  GeoPunchPrecheckResult,
+  GeoPunchResult,
+  GeoPunchStatus,
+  OnDutyRequestResult,
   Holiday,
   IdCardData,
   LeaveRequest,
@@ -16,7 +21,6 @@ import type {
   LoginResponse,
   ManagerFlags,
   MobileHomeSummary,
-  MyShiftSummary,
   Notification,
   PendingRequestsResponse,
   PermissionRequest,
@@ -57,8 +61,40 @@ export const attendanceApi = {
     apiRequest<AttendanceMonthResponse>({ method: 'GET', url: `/attendance/employee/${employeeId}`, params: { month, year } }),
   shiftStats: (month: number, year: number) =>
     apiRequest<EmployeeShiftStats>({ method: 'GET', url: '/attendance/employee-shift-stats', params: { month, year } }),
-  myShiftSummary: (month: number, year: number) =>
-    apiRequest<MyShiftSummary>({ method: 'GET', url: '/my-shift-summary', params: { month, year } }),
+}
+
+// ---- Geo Attendance ----
+// Two-step flow: `check` first (no photos) — auto-accepts if inside the
+// branch geofence, otherwise reports the distance without creating any
+// record. Only when the employee is genuinely outside does the UI prompt
+// for two photos and call `request`, which creates a pending approval.
+export const geoAttendanceApi = {
+  precheck: (params: { latitude: number; longitude: number }) =>
+    apiRequest<GeoPunchPrecheckResult>({ method: 'GET', url: '/attendance/geo-punch/precheck', params }),
+  punch: (body: { latitude: number; longitude: number; accuracy?: number; isMocked?: boolean }) =>
+    apiRequest<GeoPunchResult>({ method: 'POST', url: '/attendance/geo-punch', data: body }),
+  status: (date?: string) =>
+    apiRequest<GeoPunchStatus>({ method: 'GET', url: '/attendance/geo-punch/status', params: date ? { date } : undefined }),
+}
+
+export const onDutyApi = {
+  request: (body: {
+    latitude: number; longitude: number; accuracy?: number; isMocked?: boolean
+    reason: string; photo1: Blob; photo2: Blob
+  }) => {
+    const form = new FormData()
+    form.append('latitude', String(body.latitude))
+    form.append('longitude', String(body.longitude))
+    if (body.accuracy != null) form.append('accuracy', String(body.accuracy))
+    form.append('isMocked', String(!!body.isMocked))
+    form.append('reason', body.reason)
+    form.append('photo1', body.photo1, 'photo1.jpg')
+    form.append('photo2', body.photo2, 'photo2.jpg')
+    return apiRequest<OnDutyRequestResult>({
+      method: 'POST', url: '/attendance/on-duty/request', data: form,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // ---- Leave ----
@@ -112,6 +148,17 @@ export const salaryApi = {
   detail: (id: string) => apiRequest<SalarySlipDetail>({ method: 'GET', url: `/salary-slips/${id}` }),
 }
 
+// ---- Documents ----
+// Files are only ever served through the authenticated /employee-documents/:id/file
+// endpoint (backend never exposes raw media URLs — see backend/api/employee_documents_views.py),
+// so viewing/downloading needs a blob fetch (carries the Bearer token via the request
+// interceptor in client.ts) rather than a plain <a href>, which wouldn't carry it.
+export const documentsApi = {
+  list: () => apiRequest<EmployeeDocument[]>({ method: 'GET', url: '/my/documents' }),
+  fetchFile: (id: number) =>
+    apiRequest<Blob>({ method: 'GET', url: `/employee-documents/${id}/file`, responseType: 'blob' }),
+}
+
 // ---- ID Card ----
 export const idCardApi = {
   get: (employeeId: string) => apiRequest<IdCardData>({ method: 'GET', url: '/idcard', params: { employeeId } }),
@@ -154,8 +201,15 @@ export const managerApi = {
     apiRequest({ method: 'PATCH', url: `/manager/attendance-requests/${id}/status`, data: { status, comment } }),
   updateCasualLeaveStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/casual-leaves/${id}/status`, data: { status, comment } }),
+  // This endpoint alone expects { action: 'approve'|'reject' } rather than the
+  // { status: 'approved'|'rejected' } shape every other manager endpoint takes —
+  // translate here so the generic dispatch in Approvals.tsx can stay uniform.
   updateResignationAction: (id: string, status: RequestStatus, comment?: string) =>
-    apiRequest({ method: 'PATCH', url: `/manager/resignations/${id}/action`, data: { status, comment } }),
+    apiRequest({
+      method: 'PATCH',
+      url: `/manager/resignations/${id}/action`,
+      data: { action: status === 'approved' ? 'approve' : 'reject', comment },
+    }),
   updateShiftStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/shift-assignments/${id}/status`, data: { status, comment } }),
 }

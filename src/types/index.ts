@@ -105,6 +105,17 @@ export interface SalarySlip {
   emailedAt?: string | null
 }
 
+export interface EmployeeDocument {
+  id: number
+  employeeId: number
+  category: string
+  categoryLabel: string
+  originalFilename: string
+  uploadedBy: string | null
+  uploadedAt: string | null
+  fileUrl: string
+}
+
 export interface SalarySlipDetail extends SalarySlip {
   basic: number
   hra: number
@@ -170,7 +181,13 @@ export interface EmployeeShiftStats {
   totalEffectiveShifts: number
   absentDays: number
   // null until a MonthlyShiftSummary row exists for this employee/month
-  summary: { shiftDeductions: number; salaryDeductionAmount: number; billableLateCount: number } | null
+  summary: {
+    shiftDeductions: number
+    salaryDeductionAmount: number
+    billableLateCount: number
+    permissionsUsed: number
+    permissionOverageCount: number
+  } | null
   dailyLogs: ShiftDailyLog[]
 }
 
@@ -189,6 +206,15 @@ export interface MyShiftSummary {
   totalWorkingShifts: number
   absentCount: number
   dailyLogs: ShiftDailyLog[]
+  // null until a MonthlyShiftSummary row exists for this employee/month —
+  // same deduction math HR sees on the Report Log "Late Summary" tab.
+  deductions: {
+    permissionsUsed: number
+    permissionOverageCount: number
+    billableLateCount: number
+    shiftDeductions: number
+    salaryDeductionAmount: number
+  } | null
 }
 
 export interface IdCardCompany {
@@ -385,4 +411,68 @@ export interface LiveFeedItem {
   event: 'in' | 'out'
   time: string
   date: string
+}
+
+// ---- Geo Attendance (Office Geo Punch + On-Duty) ----
+
+/** Read-only status check shown BEFORE the employee commits to punching —
+ * lets the app say "You are inside/outside the allowed company radius"
+ * ahead of the actual punch action. */
+export interface GeoPunchPrecheckResult {
+  insideRadius: boolean
+  distanceM: number
+  radiusM: number
+  branchName: string
+  nextPunchNumber: number | null
+  nextPunchType: 'IN' | 'OUT' | null
+  message: string
+}
+
+export interface GeoPunchResult {
+  status: 'accepted' | 'already_recorded' | 'rejected'
+  punchNumber: number | null
+  punchType: 'IN' | 'OUT' | null
+  distanceM: number
+  radiusM?: number
+  message?: string
+  date?: string
+  time?: string
+}
+
+export interface OnDutyRequestResult {
+  status: 'pending_hod_approval'
+  requestId: number
+  punchNumber: number | null
+  punchType: 'IN' | 'OUT' | null
+}
+
+export interface GeoPunchLogEntry {
+  punchTime: string
+  punchType: 'IN' | 'OUT'
+  source: string
+  sourceLabel: string
+}
+
+export interface OnDutyRequestSummary {
+  id: number
+  punchDate: string
+  punchTime: string
+  punchType: 'IN' | 'OUT'
+  reason: string
+  status: 'pending_hod' | 'pending_hr' | 'approved' | 'rejected'
+  hodReviewedBy: string | null
+  hodReviewComment: string | null
+  hodReviewedAt: string | null
+  hrReviewedBy: string | null
+  hrReviewComment: string | null
+  hrReviewedAt: string | null
+  createdAt: string | null
+}
+
+export interface GeoPunchStatus {
+  date: string
+  punches: GeoPunchLogEntry[]
+  onDutyRequests: OnDutyRequestSummary[]
+  nextPunchNumber: number | null
+  nextPunchType: 'IN' | 'OUT' | null
 }

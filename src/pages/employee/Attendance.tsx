@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { MonthYearPicker } from '@/components/employee/MonthYearPicker'
 import { AttendanceCalendarGrid } from '@/components/employee/AttendanceCalendarGrid'
 import { DayDetailPanel } from '@/components/employee/DayDetailPanel'
+import { GeoPunchCard } from '@/components/employee/GeoPunchCard'
 import { attendanceApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
@@ -40,6 +41,8 @@ export default function Attendance() {
         icon={<CalendarCheck />}
         actions={<MonthYearPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y) }} />}
       />
+
+      <GeoPunchCard />
 
       {shiftSummary?.assignedShift && (
         <Card>

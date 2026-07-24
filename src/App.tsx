@@ -15,6 +15,7 @@ const Deactivated = lazy(() => import('@/pages/auth/Deactivated'))
 
 const Dashboard = lazy(() => import('@/pages/employee/Dashboard'))
 const Attendance = lazy(() => import('@/pages/employee/Attendance'))
+const AttendanceRequest = lazy(() => import('@/pages/employee/AttendanceRequest'))
 const Leave = lazy(() => import('@/pages/employee/Leave'))
 const Permissions = lazy(() => import('@/pages/employee/Permissions'))
 const CasualLeave = lazy(() => import('@/pages/employee/CasualLeave'))
@@ -27,6 +28,7 @@ const MyShift = lazy(() => import('@/pages/employee/MyShift'))
 const IdCard = lazy(() => import('@/pages/employee/IdCard'))
 const Holidays = lazy(() => import('@/pages/employee/Holidays'))
 const Settlement = lazy(() => import('@/pages/employee/Settlement'))
+const Documents = lazy(() => import('@/pages/employee/Documents'))
 const Chat = lazy(() => import('@/pages/employee/Chat'))
 const Resignation = lazy(() => import('@/pages/employee/Resignation'))
 const Company = lazy(() => import('@/pages/employee/Company'))
@@ -76,6 +78,7 @@ function AppRoutes() {
 
         <Route path="/employee/dashboard">{() => <EmployeePage Component={Dashboard} />}</Route>
         <Route path="/employee/attendance">{() => <EmployeePage Component={Attendance} />}</Route>
+        <Route path="/employee/attendance-request">{() => <EmployeePage Component={AttendanceRequest} />}</Route>
         <Route path="/employee/leave">{() => <EmployeePage Component={Leave} />}</Route>
         <Route path="/employee/permissions">{() => <EmployeePage Component={Permissions} />}</Route>
         <Route path="/employee/casual-leave">{() => <EmployeePage Component={CasualLeave} />}</Route>
@@ -88,6 +91,7 @@ function AppRoutes() {
         <Route path="/employee/id-card">{() => <EmployeePage Component={IdCard} />}</Route>
         <Route path="/employee/holidays">{() => <EmployeePage Component={Holidays} />}</Route>
         <Route path="/employee/settlement">{() => <EmployeePage Component={Settlement} />}</Route>
+        <Route path="/employee/documents">{() => <EmployeePage Component={Documents} />}</Route>
         <Route path="/employee/chat">{() => <EmployeePage Component={Chat} />}</Route>
         <Route path="/employee/resignation">{() => <EmployeePage Component={Resignation} />}</Route>
         <Route path="/employee/company">{() => <EmployeePage Component={Company} />}</Route>
