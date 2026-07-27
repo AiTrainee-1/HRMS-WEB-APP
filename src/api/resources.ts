@@ -20,6 +20,8 @@ import type {
   LiveFeedItem,
   LoginResponse,
   ManagerFlags,
+  MissingPunchRequest,
+  MissingPunchSlot,
   MobileHomeSummary,
   Notification,
   PendingRequestsResponse,
@@ -61,6 +63,8 @@ export const attendanceApi = {
     apiRequest<AttendanceMonthResponse>({ method: 'GET', url: `/attendance/employee/${employeeId}`, params: { month, year } }),
   shiftStats: (month: number, year: number) =>
     apiRequest<EmployeeShiftStats>({ method: 'GET', url: '/attendance/employee-shift-stats', params: { month, year } }),
+  syncStatus: () =>
+    apiRequest<{ pendingSync: boolean }>({ method: 'GET', url: '/attendance/sync-status' }),
 }
 
 // ---- Geo Attendance ----
@@ -112,6 +116,14 @@ export const permissionApi = {
     apiRequest<PermissionRequest[]>({ method: 'GET', url: '/permissions', params: { employeeId, status } }),
   apply: (body: { employeeId: string; date: string; permissionTime: string; reason: string }) =>
     apiRequest<PermissionRequest>({ method: 'POST', url: '/permissions', data: body }),
+}
+
+// ---- Missing Punch ----
+export const missingPunchApi = {
+  list: (employeeId: string, status?: string) =>
+    apiRequest<MissingPunchRequest[]>({ method: 'GET', url: '/missing-punch-requests', params: { employeeId, status } }),
+  apply: (body: { employeeId: string; date: string; punchTime: string; punchSlot: MissingPunchSlot; reason: string }) =>
+    apiRequest<MissingPunchRequest>({ method: 'POST', url: '/missing-punch-requests', data: body }),
 }
 
 // ---- Casual Leave ----
@@ -212,6 +224,10 @@ export const managerApi = {
     }),
   updateShiftStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/shift-assignments/${id}/status`, data: { status, comment } }),
+  // Department Head stage only — approving here forwards to HR for final
+  // sign-off (see missing_punch_views.py), it does not finalize the request.
+  updateMissingPunchStatus: (id: string, status: RequestStatus, comment?: string) =>
+    apiRequest({ method: 'PATCH', url: `/manager/missing-punch-requests/${id}/status`, data: { status, comment } }),
 }
 
 // ---- Chat ----

@@ -1,11 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { geoAttendanceApi, onDutyApi } from '@/api/resources'
+import { attendanceApi, geoAttendanceApi, onDutyApi } from '@/api/resources'
 
 export function useGeoPunchStatus() {
   return useQuery({
     queryKey: ['geo-punch-status'],
     queryFn: () => geoAttendanceApi.status(),
     refetchInterval: 30_000,
+  })
+}
+
+/** Whether today's attendance might still be incomplete because biometric
+ * hasn't synced yet — true only once a non-biometric punch (Geo/On-Duty/HR
+ * Entry) already exists today AND no device has synced since midnight. */
+export function useAttendanceSyncStatus() {
+  return useQuery({
+    queryKey: ['attendance-sync-status'],
+    queryFn: () => attendanceApi.syncStatus(),
+    refetchInterval: 60_000,
   })
 }
 

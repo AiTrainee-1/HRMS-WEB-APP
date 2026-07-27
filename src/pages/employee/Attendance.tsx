@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Clock, CalendarCheck } from 'lucide-react'
+import { Clock, CalendarCheck, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -11,6 +11,7 @@ import { GeoPunchCard } from '@/components/employee/GeoPunchCard'
 import { attendanceApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
+import { useAttendanceSyncStatus } from '@/hooks/useGeoAttendance'
 import type { AttendanceDay } from '@/types'
 
 export default function Attendance() {
@@ -27,6 +28,7 @@ export default function Attendance() {
   })
 
   const { data: shiftSummary } = useMyShiftSummary(month, year)
+  const { data: syncStatus } = useAttendanceSyncStatus()
 
   const summary = data?.summary
   // The monthly summary rarely carries a reliable half-shift count — fall
@@ -43,6 +45,16 @@ export default function Attendance() {
       />
 
       <GeoPunchCard />
+
+      {syncStatus?.pendingSync && (
+        <Card className="border-warning/40 bg-warning/10">
+          <CardContent className="flex items-center gap-2 py-3 text-sm text-warning-foreground">
+            <AlertTriangle className="size-4 shrink-0" />
+            Today's attendance may be incomplete — biometric punches haven't synced yet.
+            It will update automatically once HR runs the next sync.
+          </CardContent>
+        </Card>
+      )}
 
       {shiftSummary?.assignedShift && (
         <Card>

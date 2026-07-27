@@ -16,6 +16,7 @@ import {
   Bell,
   UserRound,
   Building2,
+  Fingerprint,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -39,6 +40,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Leave', href: '/employee/leave', icon: Send },
       { label: 'Permission', href: '/employee/permissions', icon: Timer },
       { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
+      { label: 'Missing Punch', href: '/employee/missing-punch', icon: Fingerprint },
       { label: 'Approvals', href: '/employee/approvals', icon: ClipboardCheck, managerOnly: true },
     ],
   },

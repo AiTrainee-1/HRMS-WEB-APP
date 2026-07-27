@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { RequestTabs } from '@/components/employee/RequestTabs'
 import { TextareaField } from '@/components/employee/TextareaField'
+import { TimePickerField } from '@/components/employee/TimePickerField'
 import { StatusBadge } from '@/components/employee/StatusBadge'
 import { EmptyState } from '@/components/employee/EmptyState'
 import { permissionApi, attendanceApi } from '@/api/resources'
@@ -117,10 +118,7 @@ export default function Permissions() {
                   <Label htmlFor="date">Date</Label>
                   <Input id="date" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="time">Time</Label>
-                  <Input id="time" type="time" value={form.permissionTime} onChange={(e) => setForm((f) => ({ ...f, permissionTime: e.target.value }))} />
-                </div>
+                <TimePickerField label="Time" value={form.permissionTime} onChange={(v) => setForm((f) => ({ ...f, permissionTime: v }))} />
               </div>
               <TextareaField
                 id="reason"

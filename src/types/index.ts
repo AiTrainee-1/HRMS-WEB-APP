@@ -80,6 +80,30 @@ export interface CasualLeaveRequest {
   createdAt: string
 }
 
+export type MissingPunchStatus = 'pending_hod' | 'pending_hr' | 'approved' | 'rejected'
+
+// Which of the day's (up to) 4 punches this request represents — purely
+// descriptive (see backend models.py::MissingPunchRequest for why this is
+// never the source of truth for real P1-P4 identity). Maps onto punchType:
+// morning_in/lunch_in -> IN, lunch_out/evening_out -> OUT.
+export type MissingPunchSlot = 'morning_in' | 'lunch_out' | 'lunch_in' | 'evening_out'
+
+export interface MissingPunchRequest {
+  id: string
+  employeeId: string
+  date: string
+  punchTime: string
+  punchType: 'IN' | 'OUT'
+  punchSlot?: MissingPunchSlot | null
+  reason: string
+  status: MissingPunchStatus
+  hodReviewedBy?: string | null
+  hodReviewComment?: string | null
+  hrReviewedBy?: string | null
+  hrReviewComment?: string | null
+  createdAt: string
+}
+
 export interface CasualLeaveEligibility {
   eligible: boolean
   reason?: string
@@ -291,6 +315,7 @@ export interface ManagerFlags {
   canApproveCasualLeave?: boolean
   canApproveResignations?: boolean
   canApproveShifts?: boolean
+  canApproveMissingPunch?: boolean
   pendingApprovalsCount: number
 }
 
@@ -345,6 +370,21 @@ export interface PendingShiftApproval {
   createdAt: string
 }
 
+export interface PendingMissingPunchRequest {
+  id: string
+  employeeId: string
+  employeeCode: string
+  employeeName: string
+  department?: string | null
+  date: string
+  punchTime: string
+  punchType: 'IN' | 'OUT'
+  punchSlot?: MissingPunchSlot | null
+  reason: string
+  status: MissingPunchStatus
+  createdAt: string
+}
+
 export interface PendingRequestsResponse {
   leaveRequests: PendingLeaveRequest[]
   permissions: PendingPermissionRequest[]
@@ -352,6 +392,7 @@ export interface PendingRequestsResponse {
   attendanceRequests: PendingAttendanceRequest[]
   casualLeaves: PendingCasualLeaveRequest[]
   shiftApprovals: PendingShiftApproval[]
+  missingPunchRequests: PendingMissingPunchRequest[]
   totalPending: number
 }
 

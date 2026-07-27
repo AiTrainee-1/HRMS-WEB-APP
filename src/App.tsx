@@ -19,6 +19,7 @@ const AttendanceRequest = lazy(() => import('@/pages/employee/AttendanceRequest'
 const Leave = lazy(() => import('@/pages/employee/Leave'))
 const Permissions = lazy(() => import('@/pages/employee/Permissions'))
 const CasualLeave = lazy(() => import('@/pages/employee/CasualLeave'))
+const MissingPunch = lazy(() => import('@/pages/employee/MissingPunch'))
 const Approvals = lazy(() => import('@/pages/employee/Approvals'))
 const Notifications = lazy(() => import('@/pages/employee/Notifications'))
 const Profile = lazy(() => import('@/pages/employee/Profile'))
@@ -82,6 +83,7 @@ function AppRoutes() {
         <Route path="/employee/leave">{() => <EmployeePage Component={Leave} />}</Route>
         <Route path="/employee/permissions">{() => <EmployeePage Component={Permissions} />}</Route>
         <Route path="/employee/casual-leave">{() => <EmployeePage Component={CasualLeave} />}</Route>
+        <Route path="/employee/missing-punch">{() => <EmployeePage Component={MissingPunch} />}</Route>
         <Route path="/employee/approvals">{() => <EmployeePage Component={Approvals} />}</Route>
         <Route path="/employee/notifications">{() => <EmployeePage Component={Notifications} />}</Route>
         <Route path="/employee/profile">{() => <EmployeePage Component={Profile} />}</Route>

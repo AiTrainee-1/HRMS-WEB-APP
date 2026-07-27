@@ -13,14 +13,26 @@ import { managerApi } from '@/api/resources'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
 import { ApiError } from '@/api/client'
 import type {
+  MissingPunchSlot,
   PendingAttendanceRequest,
   PendingCasualLeaveRequest,
   PendingLeaveRequest,
+  PendingMissingPunchRequest,
   PendingPermissionRequest,
   PendingResignation,
   PendingShiftApproval,
   RequestStatus,
 } from '@/types'
+
+// Mirrors src/pages/employee/MissingPunch.tsx — purely descriptive label for
+// which of the day's 4 punches this is, never the source of truth for real
+// P1-P4 identity (the attendance engine derives that from punch time).
+const PUNCH_SLOT_LABEL: Record<MissingPunchSlot, string> = {
+  morning_in: 'Morning Check-In',
+  lunch_out: 'Lunch Check-Out',
+  lunch_in: 'Lunch Check-In',
+  evening_out: 'Evening Check-Out',
+}
 
 // The backend does NOT return a uniform shape across categories: leaveRequests
 // and permissions get an extra nested `employee{}` object bolted on, while
@@ -104,6 +116,19 @@ const CATEGORIES = [
       department: item.department,
       dateRange: item.effectiveFrom ? formatDateRange(item.effectiveFrom) : '—',
       reason: item.shiftName ? `New shift: ${item.shiftName}` : 'Shift reassignment request',
+    }),
+  },
+  {
+    key: 'missingPunchRequests' as const,
+    label: 'Missing Punch',
+    flag: 'canApproveMissingPunch' as const,
+    action: managerApi.updateMissingPunchStatus,
+    describe: (item: PendingMissingPunchRequest) => ({
+      name: item.employeeName,
+      code: item.employeeCode,
+      department: item.department,
+      dateRange: `${formatDateRange(item.date)} · ${item.punchTime}`,
+      reason: `${item.punchSlot ? PUNCH_SLOT_LABEL[item.punchSlot] : (item.punchType === 'IN' ? 'Check-In' : 'Check-Out')} — ${item.reason}`,
     }),
   },
 ] as const
