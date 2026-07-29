@@ -22,7 +22,6 @@ import type {
   ManagerFlags,
   MissingPunchRequest,
   MissingPunchSlot,
-  MobileHomeSummary,
   Notification,
   PendingRequestsResponse,
   PermissionRequest,
@@ -30,6 +29,7 @@ import type {
   Resignation,
   SalarySlip,
   SalarySlipDetail,
+  ShiftAssignment,
 } from '@/types'
 
 // ---- Auth ----
@@ -43,8 +43,19 @@ export const authApi = {
 
 // ---- Dashboard ----
 export const dashboardApi = {
-  mobileHomeSummary: () => apiRequest<MobileHomeSummary>({ method: 'GET', url: '/dashboard/mobile-home-summary' }),
+  // Self-scoped to the calling employee's own punches only (server-side,
+  // since this session's mobile-app work) — no company-wide variant exists
+  // on this endpoint anymore.
   liveFeed: (limit = 20) => apiRequest<{ items: LiveFeedItem[] }>({ method: 'GET', url: '/attendance/live-feed', params: { limit } }),
+}
+
+// ---- Shift ----
+export const shiftApi = {
+  // Self-scoped for an employee token regardless of the employeeId param
+  // (server ignores it and substitutes the caller's own id) — same endpoint
+  // the mobile app's useShift.ts hook uses.
+  assignments: (employeeId: string) =>
+    apiRequest<ShiftAssignment[]>({ method: 'GET', url: '/shift-assignments', params: { employeeId } }),
 }
 
 // ---- Employee / Profile ----
@@ -120,8 +131,8 @@ export const permissionApi = {
 
 // ---- Missing Punch ----
 export const missingPunchApi = {
-  list: (employeeId: string, status?: string) =>
-    apiRequest<MissingPunchRequest[]>({ method: 'GET', url: '/missing-punch-requests', params: { employeeId, status } }),
+  list: (employeeId: string, status?: string, month?: number, year?: number) =>
+    apiRequest<MissingPunchRequest[]>({ method: 'GET', url: '/missing-punch-requests', params: { employeeId, status, month, year } }),
   apply: (body: { employeeId: string; date: string; punchTime: string; punchSlot: MissingPunchSlot; reason: string }) =>
     apiRequest<MissingPunchRequest>({ method: 'POST', url: '/missing-punch-requests', data: body }),
 }
@@ -130,15 +141,16 @@ export const missingPunchApi = {
 export const casualLeaveApi = {
   list: (employeeId: string, status?: RequestStatus, month?: number, year?: number) =>
     apiRequest<CasualLeaveRequest[]>({ method: 'GET', url: '/casual-leaves', params: { employeeId, status, month, year } }),
-  // This endpoint is HR-only on the backend today — an employee token gets a
-  // 403. Swallow that quietly (return null = "eligibility unknown") so the
-  // page just skips the pre-emptive banner instead of erroring; the actual
-  // eligibility rule is still enforced server-side on submit either way.
-  eligibility: async (employeeId: string): Promise<CasualLeaveEligibility | null> => {
+  // Self-service endpoint, self-scoped for an employee token (added this
+  // session alongside the mobile app's CL card — the old /casual-leaves/eligibility
+  // is HR-only and bulk-shaped, and always 403s for an employee token).
+  // Still swallow a genuine network error to null so the page just skips
+  // the pre-emptive banner instead of erroring.
+  eligibility: async (): Promise<CasualLeaveEligibility | null> => {
     try {
-      return await apiRequest<CasualLeaveEligibility>({ method: 'GET', url: '/casual-leaves/eligibility', params: { employeeId } })
+      return await apiRequest<CasualLeaveEligibility>({ method: 'GET', url: '/casual-leaves/my-eligibility' })
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) return null
+      if (err instanceof ApiError) return null
       throw err
     }
   },
@@ -150,6 +162,7 @@ export const casualLeaveApi = {
 export const notificationApi = {
   list: () => apiRequest<Notification[]>({ method: 'GET', url: '/notifications' }),
   markRead: (id: string) => apiRequest<{ success: boolean }>({ method: 'PATCH', url: `/notifications/${id}/read` }),
+  markAllRead: () => apiRequest<{ updated: number }>({ method: 'PATCH', url: '/notifications/mark-all-read' }),
 }
 
 // ---- Salary ----

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { SidebarNav } from './SidebarNav'
 import { NotificationBell } from './NotificationBell'
+import { PermissionNudgeBanner } from './PermissionNudgeBanner'
 import { useAuth } from '@/context/AuthContext'
 
 /** Context that exposes the main scroll container ref for parallax consumers */
@@ -68,6 +69,7 @@ export function EmployeeLayout({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
         </header>
+        <PermissionNudgeBanner />
         <MainScrollContext.Provider value={mainRef}>
           <main ref={mainRef} className="flex-1 overflow-y-auto p-4 lg:p-6">
             <div className="mx-auto max-w-6xl">

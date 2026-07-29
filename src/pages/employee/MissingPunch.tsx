@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { RequestTabs } from '@/components/employee/RequestTabs'
 import { TextareaField } from '@/components/employee/TextareaField'
 import { TimePickerField } from '@/components/employee/TimePickerField'
+import { MonthYearPicker } from '@/components/employee/MonthYearPicker'
 import { EmptyState } from '@/components/employee/EmptyState'
 import { missingPunchApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
@@ -50,6 +51,8 @@ export default function MissingPunch() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const now = new Date()
+  const [month, setMonth] = React.useState(now.getMonth() + 1)
+  const [year, setYear] = React.useState(now.getFullYear())
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [form, setForm] = React.useState<{ date: string; punchTime: string; punchSlot: MissingPunchSlot; reason: string }>({
     date: '', punchTime: '', punchSlot: 'morning_in', reason: '',
@@ -57,8 +60,8 @@ export default function MissingPunch() {
   const [formError, setFormError] = React.useState<string | null>(null)
 
   const listQuery = useQuery({
-    queryKey: ['missing-punch', user?.employeeId],
-    queryFn: () => missingPunchApi.list(user!.employeeId),
+    queryKey: ['missing-punch', user?.employeeId, month, year],
+    queryFn: () => missingPunchApi.list(user!.employeeId, undefined, month, year),
     enabled: !!user,
   })
 
@@ -89,6 +92,8 @@ export default function MissingPunch() {
   const all = listQuery.data ?? []
   const live = all.filter((r) => r.status === 'pending_hod' || r.status === 'pending_hr')
   const confirmed = all.filter((r) => r.status === 'approved' || r.status === 'rejected')
+  const approvedCount = all.filter((r) => r.status === 'approved').length
+  const rejectedCount = all.filter((r) => r.status === 'rejected').length
 
   function renderItem(item: MissingPunchRequest) {
     return (
@@ -127,6 +132,8 @@ export default function MissingPunch() {
         subtitle="Forgot to punch in or out? Report it here for approval"
         icon={<Fingerprint />}
         actions={
+          <div className="flex items-center gap-2">
+            <MonthYearPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y) }} />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-white text-brand-blue hover:bg-white/90 shadow-clay">
@@ -178,6 +185,7 @@ export default function MissingPunch() {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         }
       />
 
@@ -190,6 +198,33 @@ export default function MissingPunch() {
           </p>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
+          <CardContent className="py-1">
+            <p className="text-muted-foreground text-xs">Total</p>
+            <p className="mt-1 text-xl font-bold text-primary">{all.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-1">
+            <p className="text-muted-foreground text-xs">Pending</p>
+            <p className="mt-1 text-xl font-bold text-warning-foreground">{live.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-1">
+            <p className="text-muted-foreground text-xs">Approved</p>
+            <p className="mt-1 text-xl font-bold text-success">{approvedCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-1">
+            <p className="text-muted-foreground text-xs">Rejected</p>
+            <p className="mt-1 text-xl font-bold text-destructive">{rejectedCount}</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {listQuery.isLoading ? (
         <Skeleton className="h-64 w-full" />

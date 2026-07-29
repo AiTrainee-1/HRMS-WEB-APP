@@ -1,6 +1,9 @@
 import * as React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bell, CalendarClock, Send, Timer, FileSignature, MessageCircle, CalendarCheck } from 'lucide-react'
+import {
+  Bell, CalendarClock, Send, Timer, FileSignature, MessageCircle, CalendarCheck,
+  Briefcase, Fingerprint, FileText, CheckCheck,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -12,6 +15,9 @@ import { cn } from '@/lib/utils'
 import { format, formatDistanceToNow, isToday, parseISO } from 'date-fns'
 import type { Notification } from '@/types'
 
+// Every real `type` value the backend actually sends (grep-confirmed
+// against every Notification.objects.create() call site) — anything not
+// listed falls through to the generic Bell icon.
 const ICONS: Record<string, typeof Bell> = {
   leave: Send,
   permission: Timer,
@@ -19,6 +25,9 @@ const ICONS: Record<string, typeof Bell> = {
   attendance: CalendarCheck,
   resignation: FileSignature,
   chat: MessageCircle,
+  on_duty: Briefcase,
+  missing_punch: Fingerprint,
+  employee_request: FileText,
 }
 
 export default function Notifications() {
@@ -32,7 +41,15 @@ export default function Notifications() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
 
+  const markAllReadMutation = useMutation({
+    mutationFn: notificationApi.markAllRead,
+    onSuccess: () => {
+      qc.setQueryData<Notification[]>(['notifications'], (old) => old?.map((n) => ({ ...n, isRead: true })))
+    },
+  })
+
   const list = (data ?? []).filter((n) => !todayOnly || isToday(parseISO(n.createdAt)))
+  const unreadCount = (data ?? []).filter((n) => !n.isRead).length
 
   function renderItem(n: Notification) {
     const Icon = ICONS[n.type] ?? Bell
@@ -68,15 +85,29 @@ export default function Notifications() {
         subtitle="Status changes and updates on your requests"
         icon={<Bell />}
         actions={
-          <Button
-            size="sm"
-            onClick={() => setTodayOnly((v) => !v)}
-            className={cn(
-              todayOnly ? 'bg-white text-brand-blue hover:bg-white/90' : 'bg-white/15 text-white hover:bg-white/25 border border-white/25',
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => markAllReadMutation.mutate()}
+                disabled={markAllReadMutation.isPending}
+                className="bg-white/15 text-white hover:bg-white/25 border border-white/25"
+              >
+                <CheckCheck className="size-4" />
+                Mark all read
+              </Button>
             )}
-          >
-            {todayOnly ? `Today (${format(new Date(), 'MMM d')})` : 'All'}
-          </Button>
+            <Button
+              size="sm"
+              onClick={() => setTodayOnly((v) => !v)}
+              className={cn(
+                todayOnly ? 'bg-white text-brand-blue hover:bg-white/90' : 'bg-white/15 text-white hover:bg-white/25 border border-white/25',
+              )}
+            >
+              {todayOnly ? `Today (${format(new Date(), 'MMM d')})` : 'All'}
+            </Button>
+          </div>
         }
       />
 

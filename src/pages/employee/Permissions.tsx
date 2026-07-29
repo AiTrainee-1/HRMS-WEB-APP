@@ -159,7 +159,11 @@ export default function Permissions() {
           <CardHeader>
             <CardTitle className="text-base">Lateness & Deductions</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3">
+          <CardContent className="grid grid-cols-3 gap-3 pt-0">
+            <p className="col-span-3 text-xs text-muted-foreground">
+              You get 3 free lates/permissions per month (combined). Every 3 beyond that costs a
+              ¼ shift deduction from salary.
+            </p>
             <div>
               <p className="text-muted-foreground text-xs">Late Count</p>
               <p className="text-xl font-bold">{statsQuery.data.totalLateCount}</p>

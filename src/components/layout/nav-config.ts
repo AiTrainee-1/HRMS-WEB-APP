@@ -17,6 +17,7 @@ import {
   UserRound,
   Building2,
   Fingerprint,
+  FileSignature,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -28,11 +29,13 @@ export interface NavItem {
 }
 
 export interface NavGroup {
+  heading: string
   items: NavItem[]
 }
 
 export const navGroups: NavGroup[] = [
   {
+    heading: 'Home & Attendance',
     items: [
       { label: 'Home', href: '/employee/dashboard', icon: LayoutDashboard },
       { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck },
@@ -45,6 +48,7 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    heading: 'Payroll & Records',
     items: [
       { label: 'Salary Slip', href: '/employee/salary', icon: Wallet },
       { label: 'My Shift', href: '/employee/shift', icon: Clock },
@@ -55,11 +59,13 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
+    heading: 'Other',
     items: [
       { label: 'Chat', href: '/employee/chat', icon: MessageCircle },
       { label: 'Alerts', href: '/employee/notifications', icon: Bell },
       { label: 'Profile', href: '/employee/profile', icon: UserRound },
       { label: 'Company', href: '/employee/company', icon: Building2 },
+      { label: 'Resignation', href: '/employee/resignation', icon: FileSignature },
     ],
   },
 ]

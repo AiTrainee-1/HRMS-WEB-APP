@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 import { navGroups } from './nav-config'
 import { useAuth } from '@/context/AuthContext'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
-import { Separator } from '@/components/ui/separator'
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const [location] = useLocation()
@@ -24,6 +23,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
         {navGroups.map((group, gi) => (
           <div key={gi} className="mb-3">
+            <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {group.heading}
+            </p>
             <div className="flex flex-col gap-0.5">
               {group.items
                 .filter((item) => !item.managerOnly || isManager)
@@ -48,7 +50,6 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                   )
                 })}
             </div>
-            {gi < navGroups.length - 1 && <Separator className="my-3" />}
           </div>
         ))}
       </nav>

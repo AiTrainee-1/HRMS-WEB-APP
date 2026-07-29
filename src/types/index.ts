@@ -37,6 +37,10 @@ export interface Employee {
   esiNumber?: string
   uanNumber?: string
   address?: string
+  branchName?: string
+  branchAddress?: string
+  branchLat?: number
+  branchLng?: number
 }
 
 export interface LeaveType {
@@ -107,6 +111,10 @@ export interface MissingPunchRequest {
 export interface CasualLeaveEligibility {
   eligible: boolean
   reason?: string
+  year?: number
+  yearlyEntitlement?: number
+  usedThisYear?: number
+  remainingThisYear?: number
 }
 
 export interface Notification {
@@ -160,15 +168,29 @@ export interface SalarySlipDetail extends SalarySlip {
   lateDays: number
 }
 
+export interface AttendancePunch {
+  time: string
+  type: 'IN' | 'OUT'
+  source: string
+  sourceLabel: string
+}
+
 export interface AttendanceDay {
   date: string
   // 'no_record' is a frontend-only sentinel for calendar cells with no API
   // entry at all (shouldn't normally happen — the backend returns one row
   // per calendar day, including 'future' for days after today).
   status: 'present' | 'half_shift' | 'absent' | 'on_leave' | 'holiday' | 'future' | 'no_record'
+  // Both now sourced from the canonical attendance engine
+  // (compute_month_records) — a day can be half_shift AND isLate at once
+  // (an afternoon arrival past the Half Shift late boundary), the same way
+  // HRMS's own Attendance Search shows them as two independent flags.
+  isLate?: boolean
+  isHalfShift?: boolean
   firstPunch?: string | null
   lastPunch?: string | null
   totalPunches?: number
+  punches?: AttendancePunch[]
   leaveType?: string | null
   source?: string | null
 }
@@ -179,12 +201,8 @@ export interface AttendanceMonthResponse {
     present: number
     absent: number
     onLeave: number
-    // The backend always reports 0 here today — late detection isn't wired
-    // into this particular endpoint's summary. Don't rely on this number.
     late: number
-    // Not reliably populated by the backend either — Attendance.tsx falls
-    // back to counting 'half_shift' records client-side when absent.
-    halfShift?: number
+    halfShift: number
   }
 }
 
@@ -220,6 +238,25 @@ export interface AssignedShift {
   startTime: string
   endTime: string
   gracePeriodMinutes: number
+}
+
+// Raw shape of one row from GET /shift-assignments — an assignment *history*
+// entry pairing an employee with a shift template plus optional per-employee
+// overrides. useMyShiftSummary.ts picks the current one and normalizes it
+// into an AssignedShift.
+export interface ShiftAssignment {
+  id: number
+  shiftId: number | null
+  shiftName: string | null
+  shiftType: string | null
+  startTime: string | null
+  endTime: string | null
+  gracePeriodMinutes: number | null
+  customStartTime?: string | null
+  customEndTime?: string | null
+  saturdayOff: boolean
+  effectiveFrom: string | null
+  effectiveTo: string | null
 }
 
 export interface MyShiftSummary {
@@ -436,14 +473,6 @@ export interface ChatMessage {
   replyTo: { id: string; senderName: string; text: string } | null
   reactions: ChatReaction[]
   createdAt: string
-}
-
-export interface MobileHomeSummary {
-  date: string
-  presentToday: number
-  absentToday: number
-  onLeaveToday: number
-  pendingRequestsCount: number
 }
 
 export interface LiveFeedItem {

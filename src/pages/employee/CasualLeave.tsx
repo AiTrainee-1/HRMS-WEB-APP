@@ -28,7 +28,7 @@ export default function CasualLeave() {
 
   const eligibilityQuery = useQuery({
     queryKey: ['cl-eligibility', user?.employeeId],
-    queryFn: () => casualLeaveApi.eligibility(user!.employeeId),
+    queryFn: () => casualLeaveApi.eligibility(),
     enabled: !!user,
   })
 

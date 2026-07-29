@@ -30,6 +30,17 @@ export function CameraCaptureDialog({
   const [error, setError] = React.useState<string | null>(null)
   const [shots, setShots] = React.useState<{ blob: Blob; url: string }[]>([])
 
+  const startCamera = React.useCallback(() => {
+    setError(null)
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: 'user' }, audio: false })
+      .then((stream) => {
+        streamRef.current = stream
+        if (videoRef.current) videoRef.current.srcObject = stream
+      })
+      .catch(() => setError('Camera access was denied. Please allow camera permission and try again.'))
+  }, [])
+
   React.useEffect(() => {
     if (!open) {
       streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -41,18 +52,12 @@ export function CameraCaptureDialog({
       setError(null)
       return
     }
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'user' }, audio: false })
-      .then((stream) => {
-        streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
-      })
-      .catch(() => setError('Camera access was denied. Please allow camera permission and try again.'))
+    startCamera()
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
     }
-  }, [open])
+  }, [open, startCamera])
 
   const capture = async () => {
     const video = videoRef.current
@@ -88,7 +93,15 @@ export function CameraCaptureDialog({
         </DialogHeader>
 
         {error ? (
-          <p className="text-sm text-destructive py-6 text-center">{error}</p>
+          <div className="flex flex-col items-center gap-3 py-6">
+            <p className="text-sm text-destructive text-center">{error}</p>
+            <p className="text-xs text-muted-foreground text-center">
+              If you already denied access, enable it in your browser's site settings for this page, then try again.
+            </p>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={startCamera}>
+              <RotateCcw className="size-3.5" /> Try Again
+            </Button>
+          </div>
         ) : shots.length < 2 ? (
           <div className="space-y-3">
             <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-black">

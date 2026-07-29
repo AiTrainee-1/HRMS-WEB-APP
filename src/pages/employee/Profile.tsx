@@ -166,6 +166,10 @@ export default function Profile() {
                 </DialogHeader>
                 <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="pwd-emp-code">Employee Code</Label>
+                    <Input id="pwd-emp-code" value={data.employeeCode} disabled />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="new-pwd">New Password</Label>
                     <Input id="new-pwd" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
                   </div>

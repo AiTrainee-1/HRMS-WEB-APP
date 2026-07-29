@@ -1,14 +1,16 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Clock, CalendarCheck, AlertTriangle } from 'lucide-react'
+import { Clock, CalendarCheck, AlertTriangle, CalendarHeart } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { MonthYearPicker } from '@/components/employee/MonthYearPicker'
 import { AttendanceCalendarGrid } from '@/components/employee/AttendanceCalendarGrid'
+import { AttendanceTrendChart } from '@/components/employee/AttendanceTrendChart'
 import { DayDetailPanel } from '@/components/employee/DayDetailPanel'
 import { GeoPunchCard } from '@/components/employee/GeoPunchCard'
-import { attendanceApi } from '@/api/resources'
+import { attendanceApi, casualLeaveApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useAttendanceSyncStatus } from '@/hooks/useGeoAttendance'
@@ -29,11 +31,13 @@ export default function Attendance() {
 
   const { data: shiftSummary } = useMyShiftSummary(month, year)
   const { data: syncStatus } = useAttendanceSyncStatus()
+  const { data: eligibility } = useQuery({
+    queryKey: ['cl-eligibility', user?.employeeId],
+    queryFn: () => casualLeaveApi.eligibility(),
+    enabled: !!user,
+  })
 
   const summary = data?.summary
-  // The monthly summary rarely carries a reliable half-shift count — fall
-  // back to counting 'half_shift' records directly when it's missing.
-  const halfShiftCount = summary?.halfShift ?? data?.records.filter((r) => r.status === 'half_shift').length ?? 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,7 +86,7 @@ export default function Attendance() {
         <Card>
           <CardContent className="py-1">
             <p className="text-muted-foreground text-xs">Half Shift</p>
-            <p className="mt-1 text-xl font-bold text-warning-foreground">{halfShiftCount}</p>
+            <p className="mt-1 text-xl font-bold text-warning-foreground">{summary?.halfShift ?? '—'}</p>
           </CardContent>
         </Card>
         <Card>
@@ -104,6 +108,48 @@ export default function Attendance() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Monthly Trend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? <Skeleton className="h-24 w-full" /> : <AttendanceTrendChart records={data?.records ?? []} />}
+        </CardContent>
+      </Card>
+
+      {eligibility && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 py-3">
+            <div className="flex items-center gap-2">
+              <CalendarHeart className="size-4 text-primary" />
+              <span className="text-sm font-medium flex-1">Casual Leave</span>
+              <Badge variant={eligibility.eligible ? 'success' : 'secondary'}>
+                {eligibility.eligible ? 'Eligible' : 'Not Eligible'}
+              </Badge>
+            </div>
+            {!eligibility.eligible && eligibility.reason && (
+              <p className="text-xs text-muted-foreground">{eligibility.reason}</p>
+            )}
+            {eligibility.yearlyEntitlement != null && (
+              <div className="flex gap-4 mt-1">
+                <div className="flex-1 text-center">
+                  <p className="text-lg font-bold">{eligibility.yearlyEntitlement}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Yearly Entitlement</p>
+                </div>
+                <div className="flex-1 text-center">
+                  <p className="text-lg font-bold text-warning-foreground">{eligibility.usedThisYear}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Used</p>
+                </div>
+                <div className="flex-1 text-center">
+                  <p className="text-lg font-bold text-success">{eligibility.remainingThisYear}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Remaining</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
