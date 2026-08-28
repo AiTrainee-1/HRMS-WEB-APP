@@ -86,7 +86,7 @@ export default function CasualLeave() {
         actions={
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-white text-brand-blue hover:bg-white/90 shadow-clay" disabled={!!ineligible}>
+              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay" disabled={!!ineligible}>
                 <Plus /> Apply Casual Leave
               </Button>
             </DialogTrigger>

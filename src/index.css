@@ -38,37 +38,52 @@
   --clay-shadow-color: 0 100 150;
 }
 
+/* Dark mode, built from the five brand colours -the same palette the mobile
+   app uses, so the two products read as one system:
+
+     #091413  ink    the ground, and text on a filled accent
+     #285A48  moss   the top of the surface ramp, borders, dividers
+     #408A71  jade   mid accent, success
+     #B0E4CC  mint   the primary text/icon accent on dark ground
+     #234C6A  slate  the cool counterpoint -info, secondary surfaces
+
+   Two rules, matching the mobile palette:
+     1. surfaces CLIMB in lightness with elevation (ink is deepest, card sits
+        above it) -on a dark ground, raised means lighter;
+     2. anything used as text or an icon gets mint, not jade. Jade on ink is
+        about 5:1, fine for a fill or a bold label, short for small copy.
+   Only the neutral steps between ink and moss are derived. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.65 0.16 240);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.25 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.25 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.28 0.03 220);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.65 0.2 27);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.3 0 0);
-  --input: oklch(0.3 0 0);
-  --ring: oklch(0.65 0.16 240);
+  --background: #091413;
+  --foreground: #e7f5ee;
+  --card: #10201c;
+  --card-foreground: #e7f5ee;
+  --popover: #142822;
+  --popover-foreground: #e7f5ee;
+  --primary: #b0e4cc;
+  --primary-foreground: #091413;
+  --secondary: #1a3229;
+  --secondary-foreground: #e7f5ee;
+  --muted: #142822;
+  --muted-foreground: #7fae9b;
+  --accent: #234c6a;
+  --accent-foreground: #cfe6f7;
+  --destructive: #ff9c92;
+  --destructive-foreground: #091413;
+  --border: #1f4235;
+  --input: #1f4235;
+  --ring: #b0e4cc;
 
-  --success: oklch(0.65 0.15 145);
-  --success-foreground: oklch(0.145 0 0);
-  --warning: oklch(0.78 0.15 85);
-  --warning-foreground: oklch(0.145 0 0);
+  --success: #7fd3ad;
+  --success-foreground: #091413;
+  --warning: #e8c46a;
+  --warning-foreground: #091413;
 
-  --brand-blue: #5cb9e6;
-  --brand-blue-light: #8fd3f2;
-  --brand-blue-tint: #153241;
-  --brand-gold: #f0d060;
-  --brand-gold-deep: #f0d060;
+  --brand-blue: #b0e4cc;
+  --brand-blue-light: #d6f2e5;
+  --brand-blue-tint: #1a3229;
+  --brand-gold: #e8c46a;
+  --brand-gold-deep: #e8c46a;
   --clay-shadow-color: 0 0 0;
 }
 

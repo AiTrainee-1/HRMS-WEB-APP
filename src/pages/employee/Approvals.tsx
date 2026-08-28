@@ -170,7 +170,7 @@ export default function Approvals() {
         title="Approvals"
         subtitle="Review pending requests from your team"
         icon={<ClipboardCheck />}
-        actions={data && <Badge className="bg-white/20 text-white border-white/30">{data.totalPending} pending</Badge>}
+        actions={data && <Badge className="bg-white/20 dark:bg-white/5 text-white border-white/30 dark:border-white/10">{data.totalPending} pending</Badge>}
       />
 
       <Tabs defaultValue={CATEGORIES[0].key}>

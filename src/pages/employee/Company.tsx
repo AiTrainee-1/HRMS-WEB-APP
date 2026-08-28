@@ -219,7 +219,7 @@ export default function Company() {
             href="https://www.uktextiles.in"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-6 py-2.5 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20"
+            className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/30 dark:border-white/10 bg-white/10 dark:bg-white/5 px-6 py-2.5 text-sm font-medium text-white backdrop-blur-sm transition hover:bg-white/20 dark:hover:bg-white/10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.4 }}
@@ -234,8 +234,8 @@ export default function Company() {
           animate={{ y: [0, 8, 0] }}
           transition={{ duration: 1.8, repeat: Infinity }}
         >
-          <div className="h-10 w-6 rounded-full border-2 border-white/40 flex items-start justify-center pt-1.5">
-            <div className="h-2 w-1 rounded-full bg-white/60" />
+          <div className="h-10 w-6 rounded-full border-2 border-white/40 dark:border-white/10 flex items-start justify-center pt-1.5">
+            <div className="h-2 w-1 rounded-full bg-white/60 dark:bg-white/5" />
           </div>
         </motion.div>
       </section>
@@ -376,7 +376,7 @@ export default function Company() {
               const Icon = pt.icon
               return (
                 <FadeUp key={pt.text} delay={i * 0.1}>
-                  <div className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur-sm">
+                  <div className="flex items-start gap-4 rounded-2xl border border-white/10 dark:border-white/10 bg-white/10 dark:bg-white/5 p-5 backdrop-blur-sm">
                     <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-gold/20">
                       <Icon className="size-5 text-brand-gold" />
                     </div>
@@ -475,7 +475,7 @@ export default function Company() {
             href="https://www.uktextiles.in"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-brand-blue shadow-clay transition hover:bg-brand-gold hover:text-black"
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-white dark:bg-card/95 px-6 py-2.5 text-sm font-semibold text-brand-blue shadow-clay transition hover:bg-brand-gold hover:text-black"
           >
             Learn more at uktextiles.in <ExternalLink className="size-3.5" />
           </a>

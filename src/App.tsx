@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Redirect, Route, Switch } from 'wouter'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { ThemeProvider } from '@/context/ThemeContext'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { EmployeeLayout } from '@/components/layout/EmployeeLayout'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
@@ -110,10 +111,12 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
         <AuthProvider>
           <AppRoutes />
           <Toaster position="top-right" richColors />
         </AuthProvider>
+        </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   )

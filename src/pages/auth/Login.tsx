@@ -29,8 +29,8 @@ function Field({ id, label, type = 'text', value, onChange, icon, autoFocus, rig
         className={[
           'relative flex items-center rounded-xl border transition-all duration-200',
           focused
-            ? 'border-brand-blue bg-white/90 shadow-[0_0_0_3px_rgb(0,100,150,0.12)]'
-            : 'border-white/40 bg-white/60 hover:border-white/70 hover:bg-white/75',
+            ? 'border-brand-blue bg-white/90 dark:bg-card/95 shadow-[0_0_0_3px_rgb(0,100,150,0.12)]'
+            : 'border-white/40 dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-white/70 dark:hover:border-white/20 hover:bg-white/75 dark:hover:bg-white/10',
         ].join(' ')}
       >
         {/* leading icon */}
@@ -152,7 +152,7 @@ export default function Login() {
               initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', damping: 14, stiffness: 180, delay: 0.1 }}
-              className="flex items-center justify-center rounded-2xl bg-white/90 shadow-clay-lg overflow-hidden"
+              className="flex items-center justify-center rounded-2xl bg-white/90 dark:bg-card/95 shadow-clay-lg overflow-hidden"
               style={{ boxShadow: '0 8px 24px -6px rgba(0,100,150,0.22), inset 0 1px 0 rgba(255,255,255,1)' }}
             >
               <img

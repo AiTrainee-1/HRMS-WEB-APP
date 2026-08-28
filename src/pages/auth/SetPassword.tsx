@@ -53,7 +53,7 @@ export default function SetPassword() {
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', damping: 12, stiffness: 160, delay: 0.1 }}
-          className="flex items-center justify-center rounded-2xl overflow-hidden shadow-clay-lg bg-white"
+          className="flex items-center justify-center rounded-2xl overflow-hidden shadow-clay-lg bg-white dark:bg-card/95"
         >
           <img
             src="/UKT_Company_Logo.png"

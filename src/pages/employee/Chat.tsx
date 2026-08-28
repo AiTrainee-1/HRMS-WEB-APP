@@ -33,7 +33,7 @@ function MessageBubble({ msg, onReply, onReact, isMine }: { msg: ChatMessage; on
             <div
               className={cn(
                 'mb-1.5 rounded-lg border-l-2 px-2 py-1 text-xs',
-                isMine ? 'border-white/60 bg-white/15' : 'border-brand-blue bg-white/70',
+                isMine ? 'border-white/60 dark:border-white/10 bg-white/15 dark:bg-white/5' : 'border-brand-blue bg-white/70 dark:bg-white/5',
               )}
             >
               <p className="font-semibold">{msg.replyTo.senderName}</p>

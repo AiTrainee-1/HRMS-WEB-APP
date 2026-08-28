@@ -20,7 +20,7 @@ function SheetOverlay({ className, ...props }: React.ComponentProps<typeof Sheet
 }
 
 const sheetVariants = cva(
-  'bg-white/80 backdrop-blur-2xl border border-white/60 fixed z-50 flex flex-col gap-4 shadow-clay-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
+  'bg-white/80 dark:bg-card/95 backdrop-blur-2xl border border-white/60 dark:border-white/10 fixed z-50 flex flex-col gap-4 shadow-clay-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
   {
     variants: {
       side: {

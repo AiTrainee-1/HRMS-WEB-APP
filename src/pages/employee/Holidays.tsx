@@ -32,7 +32,7 @@ export default function Holidays() {
         icon={<PartyPopper />}
         actions={
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-            <SelectTrigger className="w-28 bg-white/15 text-white border-white/25 [&_svg]:text-white">
+            <SelectTrigger className="w-28 bg-white/15 dark:bg-white/5 text-white border-white/25 dark:border-white/10 [&_svg]:text-white">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

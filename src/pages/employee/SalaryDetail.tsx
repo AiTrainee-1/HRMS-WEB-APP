@@ -54,7 +54,7 @@ export default function SalaryDetail() {
         subtitle="Salary slip breakdown"
         icon={<Download />}
         actions={
-          <Button onClick={handleDownload} className="bg-white text-brand-blue hover:bg-white/90 shadow-clay">
+          <Button onClick={handleDownload} className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
             <Download /> Download PDF
           </Button>
         }

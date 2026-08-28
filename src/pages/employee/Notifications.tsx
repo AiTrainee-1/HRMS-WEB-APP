@@ -92,7 +92,7 @@ export default function Notifications() {
                 variant="ghost"
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
-                className="bg-white/15 text-white hover:bg-white/25 border border-white/25"
+                className="bg-white/15 dark:bg-white/5 text-white hover:bg-white/25 dark:hover:bg-white/10 border border-white/25 dark:border-white/10"
               >
                 <CheckCheck className="size-4" />
                 Mark all read
@@ -102,7 +102,7 @@ export default function Notifications() {
               size="sm"
               onClick={() => setTodayOnly((v) => !v)}
               className={cn(
-                todayOnly ? 'bg-white text-brand-blue hover:bg-white/90' : 'bg-white/15 text-white hover:bg-white/25 border border-white/25',
+                todayOnly ? 'bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10' : 'bg-white/15 dark:bg-white/5 text-white hover:bg-white/25 dark:hover:bg-white/10 border border-white/25 dark:border-white/10',
               )}
             >
               {todayOnly ? `Today (${format(new Date(), 'MMM d')})` : 'All'}

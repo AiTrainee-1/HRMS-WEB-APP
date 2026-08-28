@@ -136,7 +136,7 @@ export default function MissingPunch() {
             <MonthYearPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y) }} />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-white text-brand-blue hover:bg-white/90 shadow-clay">
+              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
                 <Plus /> Report Missing Punch
               </Button>
             </DialogTrigger>

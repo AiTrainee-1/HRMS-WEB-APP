@@ -41,7 +41,7 @@ export function EmployeeLayout({ children }: { children: React.ReactNode }) {
         style={{ animationDelay: '2s' }}
       />
 
-      <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-r-white/40 bg-white/60 backdrop-blur-xl z-20">
+      <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-r-white/40 dark:border-r-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-xl z-20">
         <SidebarNav />
       </aside>
 
@@ -53,7 +53,7 @@ export function EmployeeLayout({ children }: { children: React.ReactNode }) {
       </Sheet>
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-b-white/40 bg-white/60 backdrop-blur-xl px-4 z-20">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-b-white/40 dark:border-b-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-xl px-4 z-20">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setDrawerOpen(true)}>
               <Menu />

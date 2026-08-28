@@ -106,9 +106,9 @@ export default function Profile() {
   return (
     <div className="flex flex-col gap-4">
       <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-clay-lg">
-        <div className="pointer-events-none absolute -top-10 -right-8 size-40 rounded-full bg-white/10 animate-blob" />
+        <div className="pointer-events-none absolute -top-10 -right-8 size-40 rounded-full bg-white/10 dark:bg-white/5 animate-blob" />
         <div
-          className="pointer-events-none absolute -bottom-14 left-16 size-28 rounded-full bg-white/5 animate-blob"
+          className="pointer-events-none absolute -bottom-14 left-16 size-28 rounded-full bg-white/5 dark:bg-white/5 animate-blob"
           style={{ animationDelay: '3s' }}
         />
         <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
@@ -119,9 +119,9 @@ export default function Profile() {
             disabled={photoMutation.isPending}
             aria-label="Change profile photo"
           >
-            <Avatar className="size-20 border-[3px] border-white/40 shadow-clay">
+            <Avatar className="size-20 border-[3px] border-white/40 dark:border-white/10 shadow-clay">
               <AvatarImage src={data.photoUrl} alt={data.firstName} />
-              <AvatarFallback className="bg-white/15 text-xl text-white">
+              <AvatarFallback className="bg-white/15 dark:bg-white/5 text-xl text-white">
                 {data.firstName?.[0]}
                 {data.lastName?.[0]}
               </AvatarFallback>
@@ -131,7 +131,7 @@ export default function Profile() {
             </span>
             {photoMutation.isPending && (
               <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
-                <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="size-4 animate-spin rounded-full border-2 border-white dark:border-white/15 border-t-transparent" />
               </span>
             )}
           </button>
@@ -142,7 +142,7 @@ export default function Profile() {
                 {data.firstName} {data.lastName}
               </h1>
               {data.employmentType && (
-                <Badge className="gap-1 border-white/30 bg-white/15 text-white">
+                <Badge className="gap-1 border-white/30 dark:border-white/10 bg-white/15 dark:bg-white/5 text-white">
                   {data.employmentType === 'production' ? <Factory className="size-3" /> : <Briefcase className="size-3" />}
                   {data.employmentType === 'production' ? 'Production' : 'Staff'}
                 </Badge>
@@ -156,7 +156,7 @@ export default function Profile() {
           <div className="ml-0 flex flex-wrap justify-center gap-2 sm:ml-auto sm:justify-end">
             <Dialog open={pwdOpen} onOpenChange={setPwdOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" className="bg-white/15 text-white border border-white/25 hover:bg-white/25">
+                <Button size="sm" className="bg-white/15 dark:bg-white/5 text-white border border-white/25 dark:border-white/10 hover:bg-white/25 dark:hover:bg-white/10">
                   <KeyRound /> Change Password
                 </Button>
               </DialogTrigger>
@@ -187,11 +187,11 @@ export default function Profile() {
               </DialogContent>
             </Dialog>
             <Link href="/employee/resignation">
-              <Button size="sm" className="bg-white/15 text-white border border-white/25 hover:bg-white/25">
+              <Button size="sm" className="bg-white/15 dark:bg-white/5 text-white border border-white/25 dark:border-white/10 hover:bg-white/25 dark:hover:bg-white/10">
                 <FileSignature /> Resignation
               </Button>
             </Link>
-            <Button size="sm" onClick={logout} className="bg-white/10 text-white hover:bg-white/20">
+            <Button size="sm" onClick={logout} className="bg-white/10 dark:bg-white/5 text-white hover:bg-white/20 dark:hover:bg-white/10">
               <LogOut /> Logout
             </Button>
           </div>

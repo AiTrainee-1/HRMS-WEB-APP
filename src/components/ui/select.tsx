@@ -16,7 +16,7 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        'flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/50 backdrop-blur-sm px-3 py-2 text-sm shadow-sm transition-all duration-200 outline-none hover:bg-white/80 hover:border-white/80 focus-visible:bg-white focus-visible:ring-[3px] focus-visible:ring-brand-blue/15 focus-visible:border-brand-blue disabled:cursor-not-allowed disabled:opacity-50',
+        'flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-white/60 dark:border-white/10 bg-white/50 dark:bg-white/5 backdrop-blur-sm px-3 py-2 text-sm shadow-sm transition-all duration-200 outline-none hover:bg-white/80 dark:hover:bg-white/10 hover:border-white/80 dark:hover:border-white/20 focus-visible:bg-white dark:focus-visible:bg-card focus-visible:ring-[3px] focus-visible:ring-brand-blue/15 focus-visible:border-brand-blue disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ function SelectContent({
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          'bg-white/75 backdrop-blur-xl text-popover-foreground relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-white/60 shadow-clay-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          'bg-white/75 dark:bg-card/95 backdrop-blur-xl text-popover-foreground relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-white/60 dark:border-white/10 shadow-clay-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
           className,
         )}

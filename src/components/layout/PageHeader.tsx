@@ -21,15 +21,15 @@ export function PageHeader({ title, subtitle, icon, actions, className }: PageHe
         className,
       )}
     >
-      <div className="pointer-events-none absolute -top-10 -right-8 size-40 rounded-full bg-white/10 animate-blob" />
+      <div className="pointer-events-none absolute -top-10 -right-8 size-40 rounded-full bg-white/10 dark:bg-white/5 animate-blob" />
       <div
-        className="pointer-events-none absolute -bottom-14 left-16 size-28 rounded-full bg-white/5 animate-blob"
+        className="pointer-events-none absolute -bottom-14 left-16 size-28 rounded-full bg-white/5 dark:bg-white/5 animate-blob"
         style={{ animationDelay: '3s' }}
       />
       <div className="relative flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {icon && (
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15 [&_svg]:size-5">{icon}</div>
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/15 dark:bg-white/5 [&_svg]:size-5">{icon}</div>
           )}
           <div>
             <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
