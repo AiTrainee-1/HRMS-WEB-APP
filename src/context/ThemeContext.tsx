@@ -11,9 +11,10 @@ import {
 /**
  * App-wide light/dark theme, mirroring the mobile app's behaviour.
  *
- * Three modes, not two: 'system' follows the OS and is the default — an
- * employee whose machine is on dark at 6am shouldn't be handed a white
- * screen by us. 'light'/'dark' are explicit overrides from the sidebar.
+ * Three modes, not two. The default is LIGHT: this product has its own look
+ * and shouldn't flip to dark just because a laptop happens to be set that
+ * way. 'dark' is the switch in the sidebar, and 'system' ('Auto') is there
+ * for anyone who does want it to follow the OS.
  *
  * Unlike React Native, the web already has a cascade: every component styled
  * through the semantic tokens (bg-card, text-foreground, border-border)
@@ -35,21 +36,29 @@ interface ThemeValue {
 }
 
 const ThemeContext = createContext<ThemeValue>({
-  mode: 'system',
+  mode: 'light',
   scheme: 'light',
   isDark: false,
   setMode: () => {},
   toggle: () => {},
 });
 
+/** The mode a viewer gets before they have ever chosen one.
+ *
+ *  Light, deliberately -NOT 'system'. Following the OS meant every employee
+ *  whose machine happens to be on dark was handed a dark app they never asked
+ *  for. Light is this product's own default; dark is opt-in, either by the
+ *  switch or by choosing Auto to follow the OS from then on. */
+const DEFAULT_MODE: ThemeMode = 'light';
+
 function readStored(): ThemeMode {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
     if (v === 'light' || v === 'dark' || v === 'system') return v;
   } catch {
-    // Private mode / storage disabled -fall through to the OS preference.
+    // Private mode / storage disabled -fall through to the default below.
   }
-  return 'system';
+  return DEFAULT_MODE;
 }
 
 function systemScheme(): 'light' | 'dark' {

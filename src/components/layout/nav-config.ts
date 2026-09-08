@@ -18,6 +18,7 @@ import {
   Building2,
   Fingerprint,
   FileSignature,
+  DoorOpen,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -43,6 +44,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Leave', href: '/employee/leave', icon: Send },
       { label: 'Permission', href: '/employee/permissions', icon: Timer },
       { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
+      { label: 'Outpass', href: '/employee/outpass', icon: DoorOpen },
       { label: 'Missing Punch', href: '/employee/missing-punch', icon: Fingerprint },
       { label: 'Approvals', href: '/employee/approvals', icon: ClipboardCheck, managerOnly: true },
     ],

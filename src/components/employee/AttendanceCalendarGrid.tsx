@@ -61,12 +61,14 @@ export function AttendanceCalendarGrid({
           // A day can be Half Shift/Present AND late at once (HRMS tracks
           // these as two independent flags) — the small corner dot surfaces
           // the late arrival without needing a second status color.
-          const showLateDot = !!cell.isLate && (cell.status === 'present' || cell.status === 'half_shift')
+          const isPermission = !!(cell.permissionMorning || cell.permissionAfternoon || cell.permissionDeparture)
+          const showLateDot = !isPermission && !!cell.isLate && (cell.status === 'present' || cell.status === 'half_shift')
+          const showPermissionDot = isPermission && (cell.status === 'present' || cell.status === 'half_shift')
           return (
             <button
               key={cell.date}
               onClick={() => onSelectDay(cell)}
-              aria-label={`${cell.date}, ${statusLabel[cell.status]}${cell.isLate ? ', late arrival' : ''}${cell.totalPunches ? `, ${cell.totalPunches} punches` : ''}`}
+              aria-label={`${cell.date}, ${statusLabel[cell.status]}${isPermission ? ', permission' : cell.isLate ? ', late arrival' : ''}${cell.isCompensationDay ? ', compensation day' : ''}${cell.totalPunches ? `, ${cell.totalPunches} punches` : ''}`}
               className={cn(
                 'relative aspect-square rounded-md border text-xs font-medium flex flex-col items-center justify-center transition-colors hover:opacity-80',
                 statusStyles[cell.status] ?? statusStyles.no_record,
@@ -75,6 +77,12 @@ export function AttendanceCalendarGrid({
               <span>{dayNum}</span>
               {showLateDot && (
                 <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-warning border border-background" />
+              )}
+              {showPermissionDot && (
+                <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary border border-background" />
+              )}
+              {cell.isCompensationDay && (
+                <span className="absolute top-0.5 left-0.5 size-1.5 rounded-full bg-violet-500 border border-background" />
               )}
             </button>
           )

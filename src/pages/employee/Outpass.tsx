@@ -1,0 +1,173 @@
+import * as React from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Plus, DoorOpen, IdCard } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PageHeader } from '@/components/layout/PageHeader'
+import { RequestTabs } from '@/components/employee/RequestTabs'
+import { TextareaField } from '@/components/employee/TextareaField'
+import { StatusBadge } from '@/components/employee/StatusBadge'
+import { EmptyState } from '@/components/employee/EmptyState'
+import { OutpassFlipCard } from '@/components/employee/OutpassFlipCard'
+import { outpassApi, employeeApi } from '@/api/resources'
+import { useAuth } from '@/context/AuthContext'
+import { ApiError } from '@/api/client'
+import type { OutpassRequest } from '@/types'
+
+export default function Outpass() {
+  const { user } = useAuth()
+  const qc = useQueryClient()
+  const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [form, setForm] = React.useState({ destination: '', reason: '' })
+  const [formError, setFormError] = React.useState<string | null>(null)
+  const [previewItem, setPreviewItem] = React.useState<OutpassRequest | null>(null)
+
+  const listQuery = useQuery({
+    queryKey: ['outpass-requests', user?.employeeId],
+    queryFn: outpassApi.list,
+    enabled: !!user,
+  })
+
+  const employeeQuery = useQuery({
+    queryKey: ['employee', user?.employeeId],
+    queryFn: () => employeeApi.get(user!.employeeId),
+    enabled: !!user,
+  })
+
+  const applyMutation = useMutation({
+    mutationFn: outpassApi.apply,
+    onSuccess: () => {
+      toast.success('Outpass request submitted')
+      qc.invalidateQueries({ queryKey: ['outpass-requests', user?.employeeId] })
+      setDialogOpen(false)
+      setForm({ destination: '', reason: '' })
+    },
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not submit outpass request'),
+  })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setFormError(null)
+    if (form.destination.trim().length < 2) return setFormError('Please enter where you are going.')
+    if (form.reason.trim().length < 5) return setFormError('Reason must be at least 5 characters.')
+    applyMutation.mutate(form)
+  }
+
+  const all = listQuery.data ?? []
+  const live = all.filter((r) => r.status === 'pending')
+  const confirmed = all.filter((r) => r.status !== 'pending')
+  // The most recent still-valid approved request -source can be "manual" or
+  // "on_duty" (an On-Duty request that just got its final approval,
+  // see geo_attendance_views.py::_create_outpass_from_on_duty); either way it
+  // shows here the same way, since both produce the same OutpassRequest shape.
+  const activePass = [...all]
+    .filter((r) => r.status === 'approved' && r.expiresAt && new Date(r.expiresAt).getTime() > Date.now())
+    .sort((a, b) => new Date(b.approvedAt ?? 0).getTime() - new Date(a.approvedAt ?? 0).getTime())[0]
+
+  function renderItem(item: OutpassRequest) {
+    return (
+      <Card key={item.id}>
+        <CardContent className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium">{item.destination}</span>
+            <StatusBadge status={item.status} />
+            {item.source === 'on_duty' && (
+              <span className="text-xs text-muted-foreground">(from On-Duty)</span>
+            )}
+          </div>
+          <p className="text-sm">{item.reason}</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {format(parseISO(item.createdAt), 'MMM d, yyyy · h:mm a')}
+              {item.approverRole && item.status === 'approved' && (
+                <> · Approved by {item.approverRole === 'dept_head' ? 'HOD' : item.approverRole === 'hr' ? 'HR' : 'On-Duty approval'}</>
+              )}
+            </p>
+            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setPreviewItem(item)}>
+              <IdCard className="size-3.5" /> Preview
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Outpass"
+        subtitle="Request permission to step out -approved by your HOD or HR"
+        icon={<DoorOpen />}
+        actions={
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
+                <Plus /> Request Outpass
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Request an Outpass</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="op-destination">Where are you going?</Label>
+                  <Input
+                    id="op-destination"
+                    value={form.destination}
+                    onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))}
+                  />
+                </div>
+                <TextareaField
+                  id="op-reason"
+                  label="Reason"
+                  rows={3}
+                  minLength={5}
+                  maxLength={300}
+                  value={form.reason}
+                  onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
+                />
+                {formError && <p className="text-sm text-destructive">{formError}</p>}
+                <DialogFooter>
+                  <Button type="submit" variant="gradient" disabled={applyMutation.isPending}>
+                    {applyMutation.isPending ? 'Submitting…' : 'Submit'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        }
+      />
+
+      {activePass && <OutpassFlipCard request={activePass} employee={employeeQuery.data} />}
+
+      {listQuery.isLoading ? (
+        <Skeleton className="h-64 w-full" />
+      ) : (
+        <RequestTabs
+          liveItems={live}
+          confirmedItems={confirmed}
+          renderItem={renderItem}
+          emptyLive={<EmptyState icon={DoorOpen} title="No pending outpass requests" />}
+          emptyConfirmed={<EmptyState icon={DoorOpen} title="No confirmed outpass requests yet" />}
+        />
+      )}
+
+      {/* Outpass card preview -any request, any status, opened from its row */}
+      <Dialog open={!!previewItem} onOpenChange={(open) => !open && setPreviewItem(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Outpass Card</DialogTitle>
+          </DialogHeader>
+          {previewItem && <OutpassFlipCard request={previewItem} employee={employeeQuery.data} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

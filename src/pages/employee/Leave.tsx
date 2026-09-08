@@ -18,7 +18,19 @@ import { formatDateRange } from '@/components/employee/ApprovalCard'
 import { leaveApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { ApiError } from '@/api/client'
-import type { LeaveRequest } from '@/types'
+import type { LeaveRequest, LeaveType } from '@/types'
+
+// Backend has no leave types configured — use these until an admin sets some up.
+// Mirrors the mobile app's FALLBACK_LEAVE_TYPES (src/hooks/useLeave.ts) so both
+// clients degrade the same way.
+const FALLBACK_LEAVE_TYPES: LeaveType[] = [
+  { id: '1', name: 'Annual Leave' },
+  { id: '2', name: 'Sick Leave' },
+  { id: '3', name: 'Casual Leave' },
+  { id: '4', name: 'Emergency Leave' },
+  { id: '5', name: 'Maternity Leave' },
+  { id: '6', name: 'Paternity Leave' },
+]
 
 export default function Leave() {
   const { user } = useAuth()
@@ -33,7 +45,13 @@ export default function Leave() {
     enabled: !!user,
   })
 
-  const typesQuery = useQuery({ queryKey: ['leave-types'], queryFn: leaveApi.types })
+  const typesQuery = useQuery({
+    queryKey: ['leave-types'],
+    queryFn: async () => {
+      const data = await leaveApi.types()
+      return data.length > 0 ? data : FALLBACK_LEAVE_TYPES
+    },
+  })
 
   const applyMutation = useMutation({
     mutationFn: leaveApi.apply,

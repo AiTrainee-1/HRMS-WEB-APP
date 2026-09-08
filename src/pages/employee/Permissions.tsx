@@ -43,7 +43,10 @@ export default function Permissions() {
   // The backend only ever sends monthlyUsed on POST (create) responses — GET
   // list items always have it null — so count the current calendar month's
   // pending+approved requests ourselves rather than trusting a list item.
-  const monthlyLimit = 3
+  const firstItem = (listQuery.data ?? [])[0]
+  const monthlyLimit = firstItem?.monthlyLimit ?? 3
+  const dailyLimit = firstItem?.dailyLimit ?? 1
+  const weeklyLimit = firstItem?.weeklyLimit ?? 2
   const monthlyUsed = (listQuery.data ?? []).filter((r) => {
     const d = parseISO(r.date)
     return (
@@ -151,6 +154,7 @@ export default function Permissions() {
           </div>
           <Progress value={(monthlyUsed / monthlyLimit) * 100} />
           {capReached && <p className="text-xs text-warning-foreground">Monthly limit reached</p>}
+          <p className="text-xs text-muted-foreground">Max {dailyLimit}/day · {weeklyLimit}/week</p>
         </CardContent>
       </Card>
 

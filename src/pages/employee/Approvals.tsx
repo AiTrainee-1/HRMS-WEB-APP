@@ -18,6 +18,7 @@ import type {
   PendingCasualLeaveRequest,
   PendingLeaveRequest,
   PendingMissingPunchRequest,
+  PendingOutpassRequest,
   PendingPermissionRequest,
   PendingResignation,
   PendingShiftApproval,
@@ -116,6 +117,19 @@ const CATEGORIES = [
       department: item.department,
       dateRange: item.effectiveFrom ? formatDateRange(item.effectiveFrom) : '—',
       reason: item.shiftName ? `New shift: ${item.shiftName}` : 'Shift reassignment request',
+    }),
+  },
+  {
+    key: 'outpassRequests' as const,
+    label: 'Outpass',
+    flag: 'canApprovePermissions' as const,
+    action: managerApi.updateOutpassStatus,
+    describe: (item: PendingOutpassRequest) => ({
+      name: item.employee.name,
+      code: item.employee.employeeCode,
+      department: item.employee.department,
+      dateRange: formatDateRange(item.createdAt),
+      reason: `${item.destination} · ${item.reason}`,
     }),
   },
   {

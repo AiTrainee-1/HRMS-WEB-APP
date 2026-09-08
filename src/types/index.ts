@@ -73,6 +73,12 @@ export interface PermissionRequest {
   // items always send these as null, so compute the monthly count client-side.
   monthlyUsed?: number | null
   monthlyLimit?: number
+  // Daily/weekly caps on the backend's auto-detected Permission zone (see
+  // PayrollSettings.max_permissions_per_day/_per_week) -sent on every GET
+  // list item too (unlike monthlyUsed above), since it's a fixed setting
+  // rather than a per-request computed count.
+  dailyLimit?: number
+  weeklyLimit?: number
 }
 
 export interface CasualLeaveRequest {
@@ -82,6 +88,34 @@ export interface CasualLeaveRequest {
   reason: string
   status: RequestStatus
   createdAt: string
+}
+
+// See backend/api/outpass_request_views.py::_outpass_request_json. Approving
+// (from either HOD or HR) sets approvedAt/expiresAt -expiresAt is always
+// exactly approvedAt + 60 minutes, computed server-side so the client never
+// has to guess the window.
+export type OutpassSource = 'manual' | 'on_duty'
+export type OutpassScanStatus = 'not_applicable' | 'pending_exit' | 'exited' | 'expired_unscanned'
+
+export interface OutpassRequest {
+  id: string
+  employeeId: string
+  destination: string
+  reason: string
+  status: RequestStatus
+  source: OutpassSource
+  approverRole?: 'hr' | 'dept_head' | 'system' | null
+  approvedBy?: string | null
+  reviewComment?: string | null
+  approvedAt?: string | null
+  expiresAt?: string | null
+  createdAt: string
+  // Gate Scanner fields -see backend/api/gate_scanner_views.py. qrToken is
+  // only present while the pass is actually presentable at a gate.
+  qrToken?: string | null
+  exitGateName?: string | null
+  exitedAt?: string | null
+  scanStatus?: OutpassScanStatus
 }
 
 export type MissingPunchStatus = 'pending_hod' | 'pending_hr' | 'approved' | 'rejected'
@@ -187,6 +221,20 @@ export interface AttendanceDay {
   // HRMS's own Attendance Search shows them as two independent flags.
   isLate?: boolean
   isHalfShift?: boolean
+  // Auto-Permission zone (see backend shift_engine.py's ZONE_* / _classify_zone)
+  // -detected purely from punch timing, independent of a submitted Permission
+  // request. The *WithRequest flags label whether an approved request also
+  // covered that edge.
+  permissionMorning?: boolean
+  permissionMorningWithRequest?: boolean
+  permissionAfternoon?: boolean
+  permissionAfternoonWithRequest?: boolean
+  permissionDeparture?: boolean
+  permissionDepartureWithRequest?: boolean
+  // HR announced this day as a Compensation Day (festival/special day) -
+  // Late/Permission penalties are exempted, but Full/Half Shift is still
+  // judged from real punches, never auto-granted.
+  isCompensationDay?: boolean
   firstPunch?: string | null
   lastPunch?: string | null
   totalPunches?: number
@@ -214,7 +262,15 @@ export interface ShiftDailyLog {
   totalPunches?: number
   isHalfShift?: boolean
   lateMorning?: boolean
+  lateAfternoon?: boolean
   lateReturn?: boolean
+  permissionMorning?: boolean
+  permissionMorningWithRequest?: boolean
+  permissionAfternoon?: boolean
+  permissionAfternoonWithRequest?: boolean
+  permissionDeparture?: boolean
+  permissionDepartureWithRequest?: boolean
+  isCompensationDay?: boolean
 }
 
 export interface EmployeeShiftStats {
@@ -366,6 +422,7 @@ interface WithNestedEmployee {
 
 export interface PendingLeaveRequest extends LeaveRequest, WithNestedEmployee {}
 export interface PendingPermissionRequest extends PermissionRequest, WithNestedEmployee {}
+export interface PendingOutpassRequest extends OutpassRequest, WithNestedEmployee {}
 
 export interface PendingCasualLeaveRequest extends CasualLeaveRequest {
   employeeName: string
@@ -430,6 +487,7 @@ export interface PendingRequestsResponse {
   casualLeaves: PendingCasualLeaveRequest[]
   shiftApprovals: PendingShiftApproval[]
   missingPunchRequests: PendingMissingPunchRequest[]
+  outpassRequests: PendingOutpassRequest[]
   totalPending: number
 }
 

@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { CameraCaptureDialog } from '@/components/employee/CameraCaptureDialog'
+import { SlideToConfirmPunch } from '@/components/employee/SlideToConfirmPunch'
 import {
   useGeoPunchStatus, useGeoPunchPrecheck, useGeoPunch, useOnDutyRequest,
 } from '@/hooks/useGeoAttendance'
@@ -322,10 +323,12 @@ export default function AttendanceRequest() {
                   </div>
 
                   {precheck.insideRadius ? (
-                    <Button variant="gradient" onClick={submitOfficePunch} disabled={punchMutation.isPending} className="gap-2">
-                      {punchMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <MapPin className="size-4" />}
-                      {precheck.nextPunchType === 'OUT' ? 'Punch Out' : 'Punch In'}
-                    </Button>
+                    <SlideToConfirmPunch
+                      label={`Slide to ${precheck.nextPunchType === 'OUT' ? 'Punch Out' : 'Punch In'}`}
+                      subLabel={punchMutation.isPending ? 'Recording your punch…' : `${precheck.distanceM}m from ${precheck.branchName}`}
+                      onCommit={submitOfficePunch}
+                      pending={punchMutation.isPending}
+                    />
                   ) : (
                     <div className="flex flex-col gap-2">
                       <p className="text-xs text-muted-foreground">

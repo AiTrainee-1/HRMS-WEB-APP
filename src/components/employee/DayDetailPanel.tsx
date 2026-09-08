@@ -11,11 +11,26 @@ export function DayDetailPanel({ day, onClose }: { day: AttendanceDay | null; on
           <>
             <DialogHeader>
               <DialogTitle>{format(parseISO(day.date), 'EEEE, MMMM d, yyyy')}</DialogTitle>
-              <DialogDescription className="flex items-center gap-2">
+              <DialogDescription className="flex items-center gap-2 flex-wrap">
                 <span className="capitalize">{day.status.replace('_', ' ')}</span>
-                {day.isLate && (day.status === 'present' || day.status === 'half_shift') && (
+                {(day.permissionMorning || day.permissionAfternoon || day.permissionDeparture) ? (
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                    Permission ({[
+                      day.permissionMorning && 'Morning',
+                      day.permissionAfternoon && 'Afternoon',
+                      day.permissionDeparture && 'Departure',
+                    ].filter(Boolean).join(' + ')})
+                    {(day.permissionMorningWithRequest || day.permissionAfternoonWithRequest || day.permissionDepartureWithRequest)
+                      ? ' · With Request' : ' · Without Request'}
+                  </span>
+                ) : day.isLate && (day.status === 'present' || day.status === 'half_shift') && (
                   <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning-foreground">
                     Late Arrival
+                  </span>
+                )}
+                {day.isCompensationDay && (
+                  <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-600">
+                    Compensation Day
                   </span>
                 )}
               </DialogDescription>

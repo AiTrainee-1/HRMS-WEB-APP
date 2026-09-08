@@ -23,6 +23,7 @@ import type {
   MissingPunchRequest,
   MissingPunchSlot,
   Notification,
+  OutpassRequest,
   PendingRequestsResponse,
   PermissionRequest,
   RequestStatus,
@@ -158,6 +159,15 @@ export const casualLeaveApi = {
     apiRequest<CasualLeaveRequest>({ method: 'POST', url: '/casual-leaves', data: body }),
 }
 
+// ---- Outpass ----
+// GET/POST both self-scope to the logged-in employee token server-side
+// (backend/api/outpass_request_views.py) -no employeeId needed on either call.
+export const outpassApi = {
+  list: () => apiRequest<OutpassRequest[]>({ method: 'GET', url: '/outpass-requests' }),
+  apply: (body: { destination: string; reason: string }) =>
+    apiRequest<OutpassRequest>({ method: 'POST', url: '/outpass-requests', data: body }),
+}
+
 // ---- Notifications ----
 export const notificationApi = {
   list: () => apiRequest<Notification[]>({ method: 'GET', url: '/notifications' }),
@@ -241,6 +251,8 @@ export const managerApi = {
   // sign-off (see missing_punch_views.py), it does not finalize the request.
   updateMissingPunchStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/missing-punch-requests/${id}/status`, data: { status, comment } }),
+  updateOutpassStatus: (id: string, status: RequestStatus, comment?: string) =>
+    apiRequest({ method: 'PATCH', url: `/manager/outpass-requests/${id}/status`, data: { status, comment } }),
 }
 
 // ---- Chat ----

@@ -43,11 +43,15 @@ export function AttendanceTrendChart({ records }: { records: AttendanceDay[] }) 
           const barH = Math.max(2, chartH * ratio)
           const x = i * (barW + gap)
           const y = chartH - barH
-          const showLateDot = !!r.isLate && (r.status === 'present' || r.status === 'half_shift')
+          const isPermission = !!(r.permissionMorning || r.permissionAfternoon || r.permissionDeparture)
+          const showLateDot = !isPermission && !!r.isLate && (r.status === 'present' || r.status === 'half_shift')
+          const showPermissionDot = isPermission && (r.status === 'present' || r.status === 'half_shift')
           return (
             <g key={r.date}>
               <rect x={x} y={y} width={barW} height={barH} rx={1} fill={STATUS_FILL[r.status] ?? 'var(--muted-foreground)'} />
               {showLateDot && <circle cx={x + barW / 2} cy={Math.max(2, y - 3)} r={1.6} fill="var(--warning)" />}
+              {showPermissionDot && <circle cx={x + barW / 2} cy={Math.max(2, y - 3)} r={1.6} fill="var(--primary)" />}
+              {r.isCompensationDay && <circle cx={x + barW / 2} cy={Math.min(chartH - 2, y + barH + 3)} r={1.6} fill="#8b5cf6" />}
             </g>
           )
         })}
