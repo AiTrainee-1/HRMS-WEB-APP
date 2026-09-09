@@ -15,10 +15,18 @@ import type { Employee, OutpassRequest } from '@/types'
  *
  * Colour identity is dynamic: neutral while pending, green once approved,
  * red once rejected -recomputed from `request.status`, never fixed.
+ *
+ * Card height is MEASURED, not guessed: each face reports its natural height
+ * after layout, and the shared flip box sizes itself to the taller of the
+ * two. A fixed height fights variable content (a two-line reason, an
+ * optional QR block, an optional gate-exit line) -measuring once removes
+ * that whole class of clipping/overflow bug.
  */
 
 const APPROVER_LABEL: Record<string, string> = { hr: 'HR', dept_head: 'HOD', system: 'On-Duty approval' }
 const SOURCE_LABEL: Record<string, string> = { manual: 'Manual request', on_duty: 'Auto-generated from On-Duty' }
+
+const MIN_CARD_HEIGHT = 230
 
 function useCountdown(expiresAt: string | null | undefined) {
   const [now, setNow] = React.useState(() => Date.now())
@@ -69,10 +77,22 @@ export function OutpassFlipCard({
   // outpass_request_views.py::_outpass_request_json.
   const showQr = !!request.qrToken
 
+  // Seed with a close estimate so the first paint is already approximately
+  // right; the layout effect below then corrects it exactly.
+  const [cardHeight, setCardHeight] = React.useState(showQr ? 400 : 270)
+  const frontRef = React.useRef<HTMLDivElement>(null)
+  const backRef = React.useRef<HTMLDivElement>(null)
+
+  React.useLayoutEffect(() => {
+    const frontH = frontRef.current?.scrollHeight ?? 0
+    const backH = backRef.current?.scrollHeight ?? 0
+    setCardHeight(Math.max(frontH, backH, MIN_CARD_HEIGHT))
+  }, [request, employee])
+
   return (
     <div
-      className={`relative w-full cursor-pointer select-none ${showQr ? 'h-[350px]' : 'h-[260px]'}`}
-      style={{ perspective: 1400 }}
+      className="relative w-full cursor-pointer select-none"
+      style={{ perspective: 1400, height: cardHeight }}
       onClick={() => setFlipped((f) => !f)}
       role="button"
       aria-label="Outpass card, click to flip"
@@ -85,24 +105,27 @@ export function OutpassFlipCard({
       >
         {/* ── Front ── */}
         <div
-          className={`absolute inset-0 flex flex-col gap-3 rounded-2xl border-2 p-4 ${tone.border} ${tone.bg}`}
+          ref={frontRef}
+          className={`absolute inset-x-0 top-0 flex flex-col gap-4 rounded-2xl border-2 p-4 ${tone.border} ${tone.bg}`}
           style={{ backfaceVisibility: 'hidden' }}
         >
-          <div className="flex items-center justify-between">
-            <div className={`flex items-center gap-1.5 text-sm font-bold ${tone.text}`}>
-              <StatusIcon className="size-4" />
-              {statusLabel}
+          <div className="flex items-center justify-between gap-2">
+            <div className={`flex min-w-0 items-center gap-1.5 text-sm font-bold ${tone.text}`}>
+              <StatusIcon className="size-4 shrink-0" />
+              <span className="truncate">{statusLabel}</span>
             </div>
-            {request.status === 'approved' && (
-              <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums ${tone.chipBg} ${tone.text}`}>
-                <Clock className="size-3" /> {expired || remainingMs == null ? 'Expired' : formatRemaining(remainingMs)}
-              </span>
-            )}
-            <RotateCw className="size-3.5 text-muted-foreground/60" />
+            <div className="flex shrink-0 items-center gap-2">
+              {request.status === 'approved' && (
+                <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums ${tone.chipBg} ${tone.text}`}>
+                  <Clock className="size-3" /> {expired || remainingMs == null ? 'Expired' : formatRemaining(remainingMs)}
+                </span>
+              )}
+              <RotateCw className="size-3.5 text-muted-foreground/60" />
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <Avatar className="size-14 border-2 border-white shadow-clay dark:border-white/10">
+            <Avatar className="size-14 shrink-0 border-2 border-white shadow-clay dark:border-white/10">
               <AvatarImage src={employee?.photoUrl} alt={employee?.firstName} />
               <AvatarFallback>
                 {employee?.firstName?.[0]}
@@ -116,50 +139,51 @@ export function OutpassFlipCard({
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground">Going to</p>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Going to</p>
               <p className="truncate font-medium">{request.destination}</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Date</p>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Date</p>
               <p className="font-medium">{format(parseISO(request.createdAt), 'MMM d, yyyy')}</p>
             </div>
-            <div className="col-span-2">
-              <p className="text-xs text-muted-foreground">Reason</p>
+            <div className="col-span-2 min-w-0">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Reason</p>
               <p className="line-clamp-2 font-medium">{request.reason}</p>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Time</p>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Time</p>
               <p className="font-medium">{format(parseISO(request.createdAt), 'h:mm a')}</p>
             </div>
           </div>
 
           {showQr && (
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="rounded-lg bg-white p-1.5">
-                <QRCodeSVG value={request.qrToken!} size={104} fgColor="#0f172a" bgColor="#ffffff" />
+            <div className="flex flex-col items-center gap-2">
+              <div className={`rounded-lg border bg-white p-2.5 ${tone.border}`}>
+                <QRCodeSVG value={request.qrToken!} size={110} fgColor="#0f172a" bgColor="#ffffff" />
               </div>
-              <p className={`text-[10px] font-bold tracking-wide ${tone.text}`}>SHOW THIS QR AT THE GATE</p>
+              <p className={`text-[10px] font-bold tracking-wider ${tone.text}`}>SHOW THIS QR AT THE GATE</p>
             </div>
           )}
 
-          <p className="mt-auto text-right text-[11px] italic text-muted-foreground">Click to flip</p>
+          <p className="self-end text-[11px] italic text-muted-foreground">Click to flip</p>
         </div>
 
         {/* ── Back ── */}
         <div
-          className={`absolute inset-0 flex flex-col gap-3 rounded-2xl border-2 p-4 ${tone.border} ${tone.bg}`}
+          ref={backRef}
+          className={`absolute inset-x-0 top-0 flex flex-col gap-4 rounded-2xl border-2 p-4 ${tone.border} ${tone.bg}`}
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
-          <div className="flex flex-col items-center gap-1.5 pt-2">
+          <div className="flex flex-col items-center gap-1.5 pt-1">
             <StatusIcon className={`size-8 ${tone.text}`} />
             <p className={`text-lg font-black ${tone.text}`}>{statusLabel}</p>
           </div>
 
-          <div className="mt-2 flex flex-col gap-2.5 text-sm">
+          <div className="flex flex-col gap-3 text-sm">
             {request.approvedBy && (
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   {request.status === 'rejected' ? 'Rejected by' : 'Approved by'}
                 </p>
                 <p className="font-semibold">
@@ -170,19 +194,19 @@ export function OutpassFlipCard({
             )}
             {request.reviewComment && (
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Comment</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Comment</p>
                 <p className="font-semibold">{request.reviewComment}</p>
               </div>
             )}
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Source</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Source</p>
               <p className="flex items-center gap-1 font-semibold">
                 <MapPin className="size-3.5" /> {SOURCE_LABEL[request.source] ?? request.source}
               </p>
             </div>
             {request.exitedAt && (
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Gate Exit</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Gate Exit</p>
                 <p className="font-semibold">
                   {request.exitGateName ? `Via ${request.exitGateName}, ` : ''}
                   {format(parseISO(request.exitedAt), 'd MMM, h:mm a')}
@@ -194,7 +218,7 @@ export function OutpassFlipCard({
             )}
           </div>
 
-          <p className="mt-auto text-right text-[11px] italic text-muted-foreground">Click to flip back</p>
+          <p className="self-end text-[11px] italic text-muted-foreground">Click to flip back</p>
         </div>
       </motion.div>
     </div>

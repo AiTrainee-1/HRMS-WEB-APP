@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Send, Timer, Wallet, Clock, PartyPopper, Radio, LogIn, LogOut, LayoutDashboard,
   CalendarCheck, MapPin, CalendarClock, Fingerprint, FolderOpen, FileStack,
-  MessageCircle, Building2, Bell, UserRound, Navigation,
+  MessageCircle, Building2, Bell, UserRound, Navigation, DoorOpen,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,14 +16,24 @@ import { IdCardFront } from '@/components/idcard/IdCardViews'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 
+// The first six lead the grid (top-left, read first) -the requests/approvals
+// an employee reaches for most, mirroring the Mobile App's Quick Actions
+// priority. "Attendance Request" is the On-Duty entry point here: this app
+// has no separate On-Duty route -it's a mode chosen at the top of that same
+// page (see AttendanceRequest.tsx's ModeSelect) -so promoting it covers both
+// On-Duty and office-punch requests in one tile, matching the mobile intent
+// without inventing a route that doesn't exist.
 const quickActions = [
-  { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck },
+  // ── Top six -requests & approvals ──
   { label: 'Attendance Request', href: '/employee/attendance-request', icon: MapPin },
-  { label: 'Permission', href: '/employee/permissions', icon: Timer },
-  { label: 'Leave', href: '/employee/leave', icon: Send },
-  { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
   { label: 'Missing Punch', href: '/employee/missing-punch', icon: Fingerprint },
+  { label: 'Leave', href: '/employee/leave', icon: Send },
+  { label: 'Permission', href: '/employee/permissions', icon: Timer },
+  { label: 'Outpass', href: '/employee/outpass', icon: DoorOpen },
   { label: 'Salary', href: '/employee/salary', icon: Wallet },
+  // ── Everything else ──
+  { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck },
+  { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
   { label: 'Shift', href: '/employee/shift', icon: Clock },
   { label: 'Documents', href: '/employee/documents', icon: FolderOpen },
   { label: 'Holidays', href: '/employee/holidays', icon: PartyPopper },

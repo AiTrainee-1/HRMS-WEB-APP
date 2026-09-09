@@ -1,12 +1,14 @@
+import { useState } from 'react'
 import { useParams } from 'wouter'
 import { useQuery } from '@tanstack/react-query'
-import { Download } from 'lucide-react'
+import { Download, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { salaryApi } from '@/api/resources'
+import { ApiError } from '@/api/client'
 import { toast } from 'sonner'
 
 const MONTH_NAMES = [
@@ -16,15 +18,30 @@ const MONTH_NAMES = [
 
 export default function SalaryDetail() {
   const { id } = useParams<{ id: string }>()
+  const [downloading, setDownloading] = useState(false)
   const { data, isLoading } = useQuery({
     queryKey: ['salary-slip', id],
     queryFn: () => salaryApi.detail(id),
   })
 
-  function handleDownload() {
-    // No PDF-generation endpoint exists on the backend yet — surface that
-    // clearly instead of opening a dead link to a 404.
-    toast.info('PDF download is not available yet. Contact HR for a physical copy.')
+  async function handleDownload() {
+    if (!id || !data) return
+    setDownloading(true)
+    try {
+      const blob = await salaryApi.pdf(id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `salary_slip_${MONTH_NAMES[data.month - 1]}_${data.year}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not download this salary slip')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (isLoading || !data) {
@@ -54,8 +71,13 @@ export default function SalaryDetail() {
         subtitle="Salary slip breakdown"
         icon={<Download />}
         actions={
-          <Button onClick={handleDownload} className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
-            <Download /> Download PDF
+          <Button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay"
+          >
+            {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+            {downloading ? 'Downloading…' : 'Download PDF'}
           </Button>
         }
       />

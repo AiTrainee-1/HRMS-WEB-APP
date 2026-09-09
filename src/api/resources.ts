@@ -181,6 +181,11 @@ export const notificationApi = {
 export const salaryApi = {
   list: () => apiRequest<SalarySlip[]>({ method: 'GET', url: '/my/salary-slips' }),
   detail: (id: string) => apiRequest<SalarySlipDetail>({ method: 'GET', url: `/salary-slips/${id}` }),
+  // Same endpoint the Mobile App already downloads/shares from successfully
+  // (backend/api/company_documents_views.py::salary_slip_pdf, @require_auth,
+  // self-scoped to the employee's own slip) — blob, since the file is only
+  // ever served through this authenticated route, same as documentsApi.fetchFile.
+  pdf: (id: string) => apiRequest<Blob>({ method: 'GET', url: `/salary-slips/${id}/pdf`, responseType: 'blob' }),
 }
 
 // ---- Documents ----
