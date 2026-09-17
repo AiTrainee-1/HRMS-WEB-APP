@@ -95,7 +95,10 @@ export interface CasualLeaveRequest {
 // exactly approvedAt + 60 minutes, computed server-side so the client never
 // has to guess the window.
 export type OutpassSource = 'manual' | 'on_duty'
-export type OutpassScanStatus = 'not_applicable' | 'pending_exit' | 'exited' | 'expired_unscanned'
+export type OutpassScanStatus =
+  | 'not_applicable' | 'pending_exit' | 'exited' | 'expired_unscanned'
+  // The return/re-entry leg -see backend/api/outpass_request_views.py::_outpass_scan_status.
+  | 'pending_return' | 'return_expired' | 'completed'
 
 export interface OutpassRequest {
   id: string
@@ -115,7 +118,38 @@ export interface OutpassRequest {
   qrToken?: string | null
   exitGateName?: string | null
   exitedAt?: string | null
+  // Return/re-entry leg -returnQrToken only appears once the employee has
+  // requested it (see outpassApi.generateReturnQr in api/resources.ts) AND
+  // it hasn't expired/been superseded by a newer one yet.
+  entryGateName?: string | null
+  enteredAt?: string | null
+  returnQrToken?: string | null
+  returnQrExpiresAt?: string | null
+  canGenerateReturnQr?: boolean
   scanStatus?: OutpassScanStatus
+}
+
+// See backend/api/tea_break_views.py. A permanent, no-approval, per-employee
+// QR -unlike OutpassRequest's per-request approval flow, this just
+// identifies WHO is scanning; the server toggles OUT/IN by itself based on
+// whether an open break already exists.
+export type TeaBreakRemark = 'overtime' | 'on_time' | 'in_progress' | 'not_returned'
+
+export interface TeaBreakLogItem {
+  id: string
+  outGateName: string | null
+  outAt: string
+  inGateName: string | null
+  inAt: string | null
+  takenMinutes: number
+  remark: TeaBreakRemark
+}
+
+export interface TeaBreakStatus {
+  onBreak: boolean
+  outAt: string | null
+  allowedMinutes: number
+  recent: TeaBreakLogItem[]
 }
 
 export type MissingPunchStatus = 'pending_hod' | 'pending_hr' | 'approved' | 'rejected'

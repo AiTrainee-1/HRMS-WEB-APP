@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, DoorOpen, IdCard } from 'lucide-react'
+import { Plus, DoorOpen, IdCard, Coffee } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,12 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { RequestTabs } from '@/components/employee/RequestTabs'
 import { TextareaField } from '@/components/employee/TextareaField'
 import { StatusBadge } from '@/components/employee/StatusBadge'
 import { EmptyState } from '@/components/employee/EmptyState'
 import { OutpassFlipCard } from '@/components/employee/OutpassFlipCard'
+import { TeaBreakPanel } from '@/components/employee/TeaBreakPanel'
 import { outpassApi, employeeApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { ApiError } from '@/api/client'
@@ -23,6 +25,7 @@ import type { OutpassRequest } from '@/types'
 export default function Outpass() {
   const { user } = useAuth()
   const qc = useQueryClient()
+  const [section, setSection] = React.useState<'outpass' | 'teaBreak'>('outpass')
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [form, setForm] = React.useState({ destination: '', reason: '' })
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -62,12 +65,20 @@ export default function Outpass() {
   const all = listQuery.data ?? []
   const live = all.filter((r) => r.status === 'pending')
   const confirmed = all.filter((r) => r.status !== 'pending')
-  // The most recent still-valid approved request -source can be "manual" or
-  // "on_duty" (an On-Duty request that just got its final approval,
+  // The most recent still-relevant approved request -source can be "manual"
+  // or "on_duty" (an On-Duty request that just got its final approval,
   // see geo_attendance_views.py::_create_outpass_from_on_duty); either way it
   // shows here the same way, since both produce the same OutpassRequest shape.
+  // Once exited but not yet returned, the card stays pinned here regardless
+  // of the original approval window (expiresAt only bounds the EXIT leg) -
+  // the employee may be out well past that 60-minute mark and still needs
+  // "Generate Return QR" to be easy to find.
   const activePass = [...all]
-    .filter((r) => r.status === 'approved' && r.expiresAt && new Date(r.expiresAt).getTime() > Date.now())
+    .filter((r) => {
+      if (r.status !== 'approved') return false
+      if (r.exitedAt && !r.enteredAt) return true
+      return !!r.expiresAt && new Date(r.expiresAt).getTime() > Date.now()
+    })
     .sort((a, b) => new Date(b.approvedAt ?? 0).getTime() - new Date(a.approvedAt ?? 0).getTime())[0]
 
   function renderItem(item: OutpassRequest) {
@@ -101,63 +112,86 @@ export default function Outpass() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="Outpass"
-        subtitle="Request permission to step out -approved by your HOD or HR"
-        icon={<DoorOpen />}
+        title={section === 'outpass' ? 'Outpass' : 'Tea Break'}
+        subtitle={
+          section === 'outpass'
+            ? 'Request permission to step out -approved by your HOD or HR'
+            : 'Scan your permanent QR at the gate to record Out/In timings -no approval needed'
+        }
+        icon={section === 'outpass' ? <DoorOpen /> : <Coffee />}
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
-                <Plus /> Request Outpass
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Request an Outpass</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="op-destination">Where are you going?</Label>
-                  <Input
-                    id="op-destination"
-                    value={form.destination}
-                    onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))}
+          section === 'outpass' ? (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
+                  <Plus /> Request Outpass
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request an Outpass</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="op-destination">Where are you going?</Label>
+                    <Input
+                      id="op-destination"
+                      value={form.destination}
+                      onChange={(e) => setForm((f) => ({ ...f, destination: e.target.value }))}
+                    />
+                  </div>
+                  <TextareaField
+                    id="op-reason"
+                    label="Reason"
+                    rows={3}
+                    minLength={5}
+                    maxLength={300}
+                    value={form.reason}
+                    onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
                   />
-                </div>
-                <TextareaField
-                  id="op-reason"
-                  label="Reason"
-                  rows={3}
-                  minLength={5}
-                  maxLength={300}
-                  value={form.reason}
-                  onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-                />
-                {formError && <p className="text-sm text-destructive">{formError}</p>}
-                <DialogFooter>
-                  <Button type="submit" variant="gradient" disabled={applyMutation.isPending}>
-                    {applyMutation.isPending ? 'Submitting…' : 'Submit'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  {formError && <p className="text-sm text-destructive">{formError}</p>}
+                  <DialogFooter>
+                    <Button type="submit" variant="gradient" disabled={applyMutation.isPending}>
+                      {applyMutation.isPending ? 'Submitting…' : 'Submit'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : undefined
         }
       />
 
-      {activePass && <OutpassFlipCard request={activePass} employee={employeeQuery.data} />}
+      {/* "A new header tab under the Outpass section" -Outpass and Tea Break
+          are two independent bodies sharing this one page, exactly like the
+          HR portal's Outpass/Visitors/Tea Break sidebar group shares one
+          page component. */}
+      <Tabs value={section} onValueChange={(v) => setSection(v as 'outpass' | 'teaBreak')} className="w-full">
+        <TabsList>
+          <TabsTrigger value="outpass">Outpass</TabsTrigger>
+          <TabsTrigger value="teaBreak">Tea Break</TabsTrigger>
+        </TabsList>
 
-      {listQuery.isLoading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <RequestTabs
-          liveItems={live}
-          confirmedItems={confirmed}
-          renderItem={renderItem}
-          emptyLive={<EmptyState icon={DoorOpen} title="No pending outpass requests" />}
-          emptyConfirmed={<EmptyState icon={DoorOpen} title="No confirmed outpass requests yet" />}
-        />
-      )}
+        <TabsContent value="outpass" className="mt-4 flex flex-col gap-4">
+          {activePass && <OutpassFlipCard request={activePass} employee={employeeQuery.data} />}
+
+          {listQuery.isLoading ? (
+            <Skeleton className="h-64 w-full" />
+          ) : (
+            <RequestTabs
+              liveItems={live}
+              confirmedItems={confirmed}
+              renderItem={renderItem}
+              emptyLive={<EmptyState icon={DoorOpen} title="No pending outpass requests" />}
+              emptyConfirmed={<EmptyState icon={DoorOpen} title="No confirmed outpass requests yet" />}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="teaBreak" className="mt-4">
+          <TeaBreakPanel />
+        </TabsContent>
+      </Tabs>
 
       {/* Outpass card preview -any request, any status, opened from its row */}
       <Dialog open={!!previewItem} onOpenChange={(open) => !open && setPreviewItem(null)}>

@@ -1,9 +1,14 @@
 import * as React from 'react'
 import { motion } from 'framer-motion'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
 import { QRCodeSVG } from 'qrcode.react'
-import { CheckCircle2, XCircle, Clock, RotateCw, MapPin } from 'lucide-react'
+import { CheckCircle2, XCircle, Clock, RotateCw, MapPin, QrCode, CheckCheck } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { outpassApi } from '@/api/resources'
+import { ApiError } from '@/api/client'
 import type { Employee, OutpassRequest } from '@/types'
 
 /**
@@ -68,7 +73,9 @@ export function OutpassFlipCard({
 }) {
   const [flipped, setFlipped] = React.useState(startFlipped)
   const { expired, remainingMs } = useCountdown(request.expiresAt)
+  const { expired: returnExpired, remainingMs: returnRemainingMs } = useCountdown(request.returnQrExpiresAt)
   const tone = toneFor(request.status)
+  const qc = useQueryClient()
 
   const StatusIcon = request.status === 'approved' ? CheckCircle2 : request.status === 'rejected' ? XCircle : Clock
   const statusLabel = request.status === 'approved' ? 'Approved' : request.status === 'rejected' ? 'Not Approved' : 'Pending Review'
@@ -76,10 +83,22 @@ export function OutpassFlipCard({
   // gate (approved, unexpired, not yet exited) -see backend/api/
   // outpass_request_views.py::_outpass_request_json.
   const showQr = !!request.qrToken
+  // Return leg -mutually exclusive with showQr. returnQrToken only appears
+  // once the employee has clicked "Generate Return QR" below and it hasn't
+  // expired or been superseded by a newer one yet.
+  const showReturnQr = !!request.returnQrToken
+  const showGenerateReturnQr = !showReturnQr && !!request.canGenerateReturnQr
+  const isReturned = !!request.enteredAt
+
+  const generateReturnQr = useMutation({
+    mutationFn: () => outpassApi.generateReturnQr(request.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['outpass-requests'] }),
+    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not generate the return QR'),
+  })
 
   // Seed with a close estimate so the first paint is already approximately
   // right; the layout effect below then corrects it exactly.
-  const [cardHeight, setCardHeight] = React.useState(showQr ? 400 : 270)
+  const [cardHeight, setCardHeight] = React.useState(showQr || showReturnQr ? 400 : showGenerateReturnQr || isReturned ? 330 : 270)
   const frontRef = React.useRef<HTMLDivElement>(null)
   const backRef = React.useRef<HTMLDivElement>(null)
 
@@ -166,6 +185,36 @@ export function OutpassFlipCard({
             </div>
           )}
 
+          {showReturnQr && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="rounded-lg border border-sky-300 bg-white p-2.5">
+                <QRCodeSVG value={request.returnQrToken!} size={110} fgColor="#0f172a" bgColor="#ffffff" />
+              </div>
+              <p className="text-[10px] font-bold tracking-wider text-sky-600">SHOW THIS QR TO RETURN</p>
+              {!returnExpired && returnRemainingMs != null && (
+                <p className="text-[10px] tabular-nums text-muted-foreground">Valid for {formatRemaining(returnRemainingMs)}</p>
+              )}
+            </div>
+          )}
+
+          {showGenerateReturnQr && (
+            <Button
+              variant="outline"
+              size="sm"
+              className={`gap-1.5 border-dashed ${tone.border} ${tone.text}`}
+              disabled={generateReturnQr.isPending}
+              onClick={(e) => { e.stopPropagation(); generateReturnQr.mutate() }}
+            >
+              <QrCode className="size-3.5" /> {generateReturnQr.isPending ? 'Generating…' : 'Generate Return QR'}
+            </Button>
+          )}
+
+          {isReturned && (
+            <div className="flex items-center justify-center gap-1.5 rounded-lg bg-success/10 py-2 text-xs font-bold text-success">
+              <CheckCheck className="size-3.5" /> Returned {format(parseISO(request.enteredAt!), 'h:mm a')}
+            </div>
+          )}
+
           <p className="self-end text-[11px] italic text-muted-foreground">Click to flip</p>
         </div>
 
@@ -210,6 +259,15 @@ export function OutpassFlipCard({
                 <p className="font-semibold">
                   {request.exitGateName ? `Via ${request.exitGateName}, ` : ''}
                   {format(parseISO(request.exitedAt), 'd MMM, h:mm a')}
+                </p>
+              </div>
+            )}
+            {request.enteredAt && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Gate Return</p>
+                <p className="font-semibold">
+                  {request.entryGateName ? `Via ${request.entryGateName}, ` : ''}
+                  {format(parseISO(request.enteredAt), 'd MMM, h:mm a')}
                 </p>
               </div>
             )}

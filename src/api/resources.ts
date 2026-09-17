@@ -31,6 +31,7 @@ import type {
   SalarySlip,
   SalarySlipDetail,
   ShiftAssignment,
+  TeaBreakStatus,
 } from '@/types'
 
 // ---- Auth ----
@@ -166,6 +167,18 @@ export const outpassApi = {
   list: () => apiRequest<OutpassRequest[]>({ method: 'GET', url: '/outpass-requests' }),
   apply: (body: { destination: string; reason: string }) =>
     apiRequest<OutpassRequest>({ method: 'POST', url: '/outpass-requests', data: body }),
+  // The "Generate Return QR" button on an already-exited Outpass card -see
+  // backend/api/outpass_request_views.py::generate_return_qr.
+  generateReturnQr: (id: string) =>
+    apiRequest<OutpassRequest>({ method: 'POST', url: `/outpass-requests/${id}/generate-return-qr` }),
+}
+
+// ---- Tea Break ----
+// A permanent, no-approval, per-employee QR -see backend/api/tea_break_views.py.
+// Both self-scope to the logged-in employee token server-side, same as Outpass above.
+export const teaBreakApi = {
+  qrToken: () => apiRequest<{ qrToken: string }>({ method: 'GET', url: '/tea-break/qr-token' }),
+  myStatus: () => apiRequest<TeaBreakStatus>({ method: 'GET', url: '/tea-break/my-status' }),
 }
 
 // ---- Notifications ----
