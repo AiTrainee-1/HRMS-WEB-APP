@@ -43,13 +43,36 @@ export function useGeoPunch() {
   })
 }
 
-/** On-Duty: submits a two-photo + reason request for the HOD→HR approval chain. */
-export function useOnDutyRequest() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: onDutyApi.request,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['geo-punch-status'] })
-    },
+export function useOnDutyStatus() {
+  return useQuery({
+    queryKey: ['on-duty-status'],
+    queryFn: onDutyApi.status,
+    refetchInterval: 30_000,
   })
+}
+
+function useInvalidateOnDuty() {
+  const queryClient = useQueryClient()
+  return () => {
+    queryClient.invalidateQueries({ queryKey: ['on-duty-status'] })
+    queryClient.invalidateQueries({ queryKey: ['geo-punch-status'] })
+  }
+}
+
+/** Starts an On-Duty session (HOD -> HR approve it in the background). */
+export function useStartOnDuty() {
+  const invalidate = useInvalidateOnDuty()
+  return useMutation({ mutationFn: onDutyApi.start, onSuccess: invalidate })
+}
+
+/** Captures one of the day's punches under the running session. */
+export function useOnDutyPunch() {
+  const invalidate = useInvalidateOnDuty()
+  return useMutation({ mutationFn: onDutyApi.punch, onSuccess: invalidate })
+}
+
+/** The employee marks their own session Done. */
+export function useCompleteOnDuty() {
+  const invalidate = useInvalidateOnDuty()
+  return useMutation({ mutationFn: onDutyApi.complete, onSuccess: invalidate })
 }

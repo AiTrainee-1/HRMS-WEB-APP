@@ -5,7 +5,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const statusStyles: Record<string, string> = {
   present: 'bg-success/20 text-success border-success/40',
-  half_shift: 'bg-warning/20 text-warning-foreground border-warning/40',
+  half_shift: 'bg-warning/20 text-warning border-warning/40',
   absent: 'bg-destructive/15 text-destructive border-destructive/30',
   on_leave: 'bg-primary/15 text-primary border-primary/30',
   holiday: 'bg-muted text-muted-foreground border-transparent',

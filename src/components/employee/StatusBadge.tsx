@@ -1,18 +1,30 @@
-import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { RequestStatus } from '@/types'
 
 const labelMap: Record<string, string> = {
   pending: 'Pending',
+  pending_hod: 'Pending HOD',
+  pending_hr: 'Pending HR',
   approved: 'Approved',
   rejected: 'Rejected',
+  cancelled: 'Cancelled',
 }
 
-const variantMap: Record<string, 'warning' | 'success' | 'destructive'> = {
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'destructive',
+const toneMap: Record<string, string> = {
+  pending: 'chip-warning',
+  pending_hod: 'chip-warning',
+  pending_hr: 'chip-info',
+  approved: 'chip-success',
+  rejected: 'chip-danger',
 }
 
-export function StatusBadge({ status }: { status: RequestStatus | string }) {
-  return <Badge variant={variantMap[status] ?? 'secondary'}>{labelMap[status] ?? status}</Badge>
+/** Glass status chip with a leading pip; pending ones pulse. */
+export function StatusBadge({ status, className }: { status: RequestStatus | string; className?: string }) {
+  const pending = status.startsWith('pending')
+  return (
+    <span className={cn('chip', toneMap[status] ?? 'chip-muted', className)}>
+      <span className={cn('pip', pending && 'pip-live')} />
+      {labelMap[status] ?? status.replace(/_/g, ' ')}
+    </span>
+  )
 }

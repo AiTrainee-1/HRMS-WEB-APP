@@ -3,26 +3,34 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
+// Sovereign Loom buttons: restrained 4px radius ("precision-milled"), Plus
+// Jakarta Sans labels, a sapphire gradient for the primary action and a
+// hairline outline for secondary ones.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.97]",
+  "font-label inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-semibold tracking-[0.01em] transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-primary/35 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
+        default:
+          'bg-brand-gradient text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] hover:brightness-110 glow-primary',
         gradient:
-          'bg-brand-gradient text-white shadow-clay hover:shadow-clay-lg hover:-translate-y-0.5',
-        destructive: 'bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90',
-        outline: 'border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground rounded-full',
-        secondary: 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground rounded-full',
-        glass: 'bg-white/40 dark:bg-white/5 backdrop-blur-md border border-white/50 dark:border-white/10 text-foreground shadow-sm hover:bg-white/60 dark:hover:bg-white/10 hover:shadow-md transition-all',
-        link: 'text-primary underline-offset-4 hover:underline rounded-none',
+          'bg-brand-gradient text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] hover:brightness-110 glow-primary',
+        destructive:
+          'bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive/25',
+        outline:
+          'border border-foreground/15 bg-foreground/[0.03] text-foreground hover:border-primary/50 hover:bg-primary/10',
+        secondary: 'bg-secondary text-secondary-foreground border hairline hover:bg-accent',
+        ghost: 'text-foreground/80 hover:bg-foreground/[0.06] hover:text-foreground',
+        glass: 'glass text-foreground hover:border-primary/40 hover:bg-primary/10',
+        success:
+          'bg-success/15 text-success border border-success/30 hover:bg-success/25',
+        link: 'text-brand-blue underline-offset-4 hover:underline px-0',
       },
       size: {
         default: 'h-9 px-4 py-2',
         sm: 'h-8 px-3 text-xs',
-        lg: 'h-11 px-7 text-[15px]',
-        icon: 'h-9 w-9 rounded-full',
+        lg: 'h-11 px-6 text-[15px]',
+        icon: 'size-9',
       },
     },
     defaultVariants: {
@@ -50,4 +58,5 @@ function Button({
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export { Button, buttonVariants }

@@ -107,7 +107,7 @@ export default function Permissions() {
         actions={
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay" disabled={capReached}>
+              <Button disabled={capReached}>
                 <Plus /> Apply Permission
               </Button>
             </DialogTrigger>
@@ -153,7 +153,7 @@ export default function Permissions() {
             </span>
           </div>
           <Progress value={(monthlyUsed / monthlyLimit) * 100} />
-          {capReached && <p className="text-xs text-warning-foreground">Monthly limit reached</p>}
+          {capReached && <p className="text-xs text-warning">Monthly limit reached</p>}
           <p className="text-xs text-muted-foreground">Max {dailyLimit}/day · {weeklyLimit}/week</p>
         </CardContent>
       </Card>

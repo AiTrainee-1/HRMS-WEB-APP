@@ -1,15 +1,8 @@
 import * as React from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Check, X } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { format, parseISO } from 'date-fns'
@@ -21,6 +14,8 @@ export interface ApprovalCardProps {
   department?: string
   dateRange: string
   reason: string
+  /** Extra context under the reason, e.g. "Approving forwards this to HR". */
+  note?: string
   disabled?: boolean
   onApprove: () => void
   onReject: (comment: string) => void
@@ -28,16 +23,7 @@ export interface ApprovalCardProps {
 }
 
 export function ApprovalCard({
-  type,
-  employeeName,
-  employeeCode,
-  department,
-  dateRange,
-  reason,
-  disabled,
-  onApprove,
-  onReject,
-  isSubmitting,
+  type, employeeName, employeeCode, department, dateRange, reason, note, disabled, onApprove, onReject, isSubmitting,
 }: ApprovalCardProps) {
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [comment, setComment] = React.useState('')
@@ -51,42 +37,48 @@ export function ApprovalCard({
     .toUpperCase()
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3 min-w-0">
-          <Avatar>
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{employeeName}</span>
-              <span className="text-muted-foreground text-xs">{employeeCode}</span>
-              <Badge variant="outline">{type}</Badge>
-            </div>
-            {department && <p className="text-muted-foreground text-xs">{department}</p>}
-            <p className="text-sm mt-1">{dateRange}</p>
-            <p
-              className={`text-sm text-muted-foreground mt-1 cursor-pointer ${expanded ? '' : 'line-clamp-1'}`}
-              onClick={() => setExpanded((e) => !e)}
-            >
-              {reason}
-            </p>
+    <article className="glass-raised flex flex-col gap-4 rounded-lg p-5 transition hover:border-primary/30 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-4">
+        <Avatar className="size-11 rounded-md">
+          <AvatarFallback className="rounded-md bg-primary/15 font-bold text-brand-blue">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[16px] font-semibold">{employeeName}</span>
+            <span className="font-label text-[12px] text-muted-foreground">{employeeCode}</span>
+            <span className="chip chip-warning">
+              <span className="pip pip-live" /> {type}
+            </span>
           </div>
+          {department && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{department}</p>}
+          <p className="font-label mt-2 text-[13.5px] font-semibold text-brand-blue">{dateRange}</p>
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            className={`mt-1 block text-left text-[14px] text-foreground/80 ${expanded ? '' : 'line-clamp-2'}`}
+            title={expanded ? undefined : 'Show full reason'}
+          >
+            {reason}
+          </button>
+          {note && <p className="mt-2 text-[12px] text-muted-foreground">{note}</p>}
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button size="sm" variant="outline" disabled={disabled || isSubmitting} onClick={() => setRejectOpen(true)}>
-            Reject
-          </Button>
-          <Button size="sm" variant="gradient" disabled={disabled || isSubmitting} onClick={onApprove}>
-            Approve
-          </Button>
-        </div>
-      </CardContent>
+      </div>
+      <div className="flex shrink-0 gap-2 sm:flex-col lg:flex-row">
+        <Button size="sm" variant="destructive" disabled={disabled || isSubmitting} onClick={() => setRejectOpen(true)} className="flex-1">
+          <X /> Reject
+        </Button>
+        <Button size="sm" variant="success" disabled={disabled || isSubmitting} onClick={onApprove} className="flex-1">
+          <Check /> Approve
+        </Button>
+      </div>
 
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject request</DialogTitle>
+            <DialogTitle>Reject {type.toLowerCase()} request</DialogTitle>
+            <DialogDescription>
+              {employeeName} ({employeeCode}) will be notified. Add a note so they know why.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
             <Label htmlFor="reject-comment">Comment (optional)</Label>
@@ -104,15 +96,16 @@ export function ApprovalCard({
                 setComment('')
               }}
             >
-              Confirm Reject
+              Confirm reject
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </article>
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatDateRange(start: string, end?: string) {
   if (!end || end === start) return format(parseISO(start), 'MMM d, yyyy')
   return `${format(parseISO(start), 'MMM d, yyyy')} – ${format(parseISO(end), 'MMM d, yyyy')}`

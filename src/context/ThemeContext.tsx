@@ -11,10 +11,9 @@ import {
 /**
  * App-wide light/dark theme, mirroring the mobile app's behaviour.
  *
- * Three modes, not two. The default is LIGHT: this product has its own look
- * and shouldn't flip to dark just because a laptop happens to be set that
- * way. 'dark' is the switch in the sidebar, and 'system' ('Auto') is there
- * for anyone who does want it to follow the OS.
+ * Three modes, not two. The default is DARK, the Sovereign Loom look this
+ * product is designed in. 'light' is the switch in the sidebar, and
+ * 'system' ('Auto') is there for anyone who wants it to follow the OS.
  *
  * Unlike React Native, the web already has a cascade: every component styled
  * through the semantic tokens (bg-card, text-foreground, border-border)
@@ -36,20 +35,19 @@ interface ThemeValue {
 }
 
 const ThemeContext = createContext<ThemeValue>({
-  mode: 'light',
-  scheme: 'light',
-  isDark: false,
+  mode: 'dark',
+  scheme: 'dark',
+  isDark: true,
   setMode: () => {},
   toggle: () => {},
 });
 
 /** The mode a viewer gets before they have ever chosen one.
  *
- *  Light, deliberately -NOT 'system'. Following the OS meant every employee
- *  whose machine happens to be on dark was handed a dark app they never asked
- *  for. Light is this product's own default; dark is opt-in, either by the
- *  switch or by choosing Auto to follow the OS from then on. */
-const DEFAULT_MODE: ThemeMode = 'light';
+ *  Dark, deliberately -NOT 'system'. The Sovereign Loom design (the Stitch
+ *  source this UI follows) is a dark-first system, so dark is the product's
+ *  own look; light is opt-in through the switch, and 'Auto' follows the OS. */
+const DEFAULT_MODE: ThemeMode = 'dark';
 
 function readStored(): ThemeMode {
   try {

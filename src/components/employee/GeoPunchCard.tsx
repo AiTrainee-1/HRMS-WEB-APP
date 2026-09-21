@@ -16,9 +16,8 @@ export function GeoPunchCard() {
   const { data: status, isLoading } = useGeoPunchStatus()
   const nextNum = status?.nextPunchNumber
   const nextType = status?.nextPunchType
-  const hasPending = (status?.onDutyRequests ?? []).some(
-    (r) => r.status === 'pending_hod' || r.status === 'pending_hr',
-  )
+  const session = status?.onDutySession
+  const hasPending = !!session && !session.employeeEndedAt && ['pending_hod', 'pending_hr', 'active'].includes(session.approvalStatus)
 
   return (
     <Card>
@@ -30,8 +29,8 @@ export function GeoPunchCard() {
         {isLoading ? (
           <span className="text-sm text-muted-foreground">Loading…</span>
         ) : hasPending ? (
-          <span className="flex items-center gap-1.5 text-sm text-warning-foreground">
-            <Clock className="size-3.5" /> On-Duty request awaiting approval
+          <span className="flex items-center gap-1.5 text-sm text-warning">
+            <Clock className="size-3.5" /> On-Duty session running: {session!.destination}
           </span>
         ) : nextNum == null ? (
           <span className="text-sm text-muted-foreground">All 4 punches recorded for today.</span>

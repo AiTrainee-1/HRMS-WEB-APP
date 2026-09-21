@@ -1,13 +1,10 @@
 import { QRCodeSVG } from 'qrcode.react'
 import type { IdCardData } from '@/types'
+import { verifyUrl } from '@/lib/verify'
 
 const PRIMARY = '#006496'
 const SECONDARY = '#4fb8f0'
 
-function verifyUrl(code: string) {
-  const origin = import.meta.env.VITE_WEB_ORIGIN || window.location.origin
-  return `${origin}/verify/${code}`
-}
 
 function KeyValueRow({ label, value }: { label: string; value?: string }) {
   return (
@@ -25,14 +22,14 @@ export function IdCardFront({ data, scale = 1 }: { data: IdCardData; scale?: num
 
   return (
     <div
-      className="relative overflow-hidden rounded-xl border shadow-md bg-white dark:bg-card/95"
+      className="relative overflow-hidden rounded-xl border shadow-md bg-white"
       style={{ width: w * scale, height: h * scale, transform: scale !== 1 ? undefined : undefined }}
     >
       <div
         className="flex items-center gap-2 px-3 py-2"
         style={{ background: `linear-gradient(90deg, ${PRIMARY}, ${SECONDARY})` }}
       >
-        <div className="flex size-6 items-center justify-center rounded-full bg-white dark:bg-card/95 text-[10px] font-bold" style={{ color: PRIMARY }}>
+        <div className="flex size-6 items-center justify-center rounded-full bg-white text-[10px] font-bold" style={{ color: PRIMARY }}>
           {data.company?.name?.[0] ?? 'U'}
         </div>
         <div className="min-w-0">
@@ -114,7 +111,7 @@ export function IdCardBack({ data, scale = 1 }: { data: IdCardData; scale?: numb
 
   return (
     <div
-      className="relative flex flex-col overflow-hidden rounded-xl border shadow-md bg-white dark:bg-card/95 p-3"
+      className="relative flex flex-col overflow-hidden rounded-xl border shadow-md bg-white p-3"
       style={{ width: w * scale, height: h * scale }}
     >
       <div className={isStaff ? 'flex flex-col gap-2' : 'flex gap-4'}>
@@ -126,7 +123,7 @@ export function IdCardBack({ data, scale = 1 }: { data: IdCardData; scale?: numb
         </div>
         {data.template?.showQrOnBack !== false && (
           <div className="flex flex-col items-center justify-start mt-2">
-            <div className="rounded-md border p-1.5 bg-white dark:bg-card/95">
+            <div className="rounded-md border p-1.5 bg-white">
               <QRCodeSVG value={verifyUrl(data.code)} size={isStaff ? 72 : 80} fgColor="#0f172a" bgColor="#ffffff" />
             </div>
             <p className="mt-1 text-center text-[7px] font-semibold tracking-wide text-slate-500">SCAN TO VERIFY EMPLOYEE</p>

@@ -34,40 +34,57 @@ export interface NavGroup {
   items: NavItem[]
 }
 
+// Grouping follows the Sovereign Loom sidebar: Overview, HR & Workflows,
+// Payroll & Ops, System & Directory.
 export const navGroups: NavGroup[] = [
   {
-    heading: 'Home & Attendance',
+    heading: 'Overview',
     items: [
-      { label: 'Home', href: '/employee/dashboard', icon: LayoutDashboard },
+      { label: 'Dashboard', href: '/employee/dashboard', icon: LayoutDashboard },
       { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck },
-      { label: 'Attendance Request', href: '/employee/attendance-request', icon: MapPin },
-      { label: 'Leave', href: '/employee/leave', icon: Send },
-      { label: 'Permission', href: '/employee/permissions', icon: Timer },
-      { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
-      { label: 'Outpass', href: '/employee/outpass', icon: DoorOpen },
-      { label: 'Missing Punch', href: '/employee/missing-punch', icon: Fingerprint },
-      { label: 'Approvals', href: '/employee/approvals', icon: ClipboardCheck, managerOnly: true },
+      { label: 'My Shift', href: '/employee/shift', icon: Clock },
     ],
   },
   {
-    heading: 'Payroll & Records',
+    heading: 'HR & Workflows',
     items: [
-      { label: 'Salary Slip', href: '/employee/salary', icon: Wallet },
-      { label: 'My Shift', href: '/employee/shift', icon: Clock },
-      { label: 'ID Card', href: '/employee/id-card', icon: BadgeCheck },
-      { label: 'Holidays', href: '/employee/holidays', icon: PartyPopper },
-      { label: 'Settlement', href: '/employee/settlement', icon: FileStack },
+      { label: 'Geo Punch / On-Duty', href: '/employee/attendance-request', icon: MapPin },
+      { label: 'Leave', href: '/employee/leave', icon: Send },
+      { label: 'Permission', href: '/employee/permissions', icon: Timer },
+      { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
+      { label: 'Missing Punch', href: '/employee/missing-punch', icon: Fingerprint },
+      { label: 'Manager Approvals', href: '/employee/approvals', icon: ClipboardCheck, managerOnly: true },
       { label: 'Documents', href: '/employee/documents', icon: FolderOpen },
     ],
   },
   {
-    heading: 'Other',
+    heading: 'Payroll & Ops',
     items: [
-      { label: 'Chat', href: '/employee/chat', icon: MessageCircle },
-      { label: 'Alerts', href: '/employee/notifications', icon: Bell },
-      { label: 'Profile', href: '/employee/profile', icon: UserRound },
-      { label: 'Company', href: '/employee/company', icon: Building2 },
+      { label: 'Salary Slips', href: '/employee/salary', icon: Wallet },
+      { label: 'Settlement & Advances', href: '/employee/settlement', icon: FileStack },
+      { label: 'Outpass & Gates', href: '/employee/outpass', icon: DoorOpen },
       { label: 'Resignation', href: '/employee/resignation', icon: FileSignature },
     ],
   },
+  {
+    heading: 'System & Directory',
+    items: [
+      { label: 'Holidays', href: '/employee/holidays', icon: PartyPopper },
+      { label: 'Team Chat', href: '/employee/chat', icon: MessageCircle },
+      { label: 'Notifications', href: '/employee/notifications', icon: Bell },
+      { label: 'Digital ID', href: '/employee/id-card', icon: BadgeCheck },
+      { label: 'My Profile', href: '/employee/profile', icon: UserRound },
+      { label: 'Company Directory', href: '/employee/company', icon: Building2 },
+    ],
+  },
 ]
+
+/** The nav entry (and its group) for a location — drives the top-bar breadcrumb. */
+export function findNav(location: string): { group: NavGroup; item: NavItem } | null {
+  for (const group of navGroups) {
+    for (const item of group.items) {
+      if (location === item.href || location.startsWith(item.href + '/')) return { group, item }
+    }
+  }
+  return null
+}

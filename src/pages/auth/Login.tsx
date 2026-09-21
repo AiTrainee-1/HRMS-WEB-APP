@@ -1,87 +1,31 @@
 import * as React from 'react'
-import { useLocation } from 'wouter'
+import { Link, useLocation } from 'wouter'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { Eye, EyeOff, LogIn, User, Lock, AlertCircle } from 'lucide-react'
+import {
+  AlertCircle, ArrowRight, Eye, EyeOff, Factory, IdCard, KeyRound, Lock,
+  MapPin, ShieldCheck, Wallet, CalendarCheck,
+} from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { ApiError } from '@/api/client'
+import heroImage from '@/assets/company/infrastructure.png'
+import { AuthBackground } from '@/components/backgrounds/AuthBackground'
 
-// ─── Floating-label input with icon prefix ─────────────────────────────────
-interface FieldProps {
-  id: string
-  label: string
-  type?: string
-  value: string
-  onChange: (v: string) => void
-  icon: React.ReactNode
-  autoFocus?: boolean
-  rightElement?: React.ReactNode
+function useClock() {
+  const [now, setNow] = React.useState(() => new Date())
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
+  return now
 }
 
-function Field({ id, label, type = 'text', value, onChange, icon, autoFocus, rightElement }: FieldProps) {
-  const [focused, setFocused] = React.useState(false)
-  const lifted = focused || value.length > 0
+const pillars = [
+  { label: 'Attendance', value: 'Geo-verified', note: 'Office & on-duty punches', icon: MapPin, tone: 'text-brand-emerald' },
+  { label: 'Payroll', value: 'Monthly', note: 'Salary slips & advances', icon: Wallet, tone: 'text-brand-gold' },
+  { label: 'Requests', value: 'Tracked', note: 'Leave, permission & outpass', icon: CalendarCheck, tone: 'text-brand-blue' },
+]
 
-  return (
-    <div className="relative">
-      {/* glass input container */}
-      <div
-        className={[
-          'relative flex items-center rounded-xl border transition-all duration-200',
-          focused
-            ? 'border-brand-blue bg-white/90 dark:bg-card/95 shadow-[0_0_0_3px_rgb(0,100,150,0.12)]'
-            : 'border-white/40 dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-white/70 dark:hover:border-white/20 hover:bg-white/75 dark:hover:bg-white/10',
-        ].join(' ')}
-      >
-        {/* leading icon */}
-        <span
-          className={[
-            'pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200',
-            focused ? 'text-brand-blue' : 'text-foreground/35',
-          ].join(' ')}
-        >
-          {icon}
-        </span>
-
-        {/* floating label */}
-        <label
-          htmlFor={id}
-          className={[
-            'pointer-events-none absolute left-10 transition-all duration-200 select-none',
-            lifted
-              ? 'top-2 text-[10px] font-semibold tracking-wide text-brand-blue'
-              : 'top-1/2 -translate-y-1/2 text-sm text-foreground/45',
-          ].join(' ')}
-        >
-          {label}
-        </label>
-
-        <input
-          id={id}
-          type={type}
-          value={value}
-          autoFocus={autoFocus}
-          autoComplete={type === 'password' ? 'current-password' : 'username'}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          className={[
-            'h-14 w-full bg-transparent pl-10 text-sm font-medium text-foreground outline-none',
-            rightElement ? 'pr-10' : 'pr-4',
-            lifted ? 'pt-4' : 'pt-0',
-          ].join(' ')}
-        />
-
-        {/* trailing element (show/hide password) */}
-        {rightElement && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2">{rightElement}</span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Page ──────────────────────────────────────────────────────────────────
 export default function Login() {
   const { login, isLoading } = useAuth()
   const [, navigate] = useLocation()
@@ -89,16 +33,17 @@ export default function Login() {
   const [password, setPassword] = React.useState('')
   const [showPw, setShowPw] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const now = useClock()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     if (!identifier || !password) {
-      setError('Please fill in all fields.')
+      setError('Enter your employee code and password.')
       return
     }
     try {
-      await login(identifier, password)
+      await login(identifier.trim(), password)
       toast.success('Welcome back!')
       navigate('/employee/dashboard')
     } catch (err) {
@@ -108,200 +53,200 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-brand-blue-tint p-4">
-
-      {/* ── background blobs (unchanged) ─────────────────────────────────── */}
-      <div className="pointer-events-none absolute -top-24 -right-16 size-96 rounded-full bg-brand-gradient opacity-20 animate-blob" />
-      <div
-        className="pointer-events-none absolute -bottom-32 -left-20 size-80 rounded-full bg-brand-gradient opacity-15 animate-blob"
-        style={{ animationDelay: '4s' }}
-      />
-      <div
-        className="pointer-events-none absolute top-1/3 left-1/4 size-40 rounded-full bg-gold-gradient opacity-20 animate-blob"
-        style={{ animationDelay: '2s' }}
-      />
-
-      {/* ── card ─────────────────────────────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-[400px]"
-      >
-        {/* glassmorphic panel */}
-        <div
-          className="relative overflow-hidden rounded-3xl px-8 pt-8 pb-7"
-          style={{
-            background: 'rgba(255,255,255,0.55)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            boxShadow:
-              '0 32px 64px -16px rgba(0,100,150,0.18), 0 8px 24px -4px rgba(0,100,150,0.10), inset 0 1px 0 rgba(255,255,255,0.9)',
-            border: '1px solid rgba(255,255,255,0.65)',
-          }}
+    <div className="dark auth-theme relative isolate flex min-h-dvh flex-col text-foreground lg:h-dvh lg:overflow-hidden">
+      <AuthBackground />
+      <main className="flex min-h-0 flex-1 items-center justify-center px-4 py-4 sm:px-8 lg:py-6">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="grid w-full max-w-6xl gap-5 rounded-xl border border-white/15 bg-white/[0.06] p-4 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.6)] backdrop-blur-md sm:p-5 lg:h-full lg:max-h-[780px] lg:grid-cols-[1.25fr_1fr]"
         >
-          {/* subtle inner shine */}
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-px"
-            style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent)' }}
-          />
+          {/* ── Left: editorial hero ─────────────────────────────────────── */}
+          <section className="relative hidden overflow-hidden rounded-lg border hairline bg-gradient-to-br from-[#241257]/80 via-[#150b38]/80 to-[#0b0620]/85 p-8 backdrop-blur-md text-[#dae2fd] lg:flex lg:min-h-0 lg:flex-col xl:p-9">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-[0.07]"
+              style={{
+                backgroundImage:
+                  'linear-gradient(rgb(255 255 255) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255) 1px, transparent 1px)',
+                backgroundSize: '48px 48px',
+              }}
+            />
+            <div className="pointer-events-none absolute -top-32 -right-24 size-96 rounded-full bg-[#7c5cff]/30 blur-3xl" />
 
-          {/* ── logo + heading ────────────────────────────────────────────── */}
-          <div className="mb-7 flex flex-col items-center gap-4">
-            <motion.div
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', damping: 14, stiffness: 180, delay: 0.1 }}
-              className="flex items-center justify-center rounded-2xl bg-white/90 dark:bg-card/95 shadow-clay-lg overflow-hidden"
-              style={{ boxShadow: '0 8px 24px -6px rgba(0,100,150,0.22), inset 0 1px 0 rgba(255,255,255,1)' }}
-            >
-              <img
-                src="/UKT_Company_Logo.png"
-                alt="UK Textiles"
-                className="h-14 w-auto object-contain px-3 py-1.5"
-              />
-            </motion.div>
+            <div className="relative flex items-center justify-between gap-3">
+              <span className="label-caps inline-flex items-center gap-2 rounded bg-white/[0.06] px-2.5 py-1.5 text-[#dae2fd]">
+                <Factory className="size-3.5 text-[#fbbf24]" /> UKTextiles workforce
+              </span>
+              <span className="inline-flex items-center gap-2 rounded bg-black/30 px-3 py-1.5">
+                <span className="pip pip-live text-[#34d399]" />
+                <span className="font-label text-[15px] font-semibold tabular-nums">
+                  {now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+                </span>
+              </span>
+            </div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-              className="text-center"
-            >
-              <h1 className="text-[22px] font-bold tracking-tight text-foreground">
-                Employee Login
-              </h1>
-              <p className="mt-1 text-[13px] text-foreground/50 font-medium">
-                Sign in to your workspace
-              </p>
-            </motion.div>
-          </div>
+            <p className="label-caps relative mt-5 text-[12px] tracking-[0.14em] text-[#fbbf24]">Employee self-service</p>
+            <h1 className="font-display relative mt-2 text-[clamp(32px,4.6vh,50px)] leading-[1.06] font-semibold tracking-tight">
+              Precision Weaving.
+              <br />
+              <em className="font-medium text-[#d4c4ff]">Unified Workforce</em>
+              <br />
+              Intelligence.
+            </h1>
+            <p className="relative mt-3 max-w-xl text-[15px] leading-relaxed text-[#c3c6d7]">
+              Your attendance, shifts, leave, outpasses and salary slips, all in one place.
+            </p>
 
-          {/* ── form ─────────────────────────────────────────────────────── */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.35, delay: 0.25 }}
-            >
-              <Field
-                id="identifier"
-                label="Employee Code / Phone / Email"
-                value={identifier}
-                onChange={setIdentifier}
-                icon={<User className="size-4" />}
-                autoFocus
-              />
-            </motion.div>
+            <figure className="relative mt-5 min-h-[100px] flex-1 overflow-hidden rounded-md border border-white/10">
+              <img src={heroImage} alt="UKTextiles mill floor" className="absolute inset-0 h-full w-full object-cover opacity-80" />
+              <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#060e20] via-[#060e20]/70 to-transparent px-5 pt-10 pb-4">
+                <p className="label-caps text-[#fbbf24]">UKTextiles • Infrastructure</p>
+                <p className="mt-1 text-[15px] font-semibold">Coimbatore & Tirupur mill units</p>
+              </figcaption>
+            </figure>
 
-            <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.35, delay: 0.32 }}
-            >
-              <Field
-                id="password"
-                label="Password"
-                type={showPw ? 'text' : 'password'}
-                value={password}
-                onChange={setPassword}
-                icon={<Lock className="size-4" />}
-                rightElement={
+            <div className="relative mt-4 grid shrink-0 grid-cols-3 gap-3">
+              {pillars.map((p) => (
+                <div key={p.label} className="rounded-md border border-white/[0.08] bg-white/[0.04] p-3.5">
+                  <p className="label-caps text-[#94a3b8]">{p.label}</p>
+                  <p className="font-display mt-1.5 text-[20px] leading-tight font-semibold">{p.value}</p>
+                  <p className={`mt-1 flex items-center gap-1.5 text-[12.5px] [@media(max-height:720px)]:hidden ${p.tone}`}>
+                    <p.icon className="size-3.5" /> {p.note}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ── Right: sign-in form ──────────────────────────────────────── */}
+          <section className="auth-card flex min-h-0 flex-col overflow-y-auto rounded-lg p-6 sm:p-8">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center overflow-hidden rounded-md bg-white p-1">
+                  <img src="/UKT_Company_Logo.png" alt="UKTextiles" className="h-full w-full object-contain" />
+                </span>
+                <div className="leading-tight">
+                  <p className="font-display text-[18px] font-semibold">UKTextiles</p>
+                  <p className="label-caps text-muted-foreground">Employee portal</p>
+                </div>
+              </div>
+              <span className="chip chip-success">
+                <span className="pip pip-live" /> Portal active
+              </span>
+            </div>
+
+            <h2 className="font-display mt-6 text-[30px] leading-tight font-semibold [@media(max-height:720px)]:mt-4">Employee Sign In</h2>
+            <p className="mt-2 text-[14.5px] text-muted-foreground [@media(max-height:720px)]:hidden">
+              Use your employee code, registered phone or email to access your shifts, requests and payroll records.
+            </p>
+
+            <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
+              <div>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <label htmlFor="identifier" className="label-caps text-foreground/85">
+                    Employee code / phone / email
+                  </label>
+                </div>
+                <div className="relative">
+                  <IdCard className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="identifier"
+                    value={identifier}
+                    autoFocus
+                    autoComplete="username"
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="e.g. UKT-4092"
+                    className="h-12 w-full rounded-md border border-input bg-background/70 pr-4 pl-11 text-[15px] text-foreground caret-primary outline-none transition placeholder:text-muted-foreground/60 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <label htmlFor="password" className="label-caps text-foreground/85">
+                    Portal password
+                  </label>
+                  <Link href="/set-password" className="font-label text-[12px] font-semibold text-brand-gold hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="password"
+                    type={showPw ? 'text' : 'password'}
+                    value={password}
+                    autoComplete="current-password"
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••"
+                    className="h-12 w-full rounded-md border border-input bg-background/70 pr-12 pl-11 text-[15px] text-foreground caret-primary outline-none transition placeholder:text-muted-foreground/60 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+                  />
                   <button
                     type="button"
                     onClick={() => setShowPw((p) => !p)}
-                    className="flex size-7 items-center justify-center rounded-lg text-foreground/35 transition hover:bg-black/5 hover:text-foreground/60"
-                    tabIndex={-1}
+                    className="absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded text-muted-foreground transition hover:bg-foreground/[0.06] hover:text-foreground"
                     aria-label={showPw ? 'Hide password' : 'Show password'}
                   >
-                    {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    {showPw ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
                   </button>
-                }
-              />
-            </motion.div>
+                </div>
+              </div>
 
-            {/* error message */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0, height: 0, y: -4 }}
-                  animate={{ opacity: 1, height: 'auto', y: 0 }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex items-start gap-2 rounded-xl bg-destructive/8 border border-destructive/15 px-3 py-2.5"
-                >
-                  <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-                  <p className="text-[12.5px] font-medium text-destructive leading-relaxed">{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    key="error"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5"
+                    role="alert"
+                  >
+                    <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                    <p className="text-[13px] font-medium text-destructive">{error}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            {/* submit button */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.38 }}
-              className="mt-1"
-            >
-              <motion.button
+              <button
                 type="submit"
                 disabled={isLoading}
-                whileHover={{ scale: isLoading ? 1 : 1.015, y: isLoading ? 0 : -1 }}
-                whileTap={{ scale: isLoading ? 1 : 0.97 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                className="relative w-full overflow-hidden rounded-xl py-3.5 text-[14px] font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{
-                  background: isLoading
-                    ? 'linear-gradient(135deg,#006496,#0090d0)'
-                    : 'linear-gradient(135deg,#006496,#0090d0)',
-                  boxShadow: '0 8px 24px -6px rgba(0,100,150,0.45), 0 2px 8px -2px rgba(0,100,150,0.25)',
-                }}
+                className="bg-brand-gradient glow-primary font-label mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-md text-[15px] font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {/* shimmer overlay on hover */}
-                <span
-                  className="pointer-events-none absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-300"
-                  style={{
-                    background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
-                  }}
-                />
-                <span className="relative flex items-center justify-center gap-2">
-                  {isLoading ? (
-                    <>
-                      <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                      </svg>
-                      Signing in…
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="size-4" />
-                      Sign in
-                    </>
-                  )}
-                </span>
-              </motion.button>
-            </motion.div>
-          </form>
+                {isLoading ? (
+                  <>
+                    <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    Signing in…
+                  </>
+                ) : (
+                  <>
+                    Sign in to portal <ArrowRight className="size-4" />
+                  </>
+                )}
+              </button>
+            </form>
 
-          {/* ── footer link ───────────────────────────────────────────────── */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.48 }}
-            className="mt-5 text-center text-[12.5px] text-foreground/45"
-          >
-            New employee or forgot password?{' '}
-            <a
-              href="/set-password"
-              className="font-semibold text-brand-blue underline-offset-4 hover:underline transition-colors"
-            >
-              Set Password
-            </a>
-          </motion.p>
-        </div>
-      </motion.div>
+            <div className="mt-auto pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border hairline bg-foreground/[0.03] px-4 py-3">
+                <span className="flex items-center gap-2 text-[13.5px] text-foreground/85">
+                  <KeyRound className="size-4 text-muted-foreground" /> First time using the portal?
+                </span>
+                <Link href="/set-password" className="font-label flex items-center gap-1 text-[14px] font-bold text-brand-gold hover:underline">
+                  Set password <ArrowRight className="size-3.5" />
+                </Link>
+              </div>
+              <p className="label-caps mt-3 flex items-center gap-2 text-muted-foreground">
+                <ShieldCheck className="size-3.5 text-brand-emerald" /> Encrypted session • Employee access only
+              </p>
+            </div>
+          </section>
+        </motion.div>
+      </main>
+
     </div>
   )
 }

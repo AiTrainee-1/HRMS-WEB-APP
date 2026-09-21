@@ -7,7 +7,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { EmployeeLayout } from '@/components/layout/EmployeeLayout'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 import { Toaster } from '@/components/ui/sonner'
-import { Skeleton } from '@/components/ui/skeleton'
+import { PageLoader } from '@/components/ui/loader'
 
 const Login = lazy(() => import('@/pages/auth/Login'))
 const SetPassword = lazy(() => import('@/pages/auth/SetPassword'))
@@ -43,13 +43,7 @@ const queryClient = new QueryClient({
 })
 
 function PageFallback() {
-  return (
-    <div className="flex flex-col gap-4">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-32 w-full" />
-      <Skeleton className="h-32 w-full" />
-    </div>
-  )
+  return <PageLoader />
 }
 
 function EmployeePage({ Component }: { Component: React.ComponentType }) {

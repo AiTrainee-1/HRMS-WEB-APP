@@ -2,89 +2,102 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ──────────────────────────────────────────────────────────────────────────
+   "Sovereign Loom" — the design system from Stitch project
+   12074820713440557288. Dark is the product's primary look: a midnight-navy
+   canvas, glass work surfaces with hairline borders, sapphire for actions,
+   amber for pending items and alerts, emerald for confirmed and live states.
+   :root is a light "ivory" companion for the theme switch, built from the
+   same hues.
+   ────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.45 0.16 240);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0.01 240);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.96 0.03 220);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.45 0.16 240);
-  --radius: 0.625rem;
+  --background: #f4f6fb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-foreground: #f8fafc;
+  --secondary: #e9eef8;
+  --secondary-foreground: #1e293b;
+  --muted: #eef2f9;
+  --muted-foreground: #5b6477;
+  --accent: #e6ecfb;
+  --accent-foreground: #1e3a8a;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --border: #dde3ee;
+  --input: #d3dae8;
+  --ring: #2563eb;
+  --radius: 0.5rem;
 
-  --success: oklch(0.6 0.15 145);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.75 0.15 85);
-  --warning-foreground: oklch(0.145 0 0);
+  --success: #059669;
+  --success-foreground: #ecfdf5;
+  --warning: #d97706;
+  --warning-foreground: #fffbeb;
 
-  /* Brand — matches the mobile app 1:1 */
-  --brand-blue: #006496;
-  --brand-blue-light: #0090d0;
-  --brand-blue-tint: #e4f1f8;
-  --brand-gold: #fed65b;
-  --brand-gold-deep: #735c00;
-  --clay-shadow-color: 0 100 150;
+  /* brand-* is what pages use for accent text/icons and tinted grounds */
+  --brand-blue: #1d4ed8;
+  --brand-blue-light: #3b82f6;
+  --brand-blue-tint: #eef2fb;
+  --brand-gold: #b45309;
+  --brand-gold-deep: #92400e;
+  --brand-emerald: #047857;
+
+  /* filled sapphire surfaces (buttons, active nav) — same in both themes */
+  --grad-from: #2563eb;
+  --grad-to: #1d4ed8;
+
+  --glass-bg: rgb(255 255 255 / 0.8);
+  --glass-bg-raised: rgb(255 255 255 / 0.94);
+  --glass-border: rgb(15 23 42 / 0.09);
+  --glass-highlight: linear-gradient(90deg, rgb(15 23 42 / 0.04) 0%, rgb(37 99 235 / 0.28) 50%, rgb(15 23 42 / 0.02) 100%);
+  --clay-shadow-color: 30 41 59;
+  --canvas-glow: radial-gradient(1200px 600px at 85% -10%, rgb(37 99 235 / 0.1), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(245 158 11 / 0.06), transparent 60%);
 }
 
-/* Dark mode, built from the five brand colours -the same palette the mobile
-   app uses, so the two products read as one system:
-
-     #091413  ink    the ground, and text on a filled accent
-     #285A48  moss   the top of the surface ramp, borders, dividers
-     #408A71  jade   mid accent, success
-     #B0E4CC  mint   the primary text/icon accent on dark ground
-     #234C6A  slate  the cool counterpoint -info, secondary surfaces
-
-   Two rules, matching the mobile palette:
-     1. surfaces CLIMB in lightness with elevation (ink is deepest, card sits
-        above it) -on a dark ground, raised means lighter;
-     2. anything used as text or an icon gets mint, not jade. Jade on ink is
-        about 5:1, fine for a fill or a bold label, short for small copy.
-   Only the neutral steps between ink and moss are derived. */
 .dark {
-  --background: #091413;
-  --foreground: #e7f5ee;
-  --card: #10201c;
-  --card-foreground: #e7f5ee;
-  --popover: #142822;
-  --popover-foreground: #e7f5ee;
-  --primary: #b0e4cc;
-  --primary-foreground: #091413;
-  --secondary: #1a3229;
-  --secondary-foreground: #e7f5ee;
-  --muted: #142822;
-  --muted-foreground: #7fae9b;
-  --accent: #234c6a;
-  --accent-foreground: #cfe6f7;
-  --destructive: #ff9c92;
-  --destructive-foreground: #091413;
-  --border: #1f4235;
-  --input: #1f4235;
-  --ring: #b0e4cc;
+  --background: #0b1326;
+  --foreground: #dae2fd;
+  --card: #131b2e;
+  --card-foreground: #dae2fd;
+  --popover: #1e293b;
+  --popover-foreground: #e2e8f0;
+  --primary: #3b6ef5;
+  --primary-foreground: #f8fafc;
+  --secondary: #171f33;
+  --secondary-foreground: #dae2fd;
+  --muted: #131b2e;
+  --muted-foreground: #94a3b8;
+  --accent: #222a3d;
+  --accent-foreground: #dae2fd;
+  --destructive: #f87171;
+  --destructive-foreground: #1f0a0a;
+  --border: #243049;
+  --input: #2d3852;
+  --ring: #3b6ef5;
 
-  --success: #7fd3ad;
-  --success-foreground: #091413;
-  --warning: #e8c46a;
-  --warning-foreground: #091413;
+  --success: #34d399;
+  --success-foreground: #022c1e;
+  --warning: #fbbf24;
+  --warning-foreground: #2a1700;
 
-  --brand-blue: #b0e4cc;
-  --brand-blue-light: #d6f2e5;
-  --brand-blue-tint: #1a3229;
-  --brand-gold: #e8c46a;
-  --brand-gold-deep: #e8c46a;
-  --clay-shadow-color: 0 0 0;
+  --brand-blue: #b4c5ff;
+  --brand-blue-light: #dbe1ff;
+  --brand-blue-tint: #0b1326;
+  --brand-gold: #fbbf24;
+  --brand-gold-deep: #ffb95f;
+  --brand-emerald: #4edea3;
+
+  --glass-bg: rgb(30 41 59 / 0.7);
+  --glass-bg-raised: rgb(30 41 59 / 0.85);
+  --glass-border: rgb(255 255 255 / 0.08);
+  --glass-highlight: linear-gradient(90deg, rgb(255 255 255 / 0.15) 0%, rgb(37 99 235 / 0.3) 50%, rgb(255 255 255 / 0.05) 100%);
+  --clay-shadow-color: 2 6 23;
+  --canvas-glow: radial-gradient(1200px 600px at 85% -10%, rgb(37 99 235 / 0.16), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(245 158 11 / 0.05), transparent 60%);
 }
 
 @theme inline {
@@ -116,11 +129,16 @@
   --color-brand-blue-tint: var(--brand-blue-tint);
   --color-brand-gold: var(--brand-gold);
   --color-brand-gold-deep: var(--brand-gold-deep);
+  --color-brand-emerald: var(--brand-emerald);
+  --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --font-label: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 12px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
 
   --animate-fade-up: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-scale-in: scale-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -169,6 +187,12 @@
   }
 }
 
+/* Sapphire fill, always dark enough for white text. A real @utility (not a
+   class in @layer utilities) so variants like data-[state=active]: work. */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(135deg, var(--grad-from) 0%, var(--grad-to) 100%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -179,8 +203,15 @@
     height: 100%;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    background-image: var(--canvas-glow);
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
 }
 
@@ -194,41 +225,39 @@
     border-radius: 999px;
   }
 
-  /* Claymorphism — soft, blue-tinted "lifted" elevation, matching the mobile app */
+  /* Elevation. Kept under the old "clay" names so every page that already
+     uses them picks up the Sovereign Loom ambient shadows. */
   .shadow-clay-sm {
-    box-shadow:
-      0 2px 6px -1px rgb(var(--clay-shadow-color) / 0.06),
-      0 1px 3px -1px rgb(var(--clay-shadow-color) / 0.04);
+    box-shadow: 0 2px 8px -2px rgb(var(--clay-shadow-color) / 0.25);
   }
   .shadow-clay {
     box-shadow:
-      0 8px 20px -6px rgb(var(--clay-shadow-color) / 0.14),
-      0 2px 8px -2px rgb(var(--clay-shadow-color) / 0.08);
+      0 12px 32px -4px rgb(var(--clay-shadow-color) / 0.35),
+      0 4px 12px -2px rgb(var(--clay-shadow-color) / 0.25);
   }
   .shadow-clay-lg {
     box-shadow:
-      0 16px 36px -10px rgb(var(--clay-shadow-color) / 0.22),
-      0 4px 12px -2px rgb(var(--clay-shadow-color) / 0.1);
+      0 24px 48px -8px rgb(var(--clay-shadow-color) / 0.5),
+      0 0 0 1px rgb(37 99 235 / 0.18);
   }
   .shadow-clay-hover {
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
+    transition:
+      box-shadow 0.25s ease,
+      transform 0.25s ease,
+      border-color 0.25s ease;
   }
   .shadow-clay-hover:hover {
     box-shadow:
-      0 14px 32px -8px rgb(var(--clay-shadow-color) / 0.2),
-      0 4px 10px -2px rgb(var(--clay-shadow-color) / 0.1);
+      0 16px 36px -8px rgb(var(--clay-shadow-color) / 0.45),
+      0 0 0 1px rgb(37 99 235 / 0.35);
     transform: translateY(-2px);
   }
 
-  /* Brand gradients */
-  .bg-brand-gradient {
-    background-image: linear-gradient(135deg, var(--brand-blue), var(--brand-blue-light));
-  }
   .bg-brand-gradient-radial {
-    background-image: radial-gradient(circle at 30% 20%, var(--brand-blue-light), var(--brand-blue) 70%);
+    background-image: radial-gradient(circle at 30% 20%, #3b82f6, var(--grad-to) 70%);
   }
   .bg-gold-gradient {
-    background-image: linear-gradient(135deg, var(--brand-gold), #ffec96);
+    background-image: linear-gradient(135deg, #f59e0b, #d97706);
   }
   .text-gradient-brand {
     background-image: linear-gradient(135deg, var(--brand-blue), var(--brand-blue-light));
@@ -237,8 +266,256 @@
     color: transparent;
   }
   .bg-shimmer {
-    background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+    background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.2), transparent);
     background-size: 200% 100%;
+  }
+
+  /* ── Sovereign Loom surfaces ─────────────────────────────────────────── */
+  /* Level 1: glass work surface */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+  }
+  /* Level 2: raised card or modal, with the sapphire hairline along the top */
+  /* No `position` here on purpose: this class also dresses fixed dialogs,
+     and a `position: relative` would override Tailwind's `fixed` and drop
+     the dialog to the bottom of the page. The top highlight is a background
+     layer instead of a ::before, so it needs no positioned parent. */
+  .glass-raised {
+    background:
+      var(--glass-highlight) top / 100% 1px no-repeat,
+      linear-gradient(var(--glass-bg-raised), var(--glass-bg-raised));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 12px 32px -4px rgb(var(--clay-shadow-color) / 0.35),
+      0 4px 12px -2px rgb(var(--clay-shadow-color) / 0.25);
+  }
+  .hairline {
+    border-color: var(--glass-border);
+  }
+
+  /* Typography roles */
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  .font-label {
+    font-family: var(--font-label);
+  }
+  /* label-sm from the design system: uppercase micro-labels */
+  .label-caps {
+    font-family: var(--font-label);
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .metric {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+
+  /* Status chips: emerald / amber / red / sapphire / slate glass tints */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    border-width: 1px;
+    padding: 0.125rem 0.625rem;
+    font-family: var(--font-label);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+  .chip-success {
+    background: rgb(16 185 129 / 0.12);
+    border-color: rgb(16 185 129 / 0.3);
+    color: var(--success);
+  }
+  .chip-warning {
+    background: rgb(245 158 11 / 0.12);
+    border-color: rgb(245 158 11 / 0.3);
+    color: var(--warning);
+  }
+  .chip-danger {
+    background: rgb(239 68 68 / 0.12);
+    border-color: rgb(239 68 68 / 0.3);
+    color: var(--destructive);
+  }
+  .chip-info {
+    background: rgb(37 99 235 / 0.12);
+    border-color: rgb(37 99 235 / 0.32);
+    color: var(--brand-blue);
+  }
+  .chip-muted {
+    background: rgb(100 116 139 / 0.15);
+    border-color: rgb(148 163 184 / 0.2);
+    color: var(--muted-foreground);
+  }
+  .pip {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: currentColor;
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .pip-live {
+    animation: pip-pulse 2s ease-in-out infinite;
+  }
+  @keyframes pip-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  /* Soft sapphire aura on primary actions */
+  .glow-primary:hover {
+    box-shadow:
+      0 0 16px rgb(37 99 235 / 0.4),
+      inset 0 1px 0 rgb(255 255 255 / 0.2);
+  }
+
+  /* Horizontal ticker for the live floor feed */
+  .marquee {
+    animation: marquee 40s linear infinite;
+  }
+  .marquee:hover {
+    animation-play-state: paused;
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* ── Signed-out pages (login, set password) ──────────────────────────────
+     They sit on the violet GradientWaves backdrop in both themes, so they
+     pin the dark tokens (`dark` on the wrapper) and retune the accent to the
+     waves' violet. `.auth-card` is the frosted violet panel. */
+  .auth-theme {
+    --background: #0d0620;
+    --card: #140a2e;
+    --popover: #1a0e3a;
+    --input: rgb(255 255 255 / 0.16);
+    --border: rgb(255 255 255 / 0.12);
+    --muted-foreground: #b3a9d6;
+    --primary: #7c5cff;
+    --ring: #8b6cff;
+    --grad-from: #5227ff;
+    --grad-to: #8b3cf7;
+    --brand-blue: #c4b5fd;
+    --brand-gold: #fcd34d;
+    --glass-border: rgb(255 255 255 / 0.12);
+  }
+  .auth-card {
+    background: linear-gradient(160deg, rgb(46 22 104 / 0.55) 0%, rgb(14 7 36 / 0.7) 100%);
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    border: 1px solid rgb(255 255 255 / 0.12);
+    border-top-color: rgb(255 255 255 / 0.22);
+    box-shadow:
+      0 30px 80px -20px rgb(0 0 0 / 0.65),
+      inset 0 1px 0 rgb(255 255 255 / 0.1);
+  }
+
+  /* ── App loader: a tile that tumbles and lands on its shadow ─────────── */
+  .app-loader {
+    --loader-color: var(--grad-from);
+    position: relative;
+    display: block;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    /* room for the shadow drawn below the tile */
+    margin-bottom: 17px;
+  }
+  .app-loader::before {
+    content: '';
+    position: absolute;
+    top: 60px;
+    left: 0;
+    width: 48px;
+    height: 5px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--loader-color) 32%, transparent);
+    animation: app-loader-shadow 0.5s linear infinite;
+  }
+  .app-loader::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--loader-color);
+    animation: app-loader-jump 0.5s linear infinite;
+  }
+  @keyframes app-loader-jump {
+    15% {
+      border-bottom-right-radius: 3px;
+    }
+    25% {
+      transform: translateY(9px) rotate(22.5deg);
+    }
+    50% {
+      transform: translateY(18px) scale(1, 0.9) rotate(45deg);
+      border-bottom-right-radius: 40px;
+    }
+    75% {
+      transform: translateY(9px) rotate(67.5deg);
+    }
+    100% {
+      transform: translateY(0) rotate(90deg);
+    }
+  }
+  @keyframes app-loader-shadow {
+    0%,
+    100% {
+      transform: scale(1, 1);
+    }
+    50% {
+      transform: scale(1.2, 1);
+    }
+  }
+
+  /* A sized box that centres the loader, scaling it down in short boxes so
+     it never overflows (e.g. a 64px-tall card placeholder). */
+  .loader-box {
+    container-type: size;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+  @container (max-height: 110px) {
+    .app-loader {
+      transform: scale(0.55);
+      margin-bottom: 0;
+    }
+  }
+  @container (max-height: 60px) {
+    .app-loader {
+      transform: scale(0.4);
+    }
   }
 
   .animate-fade-up {
@@ -249,5 +526,13 @@
   }
   .animate-blob {
     animation: var(--animate-blob);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee,
+    .pip-live,
+    .animate-blob {
+      animation: none;
+    }
   }
 }

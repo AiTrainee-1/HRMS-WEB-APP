@@ -123,7 +123,7 @@ export default function Outpass() {
           section === 'outpass' ? (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
+                <Button>
                   <Plus /> Request Outpass
                 </Button>
               </DialogTrigger>

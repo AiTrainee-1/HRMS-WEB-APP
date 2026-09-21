@@ -48,6 +48,8 @@ export interface LeaveType {
   name: string
 }
 
+export type HalfDaySlot = 'morning' | 'afternoon'
+
 export interface LeaveRequest {
   id: string
   employeeId: string
@@ -55,6 +57,9 @@ export interface LeaveRequest {
   startDate: string
   endDate: string
   totalDays: number
+  /** Half-day leave: always a single day, totalDays 0.5 (backend models.py::LeaveRequest). */
+  isHalfDay?: boolean
+  halfDaySlot?: HalfDaySlot | null
   status: RequestStatus
   reason: string
   hrComment?: string
@@ -441,7 +446,7 @@ export interface ManagerFlags {
   canApproveAttendance?: boolean
   canApproveCasualLeave?: boolean
   canApproveResignations?: boolean
-  canApproveShifts?: boolean
+  canApproveOnDuty?: boolean
   canApproveMissingPunch?: boolean
   pendingApprovalsCount: number
 }
@@ -486,17 +491,7 @@ export interface PendingResignation {
   createdAt: string
 }
 
-export interface PendingShiftApproval {
-  id: string
-  employeeId: string
-  employeeCode: string
-  employeeName: string
-  department?: string | null
-  shiftName?: string | null
-  effectiveFrom?: string | null
-  status: RequestStatus
-  createdAt: string
-}
+export type PendingOnDutySession = OnDutySession
 
 export interface PendingMissingPunchRequest {
   id: string
@@ -519,7 +514,7 @@ export interface PendingRequestsResponse {
   resignations: PendingResignation[]
   attendanceRequests: PendingAttendanceRequest[]
   casualLeaves: PendingCasualLeaveRequest[]
-  shiftApprovals: PendingShiftApproval[]
+  onDutySessions: PendingOnDutySession[]
   missingPunchRequests: PendingMissingPunchRequest[]
   outpassRequests: PendingOutpassRequest[]
   totalPending: number
@@ -601,13 +596,6 @@ export interface GeoPunchResult {
   time?: string
 }
 
-export interface OnDutyRequestResult {
-  status: 'pending_hod_approval'
-  requestId: number
-  punchNumber: number | null
-  punchType: 'IN' | 'OUT' | null
-}
-
 export interface GeoPunchLogEntry {
   punchTime: string
   punchType: 'IN' | 'OUT'
@@ -615,26 +603,103 @@ export interface GeoPunchLogEntry {
   sourceLabel: string
 }
 
-export interface OnDutyRequestSummary {
+// ---- On-Duty sessions (backend/api/geo_attendance_views.py) ----
+// A day of off-site work: the employee starts a session with a destination
+// and can punch straight away (HOD -> HR approve it in the background). Each
+// punch is a selfie + GPS "verification" that only becomes attendance once
+// HR approves both the session and the punch.
+export type OnDutySessionStatus = 'pending_hod' | 'pending_hr' | 'active' | 'completed' | 'rejected'
+
+export interface OnDutySession {
   id: number
-  punchDate: string
-  punchTime: string
-  punchType: 'IN' | 'OUT'
-  reason: string
-  status: 'pending_hod' | 'pending_hr' | 'approved' | 'rejected'
+  employeeId: number
+  employeeCode: string
+  employeeName: string
+  department: string | null
+  destination: string
+  branchId: number | null
+  branchName: string | null
+  /** Employee-facing: a still-provisional session reads as "active". */
+  status: OnDutySessionStatus
+  /** Always the real database status. */
+  approvalStatus: OnDutySessionStatus
+  isProvisional: boolean
+  pendingPunchCount: number
+  employeeEndedAt: string | null
   hodReviewedBy: string | null
   hodReviewComment: string | null
   hodReviewedAt: string | null
   hrReviewedBy: string | null
   hrReviewComment: string | null
   hrReviewedAt: string | null
+  startedAt: string | null
+  completedAt: string | null
+  completedBy: string | null
+  completionReason: string | null
   createdAt: string | null
+}
+
+/** One of the day's 4 punch slots: IN/OUT/IN/OUT by position. */
+export interface PunchSlot {
+  punchNumber: number
+  punchType: 'IN' | 'OUT'
+  /** 'available' | 'recorded' (biometric/geo) | 'pending' | 'approved' */
+  status: string
+  available: boolean
+}
+
+export interface OnDutyPunchVerification {
+  id: number
+  sessionId: number
+  sessionStatus: OnDutySessionStatus
+  sessionApproved: boolean
+  sessionDestination: string
+  punchDate: string
+  punchTime: string
+  punchType: 'IN' | 'OUT'
+  punchNumber: number
+  latitude: number
+  longitude: number
+  accuracyM: number | null
+  isMocked: boolean
+  hasPhoto: boolean
+  status: 'pending' | 'approved' | 'rejected' | string
+  hrReviewedBy: string | null
+  hrReviewComment: string | null
+  hrReviewedAt: string | null
+  createdAt: string | null
+}
+
+export interface OnDutyStatusResponse {
+  session: OnDutySession | null
+  punchVerifications: OnDutyPunchVerification[]
+  punchSlots?: PunchSlot[]
+}
+
+export interface OnDutyStartResult {
+  status: string
+  approvalStatus: OnDutySessionStatus
+  isProvisional: boolean
+  canPunch: boolean
+  sessionId: number
+  session: OnDutySession
+  message: string
+}
+
+export interface OnDutyPunchResult {
+  status: 'pending_hr_approval'
+  verificationId: number
+  punchNumber: number
+  punchType: 'IN' | 'OUT'
+  sessionEnded: boolean
+  punchSlots: PunchSlot[]
 }
 
 export interface GeoPunchStatus {
   date: string
   punches: GeoPunchLogEntry[]
-  onDutyRequests: OnDutyRequestSummary[]
+  onDutySession: OnDutySession | null
   nextPunchNumber: number | null
   nextPunchType: 'IN' | 'OUT' | null
+  punchSlots: PunchSlot[]
 }

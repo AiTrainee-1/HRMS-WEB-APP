@@ -118,7 +118,7 @@ export default function MissingPunch() {
             </p>
           )}
           {item.status === 'approved' && (
-            <p className="text-xs text-success-foreground">Added to your attendance.</p>
+            <p className="text-xs text-success">Added to your attendance.</p>
           )}
         </CardContent>
       </Card>
@@ -136,7 +136,7 @@ export default function MissingPunch() {
             <MonthYearPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y) }} />
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay">
+              <Button>
                 <Plus /> Report Missing Punch
               </Button>
             </DialogTrigger>
@@ -209,7 +209,7 @@ export default function MissingPunch() {
         <Card>
           <CardContent className="py-1">
             <p className="text-muted-foreground text-xs">Pending</p>
-            <p className="mt-1 text-xl font-bold text-warning-foreground">{live.length}</p>
+            <p className="mt-1 text-xl font-bold text-warning">{live.length}</p>
           </CardContent>
         </Card>
         <Card>

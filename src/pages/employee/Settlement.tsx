@@ -52,7 +52,7 @@ export default function Settlement() {
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Outstanding</p>
-                  <p className={`font-medium ${adv.outstanding > 0 ? 'text-warning-foreground' : ''}`}>
+                  <p className={`font-medium ${adv.outstanding > 0 ? 'text-warning' : ''}`}>
                     ₹{adv.outstanding.toLocaleString()}
                   </p>
                 </div>

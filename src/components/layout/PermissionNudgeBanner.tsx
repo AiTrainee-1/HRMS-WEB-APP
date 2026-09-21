@@ -57,9 +57,9 @@ export function PermissionNudgeBanner() {
   if (visible.length === 0) return null
 
   return (
-    <div className="flex flex-col gap-1.5 border-b bg-warning/10 px-4 py-2">
+    <div className="flex flex-col gap-1.5 border-b hairline bg-amber-500/10 px-4 py-2 lg:px-8">
       {visible.map((p) => (
-        <div key={p} className="flex items-center gap-2 text-xs text-warning-foreground">
+        <div key={p} className="flex items-center gap-2 text-[12.5px] text-brand-gold">
           <AlertTriangle className="size-3.5 shrink-0" />
           <span className="flex-1">{MESSAGES[p]}</span>
           <button

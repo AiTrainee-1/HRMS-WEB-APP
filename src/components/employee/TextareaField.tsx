@@ -24,7 +24,7 @@ export function TextareaField({ id, label, minLength, maxLength, className, valu
       <Textarea id={id} value={value} maxLength={maxLength} className={cn(className)} {...props} />
       {(minLength || maxLength) && (
         <div className="flex items-center justify-between text-xs">
-          <span className={cn('text-muted-foreground', belowMin && 'text-warning-foreground')}>
+          <span className={cn('text-muted-foreground', belowMin && 'text-warning')}>
             {minLength
               ? length === 0
                 ? `Minimum ${minLength} characters`
@@ -34,7 +34,7 @@ export function TextareaField({ id, label, minLength, maxLength, className, valu
               : ''}
           </span>
           {maxLength && (
-            <span className={cn('text-muted-foreground', nearMax && 'text-warning-foreground', atMax && 'text-destructive')}>
+            <span className={cn('text-muted-foreground', nearMax && 'text-warning', atMax && 'text-destructive')}>
               {length}/{maxLength}
             </span>
           )}

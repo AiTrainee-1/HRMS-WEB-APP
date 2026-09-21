@@ -24,7 +24,7 @@ export function DayDetailPanel({ day, onClose }: { day: AttendanceDay | null; on
                       ? ' · With Request' : ' · Without Request'}
                   </span>
                 ) : day.isLate && (day.status === 'present' || day.status === 'half_shift') && (
-                  <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning-foreground">
+                  <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning">
                     Late Arrival
                   </span>
                 )}

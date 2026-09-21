@@ -74,7 +74,7 @@ export default function SalaryDetail() {
           <Button
             onClick={handleDownload}
             disabled={downloading}
-            className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay"
+           
           >
             {downloading ? <Loader2 className="animate-spin" /> : <Download />}
             {downloading ? 'Downloading…' : 'Download PDF'}

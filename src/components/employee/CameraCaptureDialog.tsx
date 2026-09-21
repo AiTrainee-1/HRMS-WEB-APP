@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Camera, RotateCcw, Check, X } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -10,77 +10,84 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /**
- * Two-shot verification capture for out-of-geofence punch requests. Opens
- * the device camera via getUserMedia, lets the employee take two photos one
- * after another (retake either before confirming), then hands both back as
- * Blobs — the caller submits them with the punch request.
+ * Selfie capture for an On-Duty punch: the backend's /on-duty-sessions/punch
+ * takes exactly one verification photo per punch. Opens the front camera via
+ * getUserMedia, lets the employee retake, then hands the JPEG back as a Blob.
  */
 export function CameraCaptureDialog({
   open,
   onClose,
   onCapture,
+  title = 'Verification selfie',
 }: {
   open: boolean
   onClose: () => void
-  onCapture: (photo1: Blob, photo2: Blob) => void
+  onCapture: (photo: Blob) => void
+  title?: string
 }) {
-  const videoRef = React.useRef<HTMLVideoElement>(null)
   const canvasRef = React.useRef<HTMLCanvasElement>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
+  const videoElRef = React.useRef<HTMLVideoElement | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [shots, setShots] = React.useState<{ blob: Blob; url: string }[]>([])
+  const [shot, setShot] = React.useState<{ blob: Blob; url: string } | null>(null)
+
+  // A callback ref, so the stream re-attaches whenever the <video> remounts
+  // (e.g. after "Retake") rather than only on the first mount.
+  const videoRef = React.useCallback((el: HTMLVideoElement | null) => {
+    videoElRef.current = el
+    if (el && streamRef.current) el.srcObject = streamRef.current
+  }, [])
+
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+  }
 
   const startCamera = React.useCallback(() => {
     setError(null)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('This browser cannot open the camera. Try Chrome or Safari on your phone.')
+      return
+    }
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'user' }, audio: false })
       .then((stream) => {
         streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
+        if (videoElRef.current) videoElRef.current.srcObject = stream
       })
       .catch(() => setError('Camera access was denied. Please allow camera permission and try again.'))
   }, [])
 
   React.useEffect(() => {
     if (!open) {
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-      setShots((prev) => {
-        prev.forEach((s) => URL.revokeObjectURL(s.url))
-        return []
+      stopStream()
+      setShot((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url)
+        return null
       })
       setError(null)
       return
     }
     startCamera()
-    return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
+    return stopStream
   }, [open, startCamera])
 
   const capture = async () => {
-    const video = videoRef.current
+    const video = videoElRef.current
     const canvas = canvasRef.current
-    if (!video || !canvas) return
+    if (!video || !canvas || !video.videoWidth) return
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
-    canvas.getContext('2d')?.drawImage(video, 0, 0);
+    canvas.getContext('2d')?.drawImage(video, 0, 0)
     const blob = await canvasToBlob(canvas)
-    const url = URL.createObjectURL(blob)
-    setShots((prev) => [...prev, { blob, url }].slice(0, 2))
+    setShot({ blob, url: URL.createObjectURL(blob) })
   }
 
   const retake = () => {
-    setShots((prev) => {
-      prev.forEach((s) => URL.revokeObjectURL(s.url))
-      return []
+    setShot((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url)
+      return null
     })
-  }
-
-  const confirm = () => {
-    if (shots.length !== 2) return
-    onCapture(shots[0].blob, shots[1].blob)
   }
 
   return (
@@ -88,52 +95,47 @@ export function CameraCaptureDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Camera className="size-4" /> Verification Photos ({shots.length}/2)
+            <Camera className="size-5 text-brand-blue" /> {title}
           </DialogTitle>
+          <DialogDescription>HR uses this photo to confirm it's you punching from the field.</DialogDescription>
         </DialogHeader>
 
         {error ? (
           <div className="flex flex-col items-center gap-3 py-6">
-            <p className="text-sm text-destructive text-center">{error}</p>
-            <p className="text-xs text-muted-foreground text-center">
+            <p className="text-center text-sm text-destructive">{error}</p>
+            <p className="text-center text-xs text-muted-foreground">
               If you already denied access, enable it in your browser's site settings for this page, then try again.
             </p>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={startCamera}>
-              <RotateCcw className="size-3.5" /> Try Again
+            <Button variant="outline" size="sm" onClick={startCamera}>
+              <RotateCcw /> Try again
             </Button>
           </div>
-        ) : shots.length < 2 ? (
+        ) : !shot ? (
           <div className="space-y-3">
-            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-black">
-              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+            <div className="relative aspect-square w-full overflow-hidden rounded-md bg-black">
+              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full -scale-x-100 object-cover" />
+              <div className="pointer-events-none absolute inset-8 rounded-full border-2 border-dashed border-white/40" />
             </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Take {shots.length === 0 ? 'your first' : 'a second'} photo to verify you're the one punching in.
-            </p>
-            <Button className="w-full gap-2" onClick={capture}>
-              <Camera className="size-4" /> Capture Photo {shots.length + 1}
+            <Button className="w-full" onClick={capture}>
+              <Camera /> Capture selfie
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              {shots.map((s, i) => (
-                <img key={i} src={s.url} alt={`Shot ${i + 1}`} className="aspect-square w-full rounded-lg object-cover border" />
-              ))}
-            </div>
+            <img src={shot.url} alt="Your selfie" className="aspect-square w-full rounded-md border object-cover" />
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 gap-1.5" onClick={retake}>
-                <RotateCcw className="size-3.5" /> Retake
+              <Button variant="outline" className="flex-1" onClick={retake}>
+                <RotateCcw /> Retake
               </Button>
-              <Button className="flex-1 gap-1.5" onClick={confirm}>
-                <Check className="size-3.5" /> Submit
+              <Button className="flex-1" onClick={() => onCapture(shot.blob)}>
+                <Check /> Use photo
               </Button>
             </div>
           </div>
         )}
 
-        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={onClose}>
-          <X className="size-3.5" /> Cancel
+        <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onClose}>
+          <X /> Cancel
         </Button>
         <canvas ref={canvasRef} className="hidden" />
       </DialogContent>

@@ -12,7 +12,11 @@ import type {
   GeoPunchPrecheckResult,
   GeoPunchResult,
   GeoPunchStatus,
-  OnDutyRequestResult,
+  HalfDaySlot,
+  OnDutyPunchResult,
+  OnDutySession,
+  OnDutyStartResult,
+  OnDutyStatusResponse,
   Holiday,
   IdCardData,
   LeaveRequest,
@@ -63,11 +67,8 @@ export const shiftApi = {
 // ---- Employee / Profile ----
 export const employeeApi = {
   get: (id: string) => apiRequest<Employee>({ method: 'GET', url: `/employees/${id}` }),
-  updatePhoto: (file: File) => {
-    const form = new FormData()
-    form.append('photo', file)
-    return apiRequest<Employee>({ method: 'PATCH', url: '/my/profile', data: form, headers: { 'Content-Type': 'multipart/form-data' } })
-  },
+  // No self-service photo upload: PATCH /employees/:id is HR-only on the
+  // backend (views.py::employee_detail) and /my/profile doesn't exist.
 }
 
 // ---- Attendance ----
@@ -94,21 +95,27 @@ export const geoAttendanceApi = {
     apiRequest<GeoPunchStatus>({ method: 'GET', url: '/attendance/geo-punch/status', params: date ? { date } : undefined }),
 }
 
+// On-Duty is a session, not a one-shot request (see backend
+// geo_attendance_views.py): start it with a destination, then capture each
+// of the day's punches with a selfie + GPS, and mark it Done at the end.
 export const onDutyApi = {
-  request: (body: {
+  status: () => apiRequest<OnDutyStatusResponse>({ method: 'GET', url: '/on-duty-sessions/status' }),
+  start: (destination: string) =>
+    apiRequest<OnDutyStartResult>({ method: 'POST', url: '/on-duty-sessions/request', data: { destination } }),
+  complete: () => apiRequest<OnDutySession>({ method: 'POST', url: '/on-duty-sessions/complete' }),
+  punch: (body: {
     latitude: number; longitude: number; accuracy?: number; isMocked?: boolean
-    reason: string; photo1: Blob; photo2: Blob
+    photo: Blob; punchNumber?: number
   }) => {
     const form = new FormData()
     form.append('latitude', String(body.latitude))
     form.append('longitude', String(body.longitude))
     if (body.accuracy != null) form.append('accuracy', String(body.accuracy))
     form.append('isMocked', String(!!body.isMocked))
-    form.append('reason', body.reason)
-    form.append('photo1', body.photo1, 'photo1.jpg')
-    form.append('photo2', body.photo2, 'photo2.jpg')
-    return apiRequest<OnDutyRequestResult>({
-      method: 'POST', url: '/attendance/on-duty/request', data: form,
+    if (body.punchNumber != null) form.append('punchNumber', String(body.punchNumber))
+    form.append('photo', body.photo, 'selfie.jpg')
+    return apiRequest<OnDutyPunchResult>({
+      method: 'POST', url: '/on-duty-sessions/punch', data: form,
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
@@ -119,8 +126,10 @@ export const leaveApi = {
   list: (employeeId: string, status?: RequestStatus) =>
     apiRequest<LeaveRequest[]>({ method: 'GET', url: '/leave-requests', params: { employeeId, status } }),
   types: () => apiRequest<LeaveType[]>({ method: 'GET', url: '/leave-types' }),
-  apply: (body: { employeeId: string; startDate: string; endDate: string; type: string; reason: string }) =>
-    apiRequest<LeaveRequest>({ method: 'POST', url: '/leave-requests', data: body }),
+  apply: (body: {
+    employeeId: string; startDate: string; endDate: string; type: string; reason: string
+    isHalfDay?: boolean; halfDaySlot?: HalfDaySlot
+  }) => apiRequest<LeaveRequest>({ method: 'POST', url: '/leave-requests', data: body }),
 }
 
 // ---- Permissions ----
@@ -263,8 +272,10 @@ export const managerApi = {
       url: `/manager/resignations/${id}/action`,
       data: { action: status === 'approved' ? 'approve' : 'reject', comment },
     }),
-  updateShiftStatus: (id: string, status: RequestStatus, comment?: string) =>
-    apiRequest({ method: 'PATCH', url: `/manager/shift-assignments/${id}/status`, data: { status, comment } }),
+  // Stage 1 (Department Head) of the On-Duty session chain; approval moves
+  // it on to HR, rejection voids the punches captured under it.
+  updateOnDutyStatus: (id: string, status: RequestStatus, comment?: string) =>
+    apiRequest({ method: 'PATCH', url: `/manager/on-duty-sessions/${id}/status`, data: { status, comment } }),
   // Department Head stage only — approving here forwards to HR for final
   // sign-off (see missing_punch_views.py), it does not finalize the request.
   updateMissingPunchStatus: (id: string, status: RequestStatus, comment?: string) =>

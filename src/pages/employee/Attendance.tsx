@@ -52,7 +52,7 @@ export default function Attendance() {
 
       {syncStatus?.pendingSync && (
         <Card className="border-warning/40 bg-warning/10">
-          <CardContent className="flex items-center gap-2 py-3 text-sm text-warning-foreground">
+          <CardContent className="flex items-center gap-2 py-3 text-sm text-warning">
             <AlertTriangle className="size-4 shrink-0" />
             Today's attendance may be incomplete — biometric punches haven't synced yet.
             It will update automatically once HR runs the next sync.
@@ -86,7 +86,7 @@ export default function Attendance() {
         <Card>
           <CardContent className="py-1">
             <p className="text-muted-foreground text-xs">Half Shift</p>
-            <p className="mt-1 text-xl font-bold text-warning-foreground">{summary?.halfShift ?? '—'}</p>
+            <p className="mt-1 text-xl font-bold text-warning">{summary?.halfShift ?? '—'}</p>
           </CardContent>
         </Card>
         <Card>
@@ -138,7 +138,7 @@ export default function Attendance() {
                   <p className="text-[10px] text-muted-foreground uppercase">Yearly Entitlement</p>
                 </div>
                 <div className="flex-1 text-center">
-                  <p className="text-lg font-bold text-warning-foreground">{eligibility.usedThisYear}</p>
+                  <p className="text-lg font-bold text-warning">{eligibility.usedThisYear}</p>
                   <p className="text-[10px] text-muted-foreground uppercase">Used</p>
                 </div>
                 <div className="flex-1 text-center">
