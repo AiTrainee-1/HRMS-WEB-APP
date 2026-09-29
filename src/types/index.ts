@@ -66,6 +66,16 @@ export interface LeaveRequest {
   createdAt: string
 }
 
+// The 3 permission types (backend models/leave.py::EmployeePermission). Each is
+// exactly 60 minutes. `PermissionTypeKey` is the canonical slug; the wire type
+// is the legacy spelling this app SENDS on POST /permissions, because an older
+// backend rejects anything else while the new one accepts both spellings.
+export type PermissionTypeKey = 'morning_late_in' | 'evening_early_out' | 'middle_permission'
+export type PermissionWireType = 'Late In' | 'Early Out' | 'Short Leave'
+// Position among the employee's approved permissions that calendar month:
+// the first N (monthlyLimit) are within_cap ("Allowed"), later ones are excess.
+export type PermissionCapStatus = 'within_cap' | 'excess' | 'not_applicable'
+
 export interface PermissionRequest {
   id: string
   employeeId: string
@@ -74,14 +84,23 @@ export interface PermissionRequest {
   reason: string
   status: RequestStatus
   createdAt: string
+  // Legacy spelling ("Late In" / "Early Out" / "Short Leave"), or null for a
+  // request saved untyped by an older web build. Never show it raw: go
+  // through lib/permissions.ts. typeKey/typeLabel/capStatus/statusLabel are
+  // new and absent on an older backend, so all of them stay optional.
+  type?: string | null
+  typeKey?: PermissionTypeKey | null
+  typeLabel?: string | null
+  durationMinutes?: number | null
+  capStatus?: PermissionCapStatus
+  statusLabel?: string
   // Only ever populated by the backend on POST (create) responses — GET list
   // items always send these as null, so compute the monthly count client-side.
   monthlyUsed?: number | null
+  // HR-configured monthly cap (default 3): permissions past it are Overdue / Excess.
   monthlyLimit?: number
-  // Daily/weekly caps on the backend's auto-detected Permission zone (see
-  // PayrollSettings.max_permissions_per_day/_per_week) -sent on every GET
-  // list item too (unlike monthlyUsed above), since it's a fixed setting
-  // rather than a per-request computed count.
+  // DEPRECATED: the per-day / per-week caps no longer exist (one monthly cap
+  // replaced them; the backend now just echoes monthlyLimit). Nothing reads these.
   dailyLimit?: number
   weeklyLimit?: number
 }
@@ -248,28 +267,50 @@ export interface AttendancePunch {
   sourceLabel: string
 }
 
-export interface AttendanceDay {
-  date: string
-  // 'no_record' is a frontend-only sentinel for calendar cells with no API
-  // entry at all (shouldn't normally happen — the backend returns one row
-  // per calendar day, including 'future' for days after today).
-  status: 'present' | 'half_shift' | 'absent' | 'on_leave' | 'holiday' | 'future' | 'no_record'
-  // Both now sourced from the canonical attendance engine
-  // (compute_month_records) — a day can be half_shift AND isLate at once
-  // (an afternoon arrival past the Half Shift late boundary), the same way
-  // HRMS's own Attendance Search shows them as two independent flags.
+// Late Detection / Permission flags carried by every per-day attendance object
+// (attendance history records[] and shift-stats dailyLogs[]). Read them through
+// lib/attendance-flags.ts, which applies the old-key fallbacks in one place.
+export interface DayLateFlags {
+  // Morning Late-In: first punch after the day's (permission-adjusted) shift start + grace.
   isLate?: boolean
-  isHalfShift?: boolean
-  // Auto-Permission zone (see backend shift_engine.py's ZONE_* / _classify_zone)
-  // -detected purely from punch timing, independent of a submitted Permission
-  // request. The *WithRequest flags label whether an approved request also
-  // covered that edge.
+  // Evening Early-Out: last punch before shift end - grace. Only ever true while
+  // the company has that check switched on; absent on an older backend.
+  isEarlyOut?: boolean
+  // Why the day was flagged late, when the backend says (e.g. "arrived 09:40, deadline 09:15").
+  lateReason?: string | null
+  // An Allowed (within the monthly cap) Morning Late-In / Evening Early-Out
+  // permission shifted that edge by 60 minutes today.
+  morningPermissionApplied?: boolean
+  eveningPermissionApplied?: boolean
+  // Approved but Overdue / Excess: it did NOT shift the edge and counts as a late occurrence.
+  morningPermissionExcess?: boolean
+  eveningPermissionExcess?: boolean
+  // An approved Middle One-Hour Permission covers today (moves nothing).
+  middlePermissionToday?: boolean
+  // DEPRECATED mirrors of the applied flags above (all an older backend sends;
+  // the new one still mirrors them). Used only as a fallback, never preferred.
+  // On an older backend they were an auto-detected punch-timing zone, and the
+  // *WithRequest twins said whether an approved request also covered that edge.
   permissionMorning?: boolean
   permissionMorningWithRequest?: boolean
   permissionAfternoon?: boolean
   permissionAfternoonWithRequest?: boolean
   permissionDeparture?: boolean
   permissionDepartureWithRequest?: boolean
+}
+
+export interface AttendanceDay extends DayLateFlags {
+  date: string
+  // 'no_record' is a frontend-only sentinel for calendar cells with no API
+  // entry at all (shouldn't normally happen — the backend returns one row
+  // per calendar day, including 'future' for days after today).
+  status: 'present' | 'half_shift' | 'absent' | 'on_leave' | 'holiday' | 'future' | 'no_record'
+  // Both sourced from the canonical attendance engine (compute_month_records).
+  // A day is Half Day when it has a punch in only one of the two halves
+  // (Half-Day Detection); Late-In/Early-Out are judged separately, so a Half
+  // Day can also be late — the same way HRMS's own Attendance Search shows
+  // them as independent flags.
+  isHalfShift?: boolean
   // HR announced this day as a Compensation Day (festival/special day) -
   // Late/Permission penalties are exempted, but Full/Half Shift is still
   // judged from real punches, never auto-granted.
@@ -293,7 +334,7 @@ export interface AttendanceMonthResponse {
   }
 }
 
-export interface ShiftDailyLog {
+export interface ShiftDailyLog extends DayLateFlags {
   date: string
   status: string
   firstPunch?: string | null
@@ -303,28 +344,58 @@ export interface ShiftDailyLog {
   lateMorning?: boolean
   lateAfternoon?: boolean
   lateReturn?: boolean
-  permissionMorning?: boolean
-  permissionMorningWithRequest?: boolean
-  permissionAfternoon?: boolean
-  permissionAfternoonWithRequest?: boolean
-  permissionDeparture?: boolean
-  permissionDepartureWithRequest?: boolean
   isCompensationDay?: boolean
 }
 
+// The monthly late-deduction preview. All of the "new" keys are optional: an
+// older backend only sends the first five. shiftDeductions and
+// salaryDeductionAmount are Decimal fields serialized as strings on the wire;
+// lib/deductions.ts converts them, so they are numbers everywhere past it.
+export interface ShiftDeductionSummary {
+  shiftDeductions: number
+  salaryDeductionAmount: number
+  // Occurrences beyond the free allowance — the ones that cost a shift deduction.
+  billableLateCount: number
+  // Despite the name: how much of the FREE allowance is used (capped at it).
+  permissionsUsed: number
+  permissionOverageCount: number
+  // The one monthly pool: Morning Late-Ins + Evening Early-Outs + Excess permissions.
+  lateInCount?: number
+  earlyOutCount?: number
+  excessPermissionCount?: number
+  // Occurrences per month that are free (default 3) and the Allowed-permission cap (default 3).
+  freeAllowance?: number
+  permissionMonthlyCap?: number
+}
+
+// The company-wide rules the shift-stats days were judged by (top-level `policy`
+// of GET /attendance/employee-shift-stats). Absent on an older backend, and every
+// field is optional: read it through lib/attendance-flags.ts (shiftPolicyOf and
+// the helpers next to it), which supplies the "undefined means enabled" and
+// "no time known" fallbacks.
+export interface ShiftPolicy {
+  morningLateInEnabled?: boolean
+  eveningEarlyOutEnabled?: boolean
+  // "HH:MM". Morning half = any punch before halfDayFirstHalfEnd; evening half =
+  // any punch at/after halfDaySecondHalfStart. Both = Full Day, one = Half Day.
+  halfDayFirstHalfEnd?: string
+  halfDaySecondHalfStart?: string
+  permissionMonthlyCap?: number
+  freeAllowance?: number
+  permissionDurationMinutes?: number
+}
+
 export interface EmployeeShiftStats {
+  // 'staff' | 'production'. Production keeps its own separate late policy, so
+  // the staff pool breakdown must not be shown for it.
+  employmentType?: string
+  policy?: ShiftPolicy | null
   totalLateCount: number
   halfShiftDays: number
   totalEffectiveShifts: number
   absentDays: number
   // null until a MonthlyShiftSummary row exists for this employee/month
-  summary: {
-    shiftDeductions: number
-    salaryDeductionAmount: number
-    billableLateCount: number
-    permissionsUsed: number
-    permissionOverageCount: number
-  } | null
+  summary: ShiftDeductionSummary | null
   dailyLogs: ShiftDailyLog[]
 }
 
@@ -364,13 +435,19 @@ export interface MyShiftSummary {
   dailyLogs: ShiftDailyLog[]
   // null until a MonthlyShiftSummary row exists for this employee/month —
   // same deduction math HR sees on the Report Log "Late Summary" tab.
-  deductions: {
-    permissionsUsed: number
-    permissionOverageCount: number
-    billableLateCount: number
-    shiftDeductions: number
-    salaryDeductionAmount: number
-  } | null
+  deductions: DeductionPreview | null
+  // Company rules behind the days above; null on an older backend. Already
+  // reduced to what applies to this employee (see shiftPolicyOf).
+  policy: ShiftPolicy | null
+}
+
+// ShiftDeductionSummary with its Decimal strings turned into real numbers
+// (see lib/deductions.ts) plus whether the employee is on the Production
+// policy, which has no Late-In / Early-Out / Excess-permission breakdown.
+export interface DeductionPreview extends ShiftDeductionSummary {
+  isProduction?: boolean
+  // Preferred over the freeAllowance / permissionMonthlyCap copies in the summary.
+  policy?: ShiftPolicy | null
 }
 
 export interface IdCardCompany {

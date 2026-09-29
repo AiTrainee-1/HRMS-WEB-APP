@@ -1,4 +1,8 @@
-import type { AttendanceDay } from '@/types'
+import { COMPENSATION_MARKER, getDayMarkers } from '@/lib/attendance-flags'
+import type { AttendanceDay, ShiftPolicy } from '@/types'
+
+// Horizontal gap between markers stacked on one bar (a bar is ~18 units wide).
+const MARKER_SPACING = 3.6
 
 const STATUS_FILL: Record<string, string> = {
   present: 'var(--success)',
@@ -22,9 +26,9 @@ const STATUS_HEIGHT_RATIO: Record<string, number> = {
 
 /** Hand-rolled inline SVG bar chart (no charting library installed) — one
  * bar per day of the month, already fetched for the calendar grid above, so
- * this needs no extra API call. Late arrivals get a small marker on top of
- * their bar, mirroring the calendar grid's late dot. */
-export function AttendanceTrendChart({ records }: { records: AttendanceDay[] }) {
+ * this needs no extra API call. Late-Ins, Early-Outs and permissions get small
+ * markers on top of their bar, in the same colours as the calendar grid's dots. */
+export function AttendanceTrendChart({ records, policy }: { records: AttendanceDay[]; policy?: ShiftPolicy | null }) {
   const chartW = 600
   const chartH = 84
   const gap = 2
@@ -43,15 +47,20 @@ export function AttendanceTrendChart({ records }: { records: AttendanceDay[] }) 
           const barH = Math.max(2, chartH * ratio)
           const x = i * (barW + gap)
           const y = chartH - barH
-          const isPermission = !!(r.permissionMorning || r.permissionAfternoon || r.permissionDeparture)
-          const showLateDot = !isPermission && !!r.isLate && (r.status === 'present' || r.status === 'half_shift')
-          const showPermissionDot = isPermission && (r.status === 'present' || r.status === 'half_shift')
+          const markers = getDayMarkers(r, policy)
           return (
             <g key={r.date}>
               <rect x={x} y={y} width={barW} height={barH} rx={1} fill={STATUS_FILL[r.status] ?? 'var(--muted-foreground)'} />
-              {showLateDot && <circle cx={x + barW / 2} cy={Math.max(2, y - 3)} r={1.6} fill="var(--warning)" />}
-              {showPermissionDot && <circle cx={x + barW / 2} cy={Math.max(2, y - 3)} r={1.6} fill="var(--primary)" />}
-              {r.isCompensationDay && <circle cx={x + barW / 2} cy={Math.min(chartH - 2, y + barH + 3)} r={1.6} fill="#8b5cf6" />}
+              {markers.map((m, mi) => (
+                <circle
+                  key={m.key}
+                  cx={x + barW / 2 + (mi - (markers.length - 1) / 2) * MARKER_SPACING}
+                  cy={Math.max(2, y - 3)}
+                  r={1.6}
+                  fill={m.fill}
+                />
+              ))}
+              {r.isCompensationDay && <circle cx={x + barW / 2} cy={Math.min(chartH - 2, y + barH + 3)} r={1.6} fill={COMPENSATION_MARKER.fill} />}
             </g>
           )
         })}

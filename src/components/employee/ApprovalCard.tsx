@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 
 export interface ApprovalCardProps {
@@ -16,6 +17,10 @@ export interface ApprovalCardProps {
   reason: string
   /** Extra context under the reason, e.g. "Approving forwards this to HR". */
   note?: string
+  /** Second chip after the category, e.g. a permission's type ("Morning Late-In · 1 hour"). */
+  badge?: string
+  /** Outcome chip (e.g. "Overdue / Excess") when the request already has one; className is a chip tone. */
+  outcome?: { label: string; className: string }
   disabled?: boolean
   onApprove: () => void
   onReject: (comment: string) => void
@@ -23,7 +28,7 @@ export interface ApprovalCardProps {
 }
 
 export function ApprovalCard({
-  type, employeeName, employeeCode, department, dateRange, reason, note, disabled, onApprove, onReject, isSubmitting,
+  type, employeeName, employeeCode, department, dateRange, reason, note, badge, outcome, disabled, onApprove, onReject, isSubmitting,
 }: ApprovalCardProps) {
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [comment, setComment] = React.useState('')
@@ -49,6 +54,8 @@ export function ApprovalCard({
             <span className="chip chip-warning">
               <span className="pip pip-live" /> {type}
             </span>
+            {badge && <span className="chip chip-info">{badge}</span>}
+            {outcome && <span className={cn('chip', outcome.className)}>{outcome.label}</span>}
           </div>
           {department && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{department}</p>}
           <p className="font-label mt-2 text-[13.5px] font-semibold text-brand-blue">{dateRange}</p>

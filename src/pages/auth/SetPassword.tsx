@@ -7,10 +7,118 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AuthShell } from '@/components/layout/AuthShell'
+import { OtpFlow } from '@/components/auth/OtpFlow'
 import { ApiError } from '@/api/client'
 
+/**
+ * First-time access. A new employee first confirms a code WhatsApped to the number HR registered for
+ * them, then chooses a password. The plain form below is only used when the server has activation
+ * codes switched off (or can't send them), so nobody is locked out.
+ */
 export default function SetPassword() {
   const [, navigate] = useLocation()
+  // null until the server answers; if it can't be reached, assume codes are needed (the request will
+  // then report the connection problem itself).
+  const [otpActivate, setOtpActivate] = React.useState<boolean | null>(null)
+
+  React.useEffect(() => {
+    authApi
+      .loginOptions()
+      .then((o) => setOtpActivate(o.otpActivate))
+      .catch(() => setOtpActivate(true))
+  }, [])
+
+  return (
+    <AuthShell width="max-w-lg">
+      <p className="label-caps flex items-center gap-2 text-brand-gold">
+        <span className="grid size-7 place-items-center rounded-md border border-amber-500/30 bg-amber-500/10">
+          <KeyRound className="size-3.5" />
+        </span>
+        First-time access
+      </p>
+      <h1 className="font-display mt-3 text-[28px] leading-tight font-semibold">Set your password</h1>
+      <p className="mt-1.5 text-[14px] text-muted-foreground [@media(max-height:720px)]:hidden">
+        {otpActivate === false ? (
+          'New to the portal? Choose a password using your employee code, registered phone or email.'
+        ) : (
+          <>
+            New to the portal? Confirm your WhatsApp number, then choose a password. Forgotten an existing password?{' '}
+            <Link href="/forgot-password" className="font-semibold text-brand-gold underline">
+              Reset it here
+            </Link>
+            .
+          </>
+        )}
+      </p>
+
+      {otpActivate === null && <div className="mt-5 h-28 animate-pulse rounded-md bg-foreground/[0.04]" aria-hidden />}
+      {otpActivate === true && <ActivateWithOtp onDone={() => navigate('/employee-login')} />}
+      {otpActivate === false && <DirectForm onDone={() => navigate('/employee-login')} />}
+
+      <Link
+        href="/employee-login"
+        className="font-label mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-blue hover:underline"
+      >
+        <ArrowLeft className="size-4" /> Back to sign in
+      </Link>
+    </AuthShell>
+  )
+}
+
+function ActivateWithOtp({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = React.useState('')
+  const [confirm, setConfirm] = React.useState('')
+  const passwordsOk = password.length >= 8 && password === confirm
+
+  return (
+    <OtpFlow
+      purpose="activate"
+      submitLabel="Set password & activate"
+      submittingLabel="Saving…"
+      extraValid={passwordsOk}
+      extraFields={
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-password">New password</Label>
+              <Input
+                id="new-password"
+                className="h-11"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Input
+                id="confirm-password"
+                className="h-11"
+                type="password"
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="-mt-1.5 text-[12px] text-muted-foreground">
+            At least 8 characters.
+            {confirm && password !== confirm && <span className="ml-1 text-destructive">Passwords don't match.</span>}
+          </p>
+        </>
+      }
+      onSubmit={async (employeeCode, otp) => {
+        await authApi.activateWithOtp(employeeCode, otp, password)
+        toast.success('Password set. You can now sign in.')
+        onDone()
+      }}
+    />
+  )
+}
+
+/** The pre-WhatsApp form: used only while activation codes are switched off on the server. */
+function DirectForm({ onDone }: { onDone: () => void }) {
   const [identifier, setIdentifier] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
@@ -28,7 +136,7 @@ export default function SetPassword() {
     try {
       await authApi.setPassword(identifier.trim(), password)
       toast.success('Password set. You can now sign in.')
-      navigate('/employee-login')
+      onDone()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not set password.')
     } finally {
@@ -37,47 +145,54 @@ export default function SetPassword() {
   }
 
   return (
-    <AuthShell width="max-w-lg">
-      <p className="label-caps flex items-center gap-2 text-brand-gold">
-        <span className="grid size-7 place-items-center rounded-md border border-amber-500/30 bg-amber-500/10">
-          <KeyRound className="size-3.5" />
-        </span>
-        First-time access
-      </p>
-      <h1 className="font-display mt-3 text-[28px] leading-tight font-semibold">Set your password</h1>
-      <p className="mt-1.5 text-[14px] text-muted-foreground [@media(max-height:720px)]:hidden">
-        New to the portal, or forgot your password? Choose one using your employee code, registered phone or email.
-      </p>
-
-      <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="identifier">Employee code / phone / email</Label>
+        <Input
+          id="identifier"
+          className="h-11"
+          autoComplete="username"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="identifier">Employee code / phone / email</Label>
-          <Input id="identifier" className="h-11" autoComplete="username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoFocus />
+          <Label htmlFor="password">New password</Label>
+          <Input
+            id="password"
+            className="h-11"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">New password</Label>
-            <Input id="password" className="h-11" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="confirm">Confirm password</Label>
-            <Input id="confirm" className="h-11" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="confirm">Confirm password</Label>
+          <Input
+            id="confirm"
+            className="h-11"
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
         </div>
-        <p className="-mt-1.5 text-[12px] text-muted-foreground">At least 8 characters.</p>
-        {error && (
-          <p role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] font-medium text-destructive">
-            <AlertCircle className="mt-0.5 size-4 shrink-0" /> {error}
-          </p>
-        )}
-        <Button type="submit" size="lg" disabled={submitting} className="h-11">
-          {submitting ? 'Saving…' : 'Set password'}
-        </Button>
-      </form>
-
-      <Link href="/employee-login" className="font-label mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-blue hover:underline">
-        <ArrowLeft className="size-4" /> Back to sign in
-      </Link>
-    </AuthShell>
+      </div>
+      <p className="-mt-1.5 text-[12px] text-muted-foreground">At least 8 characters.</p>
+      {error && (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] font-medium text-destructive"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" /> {error}
+        </p>
+      )}
+      <Button type="submit" size="lg" disabled={submitting} className="h-11">
+        {submitting ? 'Saving…' : 'Set password'}
+      </Button>
+    </form>
   )
 }

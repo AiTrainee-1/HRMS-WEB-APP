@@ -30,6 +30,7 @@ import type {
   OutpassRequest,
   PendingRequestsResponse,
   PermissionRequest,
+  PermissionWireType,
   RequestStatus,
   Resignation,
   SalarySlip,
@@ -39,7 +40,42 @@ import type {
 } from '@/types'
 
 // ---- Auth ----
+export interface LoginOptions {
+  otpLogin: boolean
+  otpReset: boolean
+  // A new employee must confirm a WhatsApp code before choosing a first password.
+  otpActivate: boolean
+  passwordLogin: boolean
+}
+
+export interface OtpRequestResult {
+  message: string
+  maskedPhone: string
+  expiresInSeconds: number
+  resendAfterSeconds: number
+}
+
 export const authApi = {
+  // Which sign-in methods the server has switched on (WhatsApp OTP, password).
+  loginOptions: () => apiRequest<LoginOptions>({ method: 'GET', url: '/auth/login-options' }),
+  // Sends a 6-digit code to the WhatsApp number registered for this employee code.
+  requestOtp: (employeeCode: string, purpose: 'login' | 'reset' | 'activate') =>
+    apiRequest<OtpRequestResult>({ method: 'POST', url: '/auth/otp/request', data: { employeeCode, purpose } }),
+  loginWithOtp: (employeeCode: string, otp: string) =>
+    apiRequest<LoginResponse>({ method: 'POST', url: '/auth/otp/login', data: { employeeCode, otp } }),
+  resetPasswordWithOtp: (employeeCode: string, otp: string, password: string) =>
+    apiRequest<{ message: string }>({
+      method: 'POST',
+      url: '/auth/otp/reset-password',
+      data: { employeeCode, otp, password },
+    }),
+  // First-time password for a new employee, after confirming the WhatsApp code.
+  activateWithOtp: (employeeCode: string, otp: string, password: string) =>
+    apiRequest<{ message: string }>({
+      method: 'POST',
+      url: '/auth/otp/activate',
+      data: { employeeCode, otp, password },
+    }),
   login: (identifier: string, password: string) =>
     apiRequest<LoginResponse>({ method: 'POST', url: '/auth/employee-login', data: { identifier, password } }),
   setPassword: (identifier: string, password: string) =>
@@ -136,8 +172,15 @@ export const leaveApi = {
 export const permissionApi = {
   list: (employeeId: string, status?: RequestStatus) =>
     apiRequest<PermissionRequest[]>({ method: 'GET', url: '/permissions', params: { employeeId, status } }),
-  apply: (body: { employeeId: string; date: string; permissionTime: string; reason: string }) =>
-    apiRequest<PermissionRequest>({ method: 'POST', url: '/permissions', data: body }),
+  // `type` is required and must be the LEGACY spelling (see PERMISSION_TYPES in
+  // lib/permissions.ts): an older backend rejects the new labels, the new one
+  // accepts both. permissionTime is the arrival / leaving / step-out time; the
+  // new backend also uses it to infer the type. No durationMinutes — every
+  // permission is a fixed 60 minutes and the server ignores a client value.
+  // A 409 means the same type is already requested for that day.
+  apply: (body: {
+    employeeId: string; date: string; permissionTime: string; reason: string; type: PermissionWireType
+  }) => apiRequest<PermissionRequest>({ method: 'POST', url: '/permissions', data: body }),
 }
 
 // ---- Missing Punch ----

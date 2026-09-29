@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   AlertCircle, ArrowRight, Eye, EyeOff, Factory, IdCard, KeyRound, Lock,
-  MapPin, ShieldCheck, Wallet, CalendarCheck,
+  MapPin, MessageCircle, ShieldCheck, Wallet, CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { authApi, type LoginOptions } from '@/api/resources'
+import { OtpFlow } from '@/components/auth/OtpFlow'
 import { ApiError } from '@/api/client'
 import heroImage from '@/assets/company/infrastructure.png'
 import { AuthBackground } from '@/components/backgrounds/AuthBackground'
@@ -27,13 +29,27 @@ const pillars = [
 ]
 
 export default function Login() {
-  const { login, isLoading } = useAuth()
+  const { login, loginWithOtp, isLoading } = useAuth()
   const [, navigate] = useLocation()
   const [identifier, setIdentifier] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [showPw, setShowPw] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const now = useClock()
+  // Which sign-in methods the server offers. Until it answers (or if it can't), password sign-in works as before.
+  const [options, setOptions] = React.useState<LoginOptions | null>(null)
+  const [mode, setMode] = React.useState<'otp' | 'password'>('password')
+  React.useEffect(() => {
+    authApi
+      .loginOptions()
+      .then((o) => {
+        setOptions(o)
+        setMode(o.otpLogin ? 'otp' : 'password')
+      })
+      .catch(() => {})
+  }, [])
+  const showOtp = mode === 'otp' && options?.otpLogin === true
+  const canSwitch = options?.otpLogin === true && options.passwordLogin
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -138,9 +154,23 @@ export default function Login() {
 
             <h2 className="font-display mt-6 text-[30px] leading-tight font-semibold [@media(max-height:720px)]:mt-4">Employee Sign In</h2>
             <p className="mt-2 text-[14.5px] text-muted-foreground [@media(max-height:720px)]:hidden">
-              Use your employee code, registered phone or email to access your shifts, requests and payroll records.
+              {showOtp
+                ? 'Sign in with a one-time code sent to your registered WhatsApp number.'
+                : 'Use your employee code, registered phone or email to access your shifts, requests and payroll records.'}
             </p>
 
+            {showOtp ? (
+              <OtpFlow
+                purpose="login"
+                submitLabel="Verify & sign in"
+                submittingLabel="Signing in…"
+                onSubmit={async (employeeCode, otp) => {
+                  await loginWithOtp(employeeCode, otp)
+                  toast.success('Welcome back!')
+                  navigate('/employee/dashboard')
+                }}
+              />
+            ) : (
             <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
               <div>
                 <div className="mb-2 flex items-baseline justify-between">
@@ -167,7 +197,7 @@ export default function Login() {
                   <label htmlFor="password" className="label-caps text-foreground/85">
                     Portal password
                   </label>
-                  <Link href="/set-password" className="font-label text-[12px] font-semibold text-brand-gold hover:underline">
+                  <Link href={options?.otpReset ? '/forgot-password' : '/set-password'} className="font-label text-[12px] font-semibold text-brand-gold hover:underline">
                     Forgot password?
                   </Link>
                 </div>
@@ -229,6 +259,25 @@ export default function Login() {
                 )}
               </button>
             </form>
+            )}
+
+            {canSwitch && (
+              <button
+                type="button"
+                onClick={() => setMode(showOtp ? 'password' : 'otp')}
+                className="font-label mt-4 inline-flex items-center gap-1.5 self-start text-[13.5px] font-semibold text-brand-gold hover:underline"
+              >
+                {showOtp ? (
+                  <>
+                    <Lock className="size-3.5" /> Use my password instead
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="size-3.5" /> Sign in with a WhatsApp code
+                  </>
+                )}
+              </button>
+            )}
 
             <div className="mt-auto pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border hairline bg-foreground/[0.03] px-4 py-3">

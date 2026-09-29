@@ -11,15 +11,17 @@ import { format, parseISO, differenceInCalendarDays, subDays } from 'date-fns'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Reveal } from '@/components/employee/Reveal'
+import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
 import { useAuth } from '@/context/AuthContext'
 import { casualLeaveApi, dashboardApi, employeeApi, holidayApi, idCardApi } from '@/api/resources'
 import { ApiError } from '@/api/client'
 import { verifyUrl } from '@/lib/verify'
+import { countEarlyOuts, dayStatusLabel, earlyOutShown, getDayMarkers, lateInShown } from '@/lib/attendance-flags'
 import { useTodayAttendance } from '@/hooks/useTodayAttendance'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
 import { cn } from '@/lib/utils'
-import type { AttendanceDay } from '@/types'
+import type { AttendanceDay, ShiftPolicy } from '@/types'
 
 type Tile = { label: string; hint: string; href: string; icon: React.ComponentType<{ className?: string }> }
 
@@ -31,7 +33,7 @@ const hub: { title: string; tone: string; tiles: Tile[] }[] = [
     tone: 'text-brand-blue',
     tiles: [
       { label: 'Apply Leave', hint: 'Leave requests', href: '/employee/leave', icon: Send },
-      { label: 'Permission', hint: 'Short early-out / late-in', href: '/employee/permissions', icon: Timer },
+      { label: 'Permission', hint: 'Late-in / early-out / 1 hour', href: '/employee/permissions', icon: Timer },
       { label: 'Casual Leave', hint: 'Yearly CL balance', href: '/employee/casual-leave', icon: CalendarClock },
       { label: 'Missing Punch', hint: 'Regularization', href: '/employee/missing-punch', icon: Fingerprint },
       { label: 'Resignation', hint: 'Separation desk', href: '/employee/resignation', icon: FileSignature },
@@ -114,11 +116,15 @@ function StatCard({
   )
 }
 
-function dayDot(day: AttendanceDay | undefined) {
+function dayDot(day: AttendanceDay | undefined, policy: ShiftPolicy | null) {
   if (!day) return 'bg-foreground/15'
   switch (day.status) {
     case 'present':
-      return day.isLate ? 'bg-amber-400' : 'bg-emerald-400'
+      // Amber for anything that counts against the late pool; an Allowed
+      // permission (or a Middle One-Hour one) still protected the day.
+      return getDayMarkers(day, policy).some((m) => m.key === 'late' || m.key === 'earlyOut' || m.key === 'excess')
+        ? 'bg-amber-400'
+        : 'bg-emerald-400'
     case 'half_shift':
       return 'bg-amber-400'
     case 'absent':
@@ -159,7 +165,10 @@ export default function Dashboard() {
     queryFn: casualLeaveApi.eligibility,
   })
   const shiftQuery = useMyShiftSummary(month, year)
-  const attendance = useTodayAttendance()
+  // Company rules from the shift stats (null on an older backend): a Late-In / Early Out
+  // check that is switched off is left out of the chips, footer and legend below.
+  const policy = shiftQuery.data?.policy ?? null
+  const attendance = useTodayAttendance(policy)
 
   // Self-scoped server-side: always this employee's own recent in/out events.
   const liveFeedQuery = useQuery({
@@ -187,6 +196,17 @@ export default function Dashboard() {
   const workingDays = elapsed.length
   const presentDays = (summary?.present ?? 0) + (summary?.halfShift ?? 0) * 0.5
   const compliance = workingDays ? Math.round((presentDays / workingDays) * 100) : 0
+  // null on a backend that doesn't send isEarlyOut, so the footer just omits it.
+  const earlyOuts = earlyOutShown(policy) ? countEarlyOuts(records) : null
+  const dayCount = (n: number) => `${n} day${n === 1 ? '' : 's'}`
+  const flaggedDays = [
+    lateInShown(policy) && summary?.late ? `${dayCount(summary.late)} flagged late` : null,
+    earlyOuts ? `${dayCount(earlyOuts)} flagged early` : null,
+  ].filter((s): s is string => !!s)
+  const flagLegend = [lateInShown(policy) && 'Late', earlyOutShown(policy) && 'Early-out', 'Half day']
+    .filter((s): s is string => !!s)
+    .map((s, i) => (i === 0 ? s : s.toLowerCase()))
+    .join(' / ')
 
   const upcomingHolidays = (holidaysQuery.data ?? [])
     .filter((h) => h.date >= todayStr)
@@ -251,6 +271,8 @@ export default function Dashboard() {
                       <MapPin className="size-3.5" /> {last.sourceLabel || last.source}
                       {employee?.branchName ? ` • ${employee.branchName}` : ''}
                     </p>
+                    {/* Today's Late-In / Early Out / Permission states, when there are any */}
+                    <DayMarkerChips markers={attendance.markers} className="mt-2" />
                   </>
                 ) : (
                   <>
@@ -298,9 +320,11 @@ export default function Dashboard() {
             icon={ShieldCheck}
             tone="emerald"
             footer={
-              <span className="chip chip-success">
-                {compliance}% attendance{summary?.late ? ` • ${summary.late} late` : ''}
-              </span>
+              <>
+                <span className="chip chip-success">{compliance}% attendance</span>
+                {/* Raw flagged days, worded so they can't be mistaken for the deduction pool's Late-Ins / Early-Outs */}
+                {flaggedDays.length > 0 && <p className="mt-1.5">{flaggedDays.join(' • ')}</p>}
+              </>
             }
             progress={compliance}
           />
@@ -539,7 +563,7 @@ export default function Dashboard() {
                 return (
                   <div
                     key={key}
-                    title={rec ? rec.status.replace('_', ' ') : 'No record'}
+                    title={rec ? [dayStatusLabel(rec.status), ...getDayMarkers(rec, policy).map((m) => m.label)].join(' · ') : 'No record'}
                     className={cn(
                       'flex flex-col items-center gap-2 rounded-md py-2',
                       isToday ? 'border border-primary/60 bg-primary/15' : 'bg-foreground/[0.04]',
@@ -548,7 +572,7 @@ export default function Dashboard() {
                     <span className={cn('label-caps !text-[9.5px]', isToday ? 'text-foreground' : 'text-muted-foreground')}>
                       {format(d, 'EEE')}
                     </span>
-                    <span className={cn('size-2.5 rounded-full', dayDot(rec))} />
+                    <span className={cn('size-2.5 rounded-full', dayDot(rec, policy))} />
                     <span className={cn('text-[11px]', isToday ? 'font-bold text-brand-blue' : 'text-muted-foreground')}>
                       {isToday ? 'Today' : format(d, 'd')}
                     </span>
@@ -558,7 +582,7 @@ export default function Dashboard() {
             </div>
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
               <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-400" /> Present</span>
-              <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-400" /> Late / half</span>
+              <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-400" /> {flagLegend}</span>
               <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-red-400" /> Absent</span>
               <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-[#b4c5ff]" /> Leave</span>
             </div>

@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { attendanceApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
+import { getDayMarkers } from '@/lib/attendance-flags'
+import type { ShiftPolicy } from '@/types'
 
 /**
  * This month's attendance plus today's record. Shares its query key with the
@@ -18,12 +20,16 @@ export function useMonthAttendance(month: number, year: number) {
   })
 }
 
-export function useTodayAttendance() {
+/** `policy` (from useMyShiftSummary) only trims the markers: a Late-In / Early Out check the company has switched off shows none. */
+export function useTodayAttendance(policy?: ShiftPolicy | null) {
   const now = new Date()
   const query = useMonthAttendance(now.getMonth() + 1, now.getFullYear())
   const todayStr = format(now, 'yyyy-MM-dd')
   const today = query.data?.records.find((r) => r.date === todayStr) ?? null
   const punches = today?.punches ?? []
   const last = punches.length ? punches[punches.length - 1] : null
-  return { ...query, today, punches, last, isIn: last?.type === 'IN' }
+  // Today's Late-In / Early Out / Permission states (lib/attendance-flags.ts),
+  // so the dashboard can say why today is flagged without a second request.
+  const markers = today ? getDayMarkers(today, policy) : []
+  return { ...query, today, punches, last, isIn: last?.type === 'IN', markers }
 }

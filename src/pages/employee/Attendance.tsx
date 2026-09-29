@@ -14,6 +14,7 @@ import { attendanceApi, casualLeaveApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useAttendanceSyncStatus } from '@/hooks/useGeoAttendance'
+import { countEarlyOuts, earlyOutShown, halfDayRule, hasCurrentPermissionFlags, lateInShown } from '@/lib/attendance-flags'
 import type { AttendanceDay } from '@/types'
 
 export default function Attendance() {
@@ -38,6 +39,28 @@ export default function Attendance() {
   })
 
   const summary = data?.summary
+  // Company rules from the shift stats (half-day windows, which checks are on); null on an older backend.
+  const policy = shiftSummary?.policy ?? null
+  const showLateIn = lateInShown(policy)
+  // Early-Out days are only known to a backend that sends isEarlyOut; null hides the card on an older
+  // one, and a company that has switched the check off never sees the wording at all.
+  const earlyOutCount = countEarlyOuts(data?.records ?? [])
+  const showEarlyOut = earlyOutCount != null && earlyOutShown(policy)
+  const statCards = 4 + (showLateIn ? 1 : 0) + (showEarlyOut ? 1 : 0)
+  // The rules text below only holds for a backend that sends the current permission flags.
+  const newRules = hasCurrentPermissionFlags(data?.records ?? [])
+  const halfRule = halfDayRule(policy)
+  const rulesNote = [
+    showLateIn ? 'Late-In: your first punch is after shift start plus grace.' : null,
+    earlyOutShown(policy)
+      ? `Early Out: your last punch is before shift end minus grace${policy?.eveningEarlyOutEnabled ? '' : ' (when your company checks it)'}.`
+      : null,
+    // The real windows when the backend states them; otherwise no time at all.
+    halfRule
+      ? `Half-day rule: ${halfRule.morning}. ${halfRule.evening}. ${halfRule.outcome}.`
+      : 'Half Day: a punch in only one of the two halves of the day (before First Half End, or at/after Second Half Start); both halves is a full day, neither is absent.',
+    "An Allowed permission moves that day's start or end by 60 minutes; an Overdue / Excess one does not, and counts toward late deductions.",
+  ].filter(Boolean).join(' ')
 
   return (
     <div className="flex flex-col gap-4">
@@ -76,7 +99,7 @@ export default function Attendance() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className={`grid grid-cols-2 gap-3 ${statCards >= 6 ? 'sm:grid-cols-6' : statCards === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
         <Card>
           <CardContent className="py-1">
             <p className="text-muted-foreground text-xs">Present</p>
@@ -85,7 +108,7 @@ export default function Attendance() {
         </Card>
         <Card>
           <CardContent className="py-1">
-            <p className="text-muted-foreground text-xs">Half Shift</p>
+            <p className="text-muted-foreground text-xs">Half Day</p>
             <p className="mt-1 text-xl font-bold text-warning">{summary?.halfShift ?? '—'}</p>
           </CardContent>
         </Card>
@@ -95,12 +118,23 @@ export default function Attendance() {
             <p className="mt-1 text-xl font-bold text-destructive">{summary?.absent ?? '—'}</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="py-1">
-            <p className="text-muted-foreground text-xs">Late</p>
-            <p className="mt-1 text-xl font-bold">{summary?.late ?? '—'}</p>
-          </CardContent>
-        </Card>
+        {showLateIn && (
+          <Card>
+            <CardContent className="py-1">
+              {/* A raw count of flagged days, not the deduction pool's Late-Ins figure — named differently on purpose */}
+              <p className="text-muted-foreground text-xs">{earlyOutCount != null ? 'Days Flagged Late' : 'Late'}</p>
+              <p className="mt-1 text-xl font-bold">{summary?.late ?? '—'}</p>
+            </CardContent>
+          </Card>
+        )}
+        {showEarlyOut && (
+          <Card>
+            <CardContent className="py-1">
+              <p className="text-muted-foreground text-xs">Days Flagged Early</p>
+              <p className="mt-1 text-xl font-bold">{earlyOutCount}</p>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardContent className="py-1">
             <p className="text-muted-foreground text-xs">On Leave</p>
@@ -114,7 +148,7 @@ export default function Attendance() {
           <CardTitle className="text-base">Monthly Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading ? <Skeleton className="h-24 w-full" /> : <AttendanceTrendChart records={data?.records ?? []} />}
+          {isLoading ? <Skeleton className="h-24 w-full" /> : <AttendanceTrendChart records={data?.records ?? []} policy={policy} />}
         </CardContent>
       </Card>
 
@@ -159,12 +193,19 @@ export default function Attendance() {
           {isLoading ? (
             <Skeleton className="h-96 w-full" />
           ) : (
-            <AttendanceCalendarGrid month={month} year={year} days={data?.records ?? []} onSelectDay={setSelectedDay} />
+            <AttendanceCalendarGrid
+              month={month}
+              year={year}
+              days={data?.records ?? []}
+              onSelectDay={setSelectedDay}
+              policy={policy}
+            />
           )}
+          {newRules && <p className="mt-4 text-xs text-muted-foreground">{rulesNote}</p>}
         </CardContent>
       </Card>
 
-      <DayDetailPanel day={selectedDay} onClose={() => setSelectedDay(null)} />
+      <DayDetailPanel day={selectedDay} onClose={() => setSelectedDay(null)} policy={policy} />
     </div>
   )
 }

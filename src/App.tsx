@@ -11,6 +11,7 @@ import { PageLoader } from '@/components/ui/loader'
 
 const Login = lazy(() => import('@/pages/auth/Login'))
 const SetPassword = lazy(() => import('@/pages/auth/SetPassword'))
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'))
 const VerifyEmployee = lazy(() => import('@/pages/auth/VerifyEmployee'))
 const Deactivated = lazy(() => import('@/pages/auth/Deactivated'))
 
@@ -70,6 +71,7 @@ function AppRoutes() {
         <Route path="/" component={RootRedirect} />
         <Route path="/employee-login" component={Login} />
         <Route path="/set-password" component={SetPassword} />
+        <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/verify/:code" component={VerifyEmployee} />
         <Route path="/account-deactivated" component={Deactivated} />
 

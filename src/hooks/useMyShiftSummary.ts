@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, casualLeaveApi, shiftApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
+import { shiftPolicyOf } from '@/lib/attendance-flags'
+import { toDeductionPreview } from '@/lib/deductions'
 import type { AssignedShift, MyShiftSummary, ShiftAssignment } from '@/types'
 
 // `/shift-assignments` returns assignment *history* (an array), each entry
@@ -51,7 +53,9 @@ export function useMyShiftSummary(month: number, year: number) {
       // back as strings (Decimal fields serialized with str() on the
       // backend) — Number() them so the `number` types here are actually
       // true at runtime, not just at compile time (matters once something
-      // calls .toLocaleString()/.toFixed() on them, as MyShift.tsx now does).
+      // calls .toLocaleString()/.toFixed() on them). toDeductionPreview also
+      // carries the late-in / early-out / excess-permission breakdown when
+      // the backend sends it (optional — an older one doesn't).
       return {
         assignedShift: normalizeShift(assignments),
         lateCount: stats.totalLateCount,
@@ -60,15 +64,9 @@ export function useMyShiftSummary(month: number, year: number) {
         totalWorkingShifts: Number(stats.totalEffectiveShifts),
         absentCount: stats.absentDays,
         dailyLogs: stats.dailyLogs,
-        deductions: stats.summary
-          ? {
-              permissionsUsed: stats.summary.permissionsUsed,
-              permissionOverageCount: stats.summary.permissionOverageCount,
-              billableLateCount: stats.summary.billableLateCount,
-              shiftDeductions: Number(stats.summary.shiftDeductions),
-              salaryDeductionAmount: Number(stats.summary.salaryDeductionAmount),
-            }
-          : null,
+        deductions: toDeductionPreview(stats),
+        // Company rules (half-day windows, which checks are on) — null on an older backend.
+        policy: shiftPolicyOf(stats),
       }
     },
     enabled: !!user,

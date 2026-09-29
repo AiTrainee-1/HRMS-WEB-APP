@@ -5,6 +5,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { MonthYearPicker } from '@/components/employee/MonthYearPicker'
 import { EmptyState } from '@/components/employee/EmptyState'
+import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
+import { LateDeductionCard } from '@/components/employee/LateDeductionCard'
+import {
+  countEarlyOuts, dayStatusLabel, earlyOutShown, getDayFlags, getDayMarkers, halfDayRule, lateInShown,
+} from '@/lib/attendance-flags'
 import { Clock } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -13,6 +18,15 @@ export default function MyShift() {
   const [month, setMonth] = React.useState(now.getMonth() + 1)
   const [year, setYear] = React.useState(now.getFullYear())
   const { data, isLoading } = useMyShiftSummary(month, year)
+  // Company rules from the shift stats; null on an older backend (then nothing is hidden and no time is shown).
+  const policy = data?.policy ?? null
+  const showLateIn = lateInShown(policy)
+  // Early-Out days are only known to a backend that sends isEarlyOut; null hides the card on an older
+  // one, and a company that has switched the check off never sees the wording at all.
+  const earlyOutCount = data ? countEarlyOuts(data.dailyLogs) : null
+  const showEarlyOut = earlyOutCount != null && earlyOutShown(policy)
+  const statCards = 4 + (showLateIn ? 1 : 0) + (showEarlyOut ? 1 : 0)
+  const halfRule = halfDayRule(policy)
 
   return (
     <div className="flex flex-col gap-4">
@@ -53,16 +67,27 @@ export default function MyShift() {
       )}
 
       {!isLoading && data && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className={`grid grid-cols-2 gap-3 ${statCards >= 6 ? 'sm:grid-cols-6' : statCards === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
+          {showLateIn && (
+            <Card>
+              <CardContent className="py-1">
+                {/* Raw flagged days — the deduction pool below has its own Late-Ins figure, so the words differ */}
+                <p className="text-muted-foreground text-xs">{earlyOutCount != null ? 'Days Flagged Late' : 'Late Count'}</p>
+                <p className="text-xl font-bold">{data.lateCount}</p>
+              </CardContent>
+            </Card>
+          )}
+          {showEarlyOut && (
+            <Card>
+              <CardContent className="py-1">
+                <p className="text-muted-foreground text-xs">Days Flagged Early</p>
+                <p className="text-xl font-bold">{earlyOutCount}</p>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardContent className="py-1">
-              <p className="text-muted-foreground text-xs">Late Count</p>
-              <p className="text-xl font-bold">{data.lateCount}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="py-1">
-              <p className="text-muted-foreground text-xs">Half-Shift Count</p>
+              <p className="text-muted-foreground text-xs">Half-Day Count</p>
               <p className="text-xl font-bold">{data.halfShiftCount}</p>
             </CardContent>
           </Card>
@@ -87,46 +112,16 @@ export default function MyShift() {
         </div>
       )}
 
-      {/* Permission usage & deduction impact — every employee gets 3 free
-          lates/permissions a month (combined pool); each additional 3 beyond
-          that costs a ¼ shift. Same numbers HR sees on their Report Log. */}
-      {!isLoading && data?.deductions && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Permission Usage & Deductions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 pt-0">
-            <p className="text-xs text-muted-foreground">
-              You get 3 free lates/permissions per month (combined). Every 3 beyond that costs a
-              ¼ shift deduction from salary.
-            </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
-                <p className="text-muted-foreground text-xs">Permissions Used</p>
-                <p className="text-xl font-bold">{data.deductions.permissionsUsed}/3</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Billable Late/Permissions</p>
-                <p className={`text-xl font-bold ${data.deductions.billableLateCount > 0 ? 'text-destructive' : ''}`}>
-                  {data.deductions.billableLateCount}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Shift Deductions</p>
-                <p className={`text-xl font-bold ${data.deductions.shiftDeductions > 0 ? 'text-destructive' : ''}`}>
-                  {data.deductions.shiftDeductions}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Salary Impact</p>
-                <p className={`text-xl font-bold ${data.deductions.salaryDeductionAmount > 0 ? 'text-destructive' : ''}`}>
-                  ₹{data.deductions.salaryDeductionAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* The company's half-day windows, only when the backend states them */}
+      {!isLoading && data && halfRule && (
+        <p className="text-xs text-muted-foreground">
+          Half-day rule: {halfRule.morning}. {halfRule.evening}. {halfRule.outcome}.
+        </p>
       )}
+
+      {/* Late-in / early-out / excess-permission pool and its deduction
+          impact — same numbers HR sees on their Report Log. */}
+      {!isLoading && data?.deductions && <LateDeductionCard deductions={data.deductions} />}
 
       <Card>
         <CardHeader>
@@ -150,6 +145,7 @@ export default function MyShift() {
                     <th className="px-4 py-2 font-medium">Punch In</th>
                     <th className="px-4 py-2 font-medium">Punch Out</th>
                     <th className="px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2 font-medium">Flags</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -158,7 +154,14 @@ export default function MyShift() {
                       <td className="px-4 py-2">{format(parseISO(log.date), 'MMM d, yyyy')}</td>
                       <td className="px-4 py-2">{log.firstPunch ?? '—'}</td>
                       <td className="px-4 py-2">{log.lastPunch ?? '—'}</td>
-                      <td className="px-4 py-2 capitalize">{log.status}</td>
+                      <td className="px-4 py-2">{dayStatusLabel(log.status)}</td>
+                      <td className="px-4 py-2">
+                        <DayMarkerChips markers={getDayMarkers(log, policy)} />
+                        {/* The backend's plain-language deadline explanation, whenever it sends one */}
+                        {getDayFlags(log).lateReason && (
+                          <p className="mt-1 text-xs text-muted-foreground">{getDayFlags(log).lateReason}</p>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

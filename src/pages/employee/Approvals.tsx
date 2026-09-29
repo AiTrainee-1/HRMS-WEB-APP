@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/employee/EmptyState'
 import { managerApi } from '@/api/resources'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
 import { ApiError } from '@/api/client'
+import { permissionDurationLabel, permissionOutcome, permissionTypeLabel } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import type {
   MissingPunchSlot,
@@ -61,13 +62,25 @@ const CATEGORIES = [
     label: 'Permission',
     flag: 'canApprovePermissions' as const,
     action: managerApi.updatePermissionStatus,
-    describe: (item: PendingPermissionRequest) => ({
-      name: item.employee.name,
-      code: item.employee.employeeCode,
-      department: item.employee.department,
-      dateRange: formatDateRange(item.date),
-      reason: item.reason,
-    }),
+    describe: (item: PendingPermissionRequest) => {
+      const outcome = permissionOutcome(item)
+      const duration = permissionDurationLabel(item.durationMinutes)
+      return {
+        name: item.employee.name,
+        code: item.employee.employeeCode,
+        department: item.employee.department,
+        dateRange: `${formatDateRange(item.date)}${item.permissionTime ? ` · ${item.permissionTime}` : ''}`,
+        reason: item.reason,
+        // The type label, never the raw legacy string the API may still send in `type`.
+        badge: `${permissionTypeLabel(item)}${duration ? ` · ${duration}` : ''}`,
+        // A pending request's outcome is just "Pending", which the card already says.
+        outcome: outcome.kind === 'pending' ? undefined : { label: outcome.label, className: outcome.chipClass },
+        // capStatus is only sent by a backend that applies the monthly limit.
+        note: item.capStatus
+          ? `Only an employee's first ${item.monthlyLimit ?? 3} approved permissions each month are Allowed; any beyond that are Overdue / Excess and do not protect the day.`
+          : undefined,
+      }
+    },
   },
   {
     key: 'attendanceRequests' as const,
@@ -264,6 +277,7 @@ export default function Approvals() {
               // category's own `describe` is typed at its definition above.
               const info = (cat.describe as (i: unknown) => {
                 name: string; code: string; department?: string | null; dateRange: string; reason: string; note?: string
+                badge?: string; outcome?: { label: string; className: string }
               })(item)
               const id = String((item as { id: string | number }).id)
               return (
@@ -276,6 +290,8 @@ export default function Approvals() {
                     dateRange={info.dateRange}
                     reason={info.reason}
                     note={info.note}
+                    badge={info.badge}
+                    outcome={info.outcome}
                     disabled={disabled}
                     isSubmitting={busyId === id}
                     onApprove={() => mutation.mutate({ action: cat.action, id, status: 'approved' })}
