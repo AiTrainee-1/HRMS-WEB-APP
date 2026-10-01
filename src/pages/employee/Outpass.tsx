@@ -14,12 +14,16 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { RequestTabs } from '@/components/employee/RequestTabs'
 import { TextareaField } from '@/components/employee/TextareaField'
 import { StatusBadge } from '@/components/employee/StatusBadge'
+import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
+import { WorkflowOffNotice } from '@/components/employee/WorkflowOffNotice'
 import { EmptyState } from '@/components/employee/EmptyState'
 import { OutpassFlipCard } from '@/components/employee/OutpassFlipCard'
 import { TeaBreakPanel } from '@/components/employee/TeaBreakPanel'
 import { outpassApi, employeeApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
+import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
+import { pipelineSentence } from '@/lib/approval'
 import type { OutpassRequest } from '@/types'
 
 export default function Outpass() {
@@ -30,6 +34,9 @@ export default function Outpass() {
   const [form, setForm] = React.useState({ destination: '', reason: '' })
   const [formError, setFormError] = React.useState<string | null>(null)
   const [previewItem, setPreviewItem] = React.useState<OutpassRequest | null>(null)
+  // The pipeline HR configured for outpasses, and the note when HR has switched them off.
+  const { workflow, offNote } = useApprovalWorkflow('outpass')
+  const pipeline = pipelineSentence(workflow)
 
   const listQuery = useQuery({
     queryKey: ['outpass-requests', user?.employeeId],
@@ -51,7 +58,10 @@ export default function Outpass() {
       setDialogOpen(false)
       setForm({ destination: '', reason: '' })
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not submit outpass request'),
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : 'Could not submit outpass request')
+      refreshIfWorkflowOff(qc, err)
+    },
   })
 
   function handleSubmit(e: React.FormEvent) {
@@ -65,6 +75,8 @@ export default function Outpass() {
   const all = listQuery.data ?? []
   const live = all.filter((r) => r.status === 'pending')
   const confirmed = all.filter((r) => r.status !== 'pending')
+  // A persistent problem in the dialog beats a toast that fades: a validation error, else "switched off".
+  const dialogError = formError ?? offNote
   // The most recent still-relevant approved request -source can be "manual"
   // or "on_duty" (an On-Duty request that just got its final approval,
   // see geo_attendance_views.py::_create_outpass_from_on_duty); either way it
@@ -87,12 +99,14 @@ export default function Outpass() {
         <CardContent className="flex flex-col gap-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">{item.destination}</span>
-            <StatusBadge status={item.status} />
+            <StatusBadge status={item.status} approval={item.approval} />
             {item.source === 'on_duty' && (
               <span className="text-xs text-muted-foreground">(from On-Duty)</span>
             )}
           </div>
           <p className="text-sm">{item.reason}</p>
+          {/* One step: the line below already names who approved. More: show each step. */}
+          <ApprovalTrail approval={item.approval} multiStepOnly />
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
               {format(parseISO(item.createdAt), 'MMM d, yyyy · h:mm a')}
@@ -115,7 +129,7 @@ export default function Outpass() {
         title={section === 'outpass' ? 'Outpass' : 'Tea Break'}
         subtitle={
           section === 'outpass'
-            ? 'Request permission to step out -approved by your HOD or HR'
+            ? `Request permission to step out${pipeline ? `. ${pipeline}` : ''}`
             : 'Scan your permanent QR at the gate to record Out/In timings -no approval needed'
         }
         icon={section === 'outpass' ? <DoorOpen /> : <Coffee />}
@@ -123,7 +137,7 @@ export default function Outpass() {
           section === 'outpass' ? (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button disabled={!!offNote}>
                   <Plus /> Request Outpass
                 </Button>
               </DialogTrigger>
@@ -149,9 +163,9 @@ export default function Outpass() {
                     value={form.reason}
                     onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
                   />
-                  {formError && <p className="text-sm text-destructive">{formError}</p>}
+                  {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
                   <DialogFooter>
-                    <Button type="submit" variant="gradient" disabled={applyMutation.isPending}>
+                    <Button type="submit" variant="gradient" disabled={applyMutation.isPending || !!offNote}>
                       {applyMutation.isPending ? 'Submitting…' : 'Submit'}
                     </Button>
                   </DialogFooter>
@@ -173,6 +187,8 @@ export default function Outpass() {
         </TabsList>
 
         <TabsContent value="outpass" className="mt-4 flex flex-col gap-4">
+          {offNote && <WorkflowOffNotice text={offNote} />}
+
           {activePass && <OutpassFlipCard request={activePass} employee={employeeQuery.data} />}
 
           {listQuery.isLoading ? (

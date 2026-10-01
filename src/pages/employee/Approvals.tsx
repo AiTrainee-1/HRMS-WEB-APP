@@ -10,10 +10,13 @@ import { ApprovalCard, formatDateRange } from '@/components/employee/ApprovalCar
 import { EmptyState } from '@/components/employee/EmptyState'
 import { managerApi } from '@/api/resources'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
+import { useApprovalSummary } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
+import { approveEffect, hodCanAct, hodCanReject, parseApprovalSummary, takesPart, waitingText } from '@/lib/approval'
 import { permissionDurationLabel, permissionOutcome, permissionTypeLabel } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import type {
+  ApprovalProgress,
   MissingPunchSlot,
   PendingAttendanceRequest,
   PendingCasualLeaveRequest,
@@ -41,10 +44,12 @@ const PUNCH_SLOT_LABEL: Record<MissingPunchSlot, string> = {
 // casualLeaves/attendanceRequests/resignations/onDutySessions carry employee
 // fields flat on the item itself. Each category needs its own accessor — do
 // not assume a shared shape or `.employee` will be undefined for 4 of these 6 tabs.
+// `workflow` is the category's approval pipeline (GET /approval-summary): who decides it, in what order.
 const CATEGORIES = [
   {
     key: 'leaveRequests' as const,
     label: 'Leave',
+    workflow: 'leave' as const,
     flag: 'canApproveLeaves' as const,
     action: managerApi.updateLeaveStatus,
     describe: (item: PendingLeaveRequest) => ({
@@ -60,6 +65,7 @@ const CATEGORIES = [
   {
     key: 'permissions' as const,
     label: 'Permission',
+    workflow: 'permission' as const,
     flag: 'canApprovePermissions' as const,
     action: managerApi.updatePermissionStatus,
     describe: (item: PendingPermissionRequest) => {
@@ -85,6 +91,7 @@ const CATEGORIES = [
   {
     key: 'attendanceRequests' as const,
     label: 'Attendance',
+    workflow: 'attendance_correction' as const,
     flag: 'canApproveAttendance' as const,
     action: managerApi.updateAttendanceStatus,
     describe: (item: PendingAttendanceRequest) => ({
@@ -98,6 +105,7 @@ const CATEGORIES = [
   {
     key: 'casualLeaves' as const,
     label: 'Casual Leave',
+    workflow: 'casual_leave' as const,
     flag: 'canApproveCasualLeave' as const,
     action: managerApi.updateCasualLeaveStatus,
     describe: (item: PendingCasualLeaveRequest) => ({
@@ -111,6 +119,7 @@ const CATEGORIES = [
   {
     key: 'resignations' as const,
     label: 'Resignation',
+    workflow: 'resignation' as const,
     flag: 'canApproveResignations' as const,
     action: managerApi.updateResignationAction,
     describe: (item: PendingResignation) => ({
@@ -124,6 +133,7 @@ const CATEGORIES = [
   {
     key: 'onDutySessions' as const,
     label: 'On-Duty',
+    workflow: 'on_duty' as const,
     flag: 'canApproveOnDuty' as const,
     action: managerApi.updateOnDutyStatus,
     describe: (item: PendingOnDutySession) => ({
@@ -132,12 +142,16 @@ const CATEGORIES = [
       department: item.department,
       dateRange: item.createdAt ? formatDateRange(item.createdAt.slice(0, 10)) : '—',
       reason: `Destination: ${item.destination}${item.pendingPunchCount ? ` • ${item.pendingPunchCount} punch${item.pendingPunchCount === 1 ? '' : 'es'} captured` : ''}`,
-      note: 'Approving forwards the session to HR for final sign-off; rejecting voids its punches.',
+      // With the pipeline on hand the card says where approving sends it (approveEffect), so only the fixed part stays here.
+      note: item.approval
+        ? 'Rejecting voids its punches.'
+        : 'Approving forwards the session to HR for final sign-off; rejecting voids its punches.',
     }),
   },
   {
     key: 'outpassRequests' as const,
     label: 'Outpass',
+    workflow: 'outpass' as const,
     flag: 'canApprovePermissions' as const,
     action: managerApi.updateOutpassStatus,
     describe: (item: PendingOutpassRequest) => ({
@@ -151,6 +165,7 @@ const CATEGORIES = [
   {
     key: 'missingPunchRequests' as const,
     label: 'Missing Punch',
+    workflow: 'missing_punch' as const,
     flag: 'canApproveMissingPunch' as const,
     action: managerApi.updateMissingPunchStatus,
     describe: (item: PendingMissingPunchRequest) => ({
@@ -159,13 +174,15 @@ const CATEGORIES = [
       department: item.department,
       dateRange: `${formatDateRange(item.date)} · ${item.punchTime}`,
       reason: `${item.punchSlot ? PUNCH_SLOT_LABEL[item.punchSlot] : (item.punchType === 'IN' ? 'Check-In' : 'Check-Out')} — ${item.reason}`,
-      note: 'Approving forwards this to HR for final sign-off.',
+      // With the pipeline on hand the card says where approving sends it (approveEffect).
+      note: item.approval ? undefined : 'Approving forwards this to HR for final sign-off.',
     }),
   },
 ] as const
 
 export default function Approvals() {
   const { isManager, flags, isLoading: managerLoading } = useManagerStatus()
+  const summaryQuery = useApprovalSummary()
   const qc = useQueryClient()
   const [active, setActive] = React.useState<(typeof CATEGORIES)[number]['key']>(CATEGORIES[0].key)
   const [busyId, setBusyId] = React.useState<string | null>(null)
@@ -182,12 +199,20 @@ export default function Approvals() {
     mutationFn: async ({ action, id, status, comment }: { action: (id: string, status: RequestStatus, comment?: string) => Promise<unknown>; id: string; status: RequestStatus; comment?: string }) =>
       action(id, status, comment),
     onMutate: ({ id }) => setBusyId(id),
-    onSuccess: (_d, { status }) => {
-      toast.success(status === 'approved' ? 'Request approved' : 'Request rejected')
+    onSuccess: (data, { status }) => {
+      // An approval may only pass the request on to the next step: say where it went.
+      const next = status === 'approved' ? waitingText((data as { approval?: ApprovalProgress | null } | undefined)?.approval) : null
+      toast.success(status === 'approved' ? 'Request approved' : 'Request rejected', next ? { description: next } : undefined)
       qc.invalidateQueries({ queryKey: ['manager-pending-requests'] })
       qc.invalidateQueries({ queryKey: ['manager-me'] })
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not update the request'),
+    onError: (err) => {
+      // The server's own words (not this role's turn, workflow off, ...). A refusal usually means the list is out of
+      // date because the request has moved on, so read it again.
+      toast.error(err instanceof ApiError ? err.message : 'Could not update the request')
+      qc.invalidateQueries({ queryKey: ['manager-pending-requests'] })
+      qc.invalidateQueries({ queryKey: ['manager-me'] })
+    },
     onSettled: () => setBusyId(null),
   })
 
@@ -204,6 +229,8 @@ export default function Approvals() {
   const cat = CATEGORIES.find((c) => c.key === active) ?? CATEGORIES[0]
   const items = (data?.[cat.key] ?? []) as unknown[]
   const disabled = flags ? (flags as unknown as Record<string, boolean | undefined>)[cat.flag] === false : false
+  // The pipelines in force: the copy the poll just returned, else the summary (both absent on an older backend).
+  const workflow = (parseApprovalSummary(data?.approvalWorkflows) ?? summaryQuery.data)?.[cat.workflow]
 
   return (
     <div className="flex flex-col gap-6">
@@ -267,6 +294,9 @@ export default function Approvals() {
           <div className="flex items-center justify-between">
             <h2 className="font-display text-[22px] font-semibold">{cat.label} requests</h2>
             {disabled && <span className="chip chip-muted">Approval not enabled for your account</span>}
+            {!disabled && workflow && !takesPart(workflow, 'hod') && (
+              <span className="chip chip-muted">HR decides these requests</span>
+            )}
           </div>
           {items.length === 0 ? (
             <EmptyState icon={ClipboardCheck} title={`No pending ${cat.label.toLowerCase()} requests`} />
@@ -280,6 +310,9 @@ export default function Approvals() {
                 badge?: string; outcome?: { label: string; className: string }
               })(item)
               const id = String((item as { id: string | number }).id)
+              // Every category carries its own pipeline progress on newer backends; the lists arrive already narrowed to
+              // what this head can decide now, and the pipeline gates the two actions (else: both, as before).
+              const approval = (item as { approval?: ApprovalProgress | null }).approval
               return (
                 <Reveal key={id} index={i}>
                   <ApprovalCard
@@ -289,9 +322,12 @@ export default function Approvals() {
                     department={info.department ?? undefined}
                     dateRange={info.dateRange}
                     reason={info.reason}
-                    note={info.note}
+                    note={[info.note, approveEffect(approval, 'hod')].filter(Boolean).join(' ') || undefined}
                     badge={info.badge}
                     outcome={info.outcome}
+                    approval={approval}
+                    canApprove={hodCanAct(approval, true)}
+                    canReject={hodCanReject(approval, true)}
                     disabled={disabled}
                     isSubmitting={busyId === id}
                     onApprove={() => mutation.mutate({ action: cat.action, id, status: 'approved' })}

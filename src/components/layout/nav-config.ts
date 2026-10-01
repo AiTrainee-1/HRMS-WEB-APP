@@ -19,6 +19,7 @@ import {
   Fingerprint,
   FileSignature,
   DoorOpen,
+  LifeBuoy,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -75,6 +76,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Digital ID', href: '/employee/id-card', icon: BadgeCheck },
       { label: 'My Profile', href: '/employee/profile', icon: UserRound },
       { label: 'Company Directory', href: '/employee/company', icon: Building2 },
+      { label: 'Help & Support', href: '/employee/help', icon: LifeBuoy },
     ],
   },
 ]

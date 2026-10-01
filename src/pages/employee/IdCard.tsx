@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/employee/EmptyState'
+import { SupportContactCard } from '@/components/support/SupportContactCard'
 import { IdCardFront, IdCardBack } from '@/components/idcard/IdCardViews'
 import { idCardApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
@@ -35,7 +36,14 @@ export default function IdCard() {
   if (isLoading) return <Skeleton className="h-96 w-full" />
 
   if (isError || !data) {
-    return <EmptyState icon={BadgeCheck} title="Couldn't load your ID card" description="Please try again later or contact HR." />
+    return (
+      <EmptyState
+        icon={BadgeCheck}
+        title="Couldn't load your ID card"
+        description="Please try again later or contact HR."
+        action={<SupportContactCard situation="hr" compact className="mt-3 w-full max-w-md" />}
+      />
+    )
   }
 
   return (

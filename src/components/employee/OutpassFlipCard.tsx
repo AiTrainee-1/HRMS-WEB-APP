@@ -7,8 +7,10 @@ import { QRCodeSVG } from 'qrcode.react'
 import { CheckCircle2, XCircle, Clock, RotateCw, MapPin, QrCode, CheckCheck } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
 import { outpassApi } from '@/api/resources'
 import { ApiError } from '@/api/client'
+import { hasTrail, waitingText } from '@/lib/approval'
 import type { Employee, OutpassRequest } from '@/types'
 
 /**
@@ -271,8 +273,17 @@ export function OutpassFlipCard({
                 </p>
               </div>
             )}
+            {hasTrail(request.approval) && request.approval.steps.length > 1 && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Approval steps</p>
+                <ApprovalTrail approval={request.approval} className="mt-1" />
+              </div>
+            )}
             {request.status === 'pending' && (
-              <p className="text-xs italic text-muted-foreground">Waiting for HOD or HR to review this request.</p>
+              <p className="text-xs italic text-muted-foreground">
+                {/* Older backend: no pipeline in the response, so the old fixed wording. */}
+                {waitingText(request.approval) ?? 'Waiting for HOD or HR to review this request.'}
+              </p>
             )}
           </div>
 

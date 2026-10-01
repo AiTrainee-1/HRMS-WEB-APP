@@ -294,7 +294,17 @@ export const resignationApi = {
   }) => apiRequest<Resignation>({ method: 'POST', url: '/my/resignation', data: body }),
 }
 
+// ---- Approval workflows ----
+// The pipelines HR configured (Approval Workflow Control), for any signed-in user. Ancillary: it only explains a
+// request's path and warns that a request type is switched off, so a failure must not read as "server unreachable".
+// Returned unvalidated: hooks/useApprovalSummary.ts parses it (an older backend has no such route).
+export const approvalApi = {
+  summary: () => apiRequest<unknown>({ method: 'GET', url: '/approval-summary', skipOfflineDetection: true }),
+}
+
 // ---- Manager / Approvals ----
+// A decision the approval pipeline does not allow (not this role's turn, role not in the pipeline, workflow off)
+// comes back 400/403 with a user-ready `error` and a `code`; apiRequest surfaces `error` as ApiError.message.
 export const managerApi = {
   me: () => apiRequest<ManagerFlags>({ method: 'GET', url: '/manager/me' }),
   pendingRequests: () => apiRequest<PendingRequestsResponse>({ method: 'GET', url: '/manager/pending-requests' }),
@@ -315,12 +325,14 @@ export const managerApi = {
       url: `/manager/resignations/${id}/action`,
       data: { action: status === 'approved' ? 'approve' : 'reject', comment },
     }),
-  // Stage 1 (Department Head) of the On-Duty session chain; approval moves
-  // it on to HR, rejection voids the punches captured under it.
+  // The Department Head's decision on an On-Duty session, at whichever step of
+  // its approval pipeline this role holds: approving passes it on or finishes it,
+  // rejection voids the punches captured under it.
   updateOnDutyStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/on-duty-sessions/${id}/status`, data: { status, comment } }),
-  // Department Head stage only — approving here forwards to HR for final
-  // sign-off (see missing_punch_views.py), it does not finalize the request.
+  // The Department Head's decision on a Missing Punch (see missing_punch_views.py):
+  // approving passes it to the next step of the pipeline, or adds the punch when
+  // this is the last one.
   updateMissingPunchStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/missing-punch-requests/${id}/status`, data: { status, comment } }),
   updateOutpassStatus: (id: string, status: RequestStatus, comment?: string) =>

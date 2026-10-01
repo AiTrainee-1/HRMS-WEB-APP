@@ -9,6 +9,7 @@ import {
 import { useAuth } from '@/context/AuthContext'
 import { authApi, type LoginOptions } from '@/api/resources'
 import { OtpFlow } from '@/components/auth/OtpFlow'
+import { SupportContactCard } from '@/components/support/SupportContactCard'
 import { ApiError } from '@/api/client'
 import heroImage from '@/assets/company/infrastructure.png'
 import { AuthBackground } from '@/components/backgrounds/AuthBackground'
@@ -278,6 +279,9 @@ export default function Login() {
                 )}
               </button>
             )}
+
+            {/* Always on screen, straight under the form (and so under its error or the code-entry errors): who to call. */}
+            <SupportContactCard situation="hr" compact title="Can't sign in?" className="mt-4" />
 
             <div className="mt-auto pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border hairline bg-foreground/[0.03] px-4 py-3">

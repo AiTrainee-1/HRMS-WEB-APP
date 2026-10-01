@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AuthShell } from '@/components/layout/AuthShell'
 import { OtpFlow } from '@/components/auth/OtpFlow'
+import { SupportContactCard } from '@/components/support/SupportContactCard'
 
 /** Forgot / reset password: a WhatsApp code proves it's really you, then choose a new password. */
 export default function ForgotPassword() {
@@ -90,6 +91,8 @@ export default function ForgotPassword() {
           }}
         />
       )}
+
+      <SupportContactCard situation="hr" compact title="Still stuck?" className="mt-5" />
 
       <Link href="/employee-login" className="font-label mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-blue hover:underline">
         <ArrowLeft className="size-4" /> Back to sign in

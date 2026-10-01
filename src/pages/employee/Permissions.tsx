@@ -7,19 +7,24 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { RequestTabs } from '@/components/employee/RequestTabs'
 import { TextareaField } from '@/components/employee/TextareaField'
 import { TimePickerField } from '@/components/employee/TimePickerField'
 import { PermissionOutcomeBadge } from '@/components/employee/StatusBadge'
+import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
+import { WorkflowOffNotice } from '@/components/employee/WorkflowOffNotice'
 import { EmptyState } from '@/components/employee/EmptyState'
 import { LateDeductionCard } from '@/components/employee/LateDeductionCard'
 import { permissionApi, attendanceApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
+import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
+import { pipelineSentence } from '@/lib/approval'
 import { shiftPolicyOf } from '@/lib/attendance-flags'
+import { checkRequestDate, getRequestWindow, windowHint } from '@/lib/request-window'
 import { toDeductionPreview } from '@/lib/deductions'
 import {
   PERMISSION_TYPES,
@@ -71,6 +76,9 @@ export default function Permissions() {
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [form, setForm] = React.useState<PermissionForm>(EMPTY_FORM)
   const [formError, setFormError] = React.useState<string | null>(null)
+  // The pipeline HR configured for permissions, and the note when HR has switched them off.
+  const { workflow, offNote } = useApprovalWorkflow('permission')
+  const pipeline = pipelineSentence(workflow)
 
   const listQuery = useQuery({
     queryKey: ['permissions', user?.employeeId],
@@ -130,6 +138,7 @@ export default function Permissions() {
       const message = err instanceof ApiError ? err.message : 'Could not submit permission request'
       setFormError(message)
       toast.error(message)
+      refreshIfWorkflowOff(qc, err)
     },
   })
 
@@ -137,7 +146,9 @@ export default function Permissions() {
     e.preventDefault()
     setFormError(null)
     if (!form.date) return setFormError('Date is required.')
-    if (form.date < format(now, 'yyyy-MM-dd')) return setFormError('Date cannot be in the past.')
+    // 'Now' is read here, when the form is submitted, never cached: the dialog can sit open across midnight.
+    const outside = checkRequestDate(form.date, new Date())
+    if (outside) return setFormError(outside)
     if (!selectedType) return setFormError('Select a permission type.')
     if (!form.permissionTime) return setFormError(`${selectedType.timeLabel} is required.`)
     if (form.reason.trim().length < 5) return setFormError('Reason must be at least 5 characters.')
@@ -153,6 +164,10 @@ export default function Permissions() {
 
   const live = all.filter((r) => r.status === 'pending')
   const confirmed = all.filter((r) => r.status !== 'pending')
+  // A persistent problem in the dialog beats a toast that fades: the server's / a validation error, else "switched off".
+  const dialogError = formError ?? offNote
+  // The dates an employee may request, from the clock as of this render (the server enforces the same window).
+  const requestWindow = getRequestWindow(now)
 
   function renderItem(item: PermissionRequest) {
     const outcome = permissionOutcome(item)
@@ -168,6 +183,7 @@ export default function Permissions() {
           <p className="text-sm font-medium">{permissionTypeLabel(item)}</p>
           <p className="text-sm text-muted-foreground">{[item.permissionTime, duration].filter(Boolean).join(' · ')}</p>
           <p className="text-sm">{item.reason}</p>
+          <ApprovalTrail approval={item.approval} className="mt-1" />
           {outcome.kind === 'allowed' && effect && <p className="text-xs text-success">{effect}</p>}
           {outcome.kind === 'excess' && (
             <p className="text-xs text-orange-700 dark:text-orange-400">
@@ -195,15 +211,16 @@ export default function Permissions() {
             }}
           >
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!!offNote}>
                 <Plus /> Apply Permission
               </Button>
             </DialogTrigger>
             <DialogContent>
             <DialogHeader>
               <DialogTitle>Apply for Permission</DialogTitle>
+              {pipeline && <DialogDescription>{pipeline}</DialogDescription>}
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <Label id="permission-type-label">Permission Type</Label>
                 <div role="radiogroup" aria-labelledby="permission-type-label" className="flex flex-col gap-2">
@@ -231,7 +248,16 @@ export default function Permissions() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="date">Date</Label>
-                  <Input id="date" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+                  <Input
+                    id="date"
+                    type="date"
+                    min={requestWindow.min}
+                    max={requestWindow.max}
+                    aria-describedby="date-hint"
+                    value={form.date}
+                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                  <p id="date-hint" className="text-xs text-muted-foreground">{windowHint(requestWindow)}</p>
                 </div>
                 <TimePickerField
                   label={selectedType?.timeLabel ?? 'Time'}
@@ -262,9 +288,9 @@ export default function Permissions() {
                   </span>
                 </p>
               )}
-              {formError && <p className="text-sm text-destructive">{formError}</p>}
+              {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
               <DialogFooter>
-                <Button type="submit" variant="gradient" disabled={applyMutation.isPending}>
+                <Button type="submit" variant="gradient" disabled={applyMutation.isPending || !!offNote}>
                   {applyMutation.isPending ? 'Submitting…' : 'Submit'}
                 </Button>
               </DialogFooter>
@@ -273,6 +299,8 @@ export default function Permissions() {
           </Dialog>
         }
       />
+
+      {offNote && <WorkflowOffNotice text={offNote} />}
 
       <Card>
         <CardContent className="flex flex-col gap-2 py-1">

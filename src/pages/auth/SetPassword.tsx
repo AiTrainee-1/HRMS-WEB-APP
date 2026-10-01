@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AuthShell } from '@/components/layout/AuthShell'
 import { OtpFlow } from '@/components/auth/OtpFlow'
+import { SupportContactCard } from '@/components/support/SupportContactCard'
 import { ApiError } from '@/api/client'
 
 /**
@@ -54,6 +55,8 @@ export default function SetPassword() {
       {otpActivate === null && <div className="mt-5 h-28 animate-pulse rounded-md bg-foreground/[0.04]" aria-hidden />}
       {otpActivate === true && <ActivateWithOtp onDone={() => navigate('/employee-login')} />}
       {otpActivate === false && <DirectForm onDone={() => navigate('/employee-login')} />}
+
+      <SupportContactCard situation="hr" compact title="Can't set your password?" className="mt-5" />
 
       <Link
         href="/employee-login"

@@ -30,3 +30,7 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Tests
+
+`npm test` runs the shared request-window vectors with Node's built-in test runner on the `.ts` files directly, so it needs Node 22.18+ or 24.

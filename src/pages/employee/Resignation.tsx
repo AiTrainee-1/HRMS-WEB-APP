@@ -12,8 +12,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/employee/StatusBadge'
 import { TextareaField } from '@/components/employee/TextareaField'
+import { WorkflowOffNotice } from '@/components/employee/WorkflowOffNotice'
 import { resignationApi } from '@/api/resources'
+import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
+import { pipelineSentence, stepsAreReliable, trailOf } from '@/lib/approval'
 import { format, parseISO } from 'date-fns'
 
 const SURVEY_QUESTIONS = [
@@ -22,6 +25,16 @@ const SURVEY_QUESTIONS = [
   { key: 'surveyQ3Answer', label: 'Is there anything we could have done differently to retain you?' },
 ] as const
 
+interface TimelineStage {
+  stage: string
+  actor?: string
+  status: 'pending' | 'approved' | 'rejected' | 'waiting'
+  actedAt?: string
+  comment?: string
+  /** What became of a step nobody has decided: Waiting for decision, Up next, Skipped, Not reached. */
+  note?: string
+}
+
 export default function Resignation() {
   const qc = useQueryClient()
   const [reason, setReason] = React.useState('')
@@ -29,6 +42,9 @@ export default function Resignation() {
   const [survey, setSurvey] = React.useState({ surveyQ1Answer: '', surveyQ2Answer: '', surveyQ3Answer: '' })
   const [acknowledged, setAcknowledged] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // The pipeline HR configured for resignations, and the note when HR has switched them off.
+  const { workflow, offNote } = useApprovalWorkflow('resignation')
+  const pipeline = pipelineSentence(workflow, 'resignation')
 
   const { data, isLoading } = useQuery({ queryKey: ['my-resignation'], queryFn: resignationApi.get })
 
@@ -38,7 +54,10 @@ export default function Resignation() {
       toast.success('Resignation submitted')
       qc.invalidateQueries({ queryKey: ['my-resignation'] })
     },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not submit resignation'),
+    onError: (err) => {
+      toast.error(err instanceof ApiError ? err.message : 'Could not submit resignation')
+      refreshIfWorkflowOff(qc, err)
+    },
   })
 
   function handleSubmit(e: React.FormEvent) {
@@ -58,27 +77,39 @@ export default function Resignation() {
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
 
-  // The backend returns flat dept-head/HR stage fields, not a timeline array —
-  // build the 3-stage timeline client-side from those.
-  const timeline = data
-    ? [
-        {
-          stage: 'Department Head Review',
-          actor: data.deptHeadName ?? undefined,
-          status: (data.deptHeadStatus as 'pending' | 'approved' | 'rejected' | undefined) ?? 'waiting',
-          actedAt: data.deptHeadApprovedAt ?? undefined,
-          comment: data.deptHeadComment ?? undefined,
-        },
-        {
-          stage: 'HR Review',
-          actor: data.approvedBy ?? data.rejectedBy ?? undefined,
-          status:
-            data.status === 'approved' ? 'approved' : data.status === 'rejected' && data.rejectedBy === 'hr' ? 'rejected' : 'waiting',
-          actedAt: data.approvedAt ?? undefined,
-          comment: data.hrComment ?? undefined,
-        },
-      ]
-    : []
+  // The steps come straight from the pipeline HR configured. An older backend (or a request decided before the
+  // backend kept a trail) returns only flat dept-head/HR stage fields, not a timeline array — build the two fixed
+  // stages client-side from those, as before.
+  const steps = stepsAreReliable(data?.approval) ? trailOf(data.approval) : null
+  const timeline: TimelineStage[] = !data
+    ? []
+    : steps
+      ? steps.map((s): TimelineStage => ({
+          stage: `${s.name} Review`,
+          // A Department Head step that predates the trail carries no name; the request itself still has it.
+          actor: s.by ?? (s.roles.includes('hod') ? data.deptHeadName : null) ?? undefined,
+          status: s.state === 'approved' || s.state === 'rejected' ? s.state : 'waiting',
+          actedAt: s.at ?? undefined,
+          comment: s.comment ?? undefined,
+          note: s.state === 'approved' || s.state === 'rejected' ? undefined : s.status,
+        }))
+      : [
+          {
+            stage: 'Department Head Review',
+            actor: data.deptHeadName ?? undefined,
+            status: (data.deptHeadStatus as 'pending' | 'approved' | 'rejected' | undefined) ?? 'waiting',
+            actedAt: data.deptHeadApprovedAt ?? undefined,
+            comment: data.deptHeadComment ?? undefined,
+          },
+          {
+            stage: 'HR Review',
+            actor: data.approvedBy ?? data.rejectedBy ?? undefined,
+            status:
+              data.status === 'approved' ? 'approved' : data.status === 'rejected' && data.rejectedBy === 'hr' ? 'rejected' : 'waiting',
+            actedAt: data.approvedAt ?? undefined,
+            comment: data.hrComment ?? undefined,
+          },
+        ]
 
   const answeredSurvey = data
     ? SURVEY_QUESTIONS.filter((q) => !!data[q.key])
@@ -90,15 +121,17 @@ export default function Resignation() {
 
       {!data ? (
         <>
+          {offNote && <WorkflowOffNotice text={offNote} />}
+
           <Card className="border-destructive/40 bg-destructive/5">
             <CardContent className="flex gap-3 py-2">
               <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div className="text-sm">
                 <p className="font-semibold">Before you submit</p>
                 <ul className="mt-1.5 list-disc space-y-1 pl-4 text-muted-foreground">
-                  <li>This action starts a formal, two-stage review — first your Department Head, then HR.</li>
+                  <li>This action starts a formal review.{pipeline && ` ${pipeline}`}</li>
                   <li>You'll be able to track the status here, but you cannot withdraw the request yourself once submitted.</li>
-                  <li>Your account is deactivated automatically once HR gives final approval.</li>
+                  <li>Your account is deactivated automatically once the final approval is given.</li>
                 </ul>
               </div>
             </CardContent>
@@ -150,7 +183,7 @@ export default function Resignation() {
                 </label>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" variant="destructive" disabled={submitMutation.isPending || !acknowledged}>
+                <Button type="submit" variant="destructive" disabled={submitMutation.isPending || !acknowledged || !!offNote}>
                   {submitMutation.isPending ? 'Submitting…' : 'Submit Resignation'}
                 </Button>
               </form>
@@ -160,9 +193,9 @@ export default function Resignation() {
       ) : (
         <>
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">Resignation Status</CardTitle>
-              <StatusBadge status={data.status} />
+              <StatusBadge status={data.status} approval={data.approval} />
             </CardHeader>
             <CardContent>
               <p className="text-sm">
@@ -185,6 +218,7 @@ export default function Resignation() {
                     <Icon className={`size-5 shrink-0 ${color}`} />
                     <div>
                       <p className="text-sm font-medium">{stage.stage}</p>
+                      {stage.note && <p className="text-xs text-muted-foreground">{stage.note}</p>}
                       {stage.actor && <p className="text-xs text-muted-foreground">{stage.actor}</p>}
                       {stage.actedAt && <p className="text-xs text-muted-foreground">{format(parseISO(stage.actedAt), 'MMM d, yyyy')}</p>}
                       {stage.comment && <p className="text-xs mt-1">{stage.comment}</p>}

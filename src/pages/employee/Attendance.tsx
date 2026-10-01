@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useAttendanceSyncStatus } from '@/hooks/useGeoAttendance'
 import { countEarlyOuts, earlyOutShown, halfDayRule, hasCurrentPermissionFlags, lateInShown } from '@/lib/attendance-flags'
+import { isCasualLeaveEligible } from '@/lib/casual-leave'
 import type { AttendanceDay } from '@/types'
 
 export default function Attendance() {
@@ -39,6 +40,8 @@ export default function Attendance() {
   })
 
   const summary = data?.summary
+  // The same verdict the Casual Leave page uses (any eligible open month, else the overall flag).
+  const clEligible = eligibility ? isCasualLeaveEligible(eligibility) : false
   // Company rules from the shift stats (half-day windows, which checks are on); null on an older backend.
   const policy = shiftSummary?.policy ?? null
   const showLateIn = lateInShown(policy)
@@ -158,11 +161,11 @@ export default function Attendance() {
             <div className="flex items-center gap-2">
               <CalendarHeart className="size-4 text-primary" />
               <span className="text-sm font-medium flex-1">Casual Leave</span>
-              <Badge variant={eligibility.eligible ? 'success' : 'secondary'}>
-                {eligibility.eligible ? 'Eligible' : 'Not Eligible'}
+              <Badge variant={clEligible ? 'success' : 'secondary'}>
+                {clEligible ? 'Eligible' : 'Not Eligible'}
               </Badge>
             </div>
-            {!eligibility.eligible && eligibility.reason && (
+            {!clEligible && eligibility.reason && (
               <p className="text-xs text-muted-foreground">{eligibility.reason}</p>
             )}
             {eligibility.yearlyEntitlement != null && (

@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { EmployeeLayout } from '@/components/layout/EmployeeLayout'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 import { Toaster } from '@/components/ui/sonner'
+import { ConnectivityNotice } from '@/components/support/ConnectivityNotice'
 import { PageLoader } from '@/components/ui/loader'
 
 const Login = lazy(() => import('@/pages/auth/Login'))
@@ -36,6 +37,7 @@ const Documents = lazy(() => import('@/pages/employee/Documents'))
 const Chat = lazy(() => import('@/pages/employee/Chat'))
 const Resignation = lazy(() => import('@/pages/employee/Resignation'))
 const Company = lazy(() => import('@/pages/employee/Company'))
+const Help = lazy(() => import('@/pages/employee/Help'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +98,7 @@ function AppRoutes() {
         <Route path="/employee/chat">{() => <EmployeePage Component={Chat} />}</Route>
         <Route path="/employee/resignation">{() => <EmployeePage Component={Resignation} />}</Route>
         <Route path="/employee/company">{() => <EmployeePage Component={Company} />}</Route>
+        <Route path="/employee/help">{() => <EmployeePage Component={Help} />}</Route>
 
         <Route>
           <div className="flex min-h-screen items-center justify-center text-muted-foreground">Page not found</div>
@@ -112,6 +115,7 @@ function App() {
         <ThemeProvider>
         <AuthProvider>
           <AppRoutes />
+          <ConnectivityNotice />
           <Toaster position="top-right" richColors />
         </AuthProvider>
         </ThemeProvider>

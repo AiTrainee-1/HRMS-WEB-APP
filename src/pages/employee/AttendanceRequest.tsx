@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Link } from 'wouter'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { formatDistanceToNowStrict, parseISO } from 'date-fns'
 import {
@@ -12,13 +13,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
 import { CameraCaptureDialog } from '@/components/employee/CameraCaptureDialog'
 import { SlideToConfirmPunch } from '@/components/employee/SlideToConfirmPunch'
 import {
   useCompleteOnDuty, useGeoPunch, useGeoPunchPrecheck, useGeoPunchStatus, useOnDutyPunch,
   useOnDutyStatus, useStartOnDuty,
 } from '@/hooks/useGeoAttendance'
+import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
+import { pipelineSentence, waitingText } from '@/lib/approval'
 import { cn } from '@/lib/utils'
 import type { GeoPunchPrecheckResult, OnDutySession, PunchSlot } from '@/types'
 
@@ -58,6 +62,8 @@ function isLive(s: OnDutySession | null | undefined): boolean {
   return !!s && !s.employeeEndedAt && ['pending_hod', 'pending_hr', 'active'].includes(s.approvalStatus)
 }
 
+// The labels a session's status alone can give: the older backend's fixed reading (HOD first, then HR). A session that
+// carries its own `approval` block says who it is waiting for instead (see OnDuty below).
 const approvalChip: Record<string, { label: string; cls: string }> = {
   pending_hod: { label: 'Awaiting HOD', cls: 'chip-warning' },
   pending_hr: { label: 'Awaiting HR', cls: 'chip-info' },
@@ -271,6 +277,9 @@ function OnDuty() {
   const start = useStartOnDuty()
   const punch = useOnDutyPunch()
   const complete = useCompleteOnDuty()
+  const qc = useQueryClient()
+  // The pipeline HR configured for On-Duty, and the note when HR has switched On-Duty requests off.
+  const { workflow, offNote } = useApprovalWorkflow('on_duty')
   const [destination, setDestination] = React.useState('')
   const [pendingSlot, setPendingSlot] = React.useState<number | null>(null)
   const [cameraOpen, setCameraOpen] = React.useState(false)
@@ -286,10 +295,13 @@ function OnDuty() {
     if (!destination.trim()) return
     try {
       const r = await start.mutateAsync(destination.trim())
-      toast.success('On-Duty session started', { description: r.message })
+      // The server's own message always names HR; with the session's pipeline on hand say where it really goes.
+      const where = pipelineSentence(r.session.approval, 'session')
+      toast.success('On-Duty session started', { description: where ? `You can begin punching. ${where}` : r.message })
       setDestination('')
     } catch (err) {
       toast.error(errMsg(err, 'Could not start the session'))
+      refreshIfWorkflowOff(qc, err)
     }
   }
 
@@ -336,7 +348,10 @@ function OnDuty() {
   if (isLoading) return <Skeleton className="h-72 w-full rounded-lg" />
 
   const slots = data?.punchSlots ?? []
-  const chip = session ? approvalChip[session.approvalStatus] ?? { label: session.approvalStatus, cls: 'chip-muted' } : null
+  const baseChip = session ? approvalChip[session.approvalStatus] ?? { label: session.approvalStatus, cls: 'chip-muted' } : null
+  // While the session waits on the pipeline, say who it waits for (the status alone only knows the old fixed order).
+  const chip = baseChip && { ...baseChip, label: waitingText(session?.approval) ?? baseChip.label }
+  const pipeline = pipelineSentence(session?.approval ?? workflow, 'session')
 
   return (
     <div className="flex flex-col gap-5">
@@ -357,9 +372,10 @@ function OnDuty() {
           </div>
           {liveSession.isProvisional && (
             <p className="mt-4 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[13px] text-brand-gold">
-              You can punch right away. Punches count once your Department Head and HR approve the session.
+              You can punch right away. Punches count once the session is approved.{pipeline && ` ${pipeline}`}
             </p>
           )}
+          <ApprovalTrail approval={liveSession.approval} className="mt-3" />
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {slots.map((s) => {
@@ -432,7 +448,12 @@ function OnDuty() {
               maxLength={200}
             />
           </div>
-          <Button type="submit" size="lg" disabled={!destination.trim() || start.isPending} className="self-start">
+          {offNote && (
+            <p role="status" className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[13px] text-brand-gold">
+              {offNote}
+            </p>
+          )}
+          <Button type="submit" size="lg" disabled={!destination.trim() || start.isPending || !!offNote} className="self-start">
             {start.isPending ? <Loader2 className="animate-spin" /> : <Play />} Start session
           </Button>
           {session && chip && (

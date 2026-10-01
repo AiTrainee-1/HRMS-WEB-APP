@@ -1,5 +1,61 @@
 export type RequestStatus = 'pending' | 'approved' | 'rejected'
 
+// ---- Approval workflow (backend/api/approval_workflow.py) ----
+// HR configures, per kind of request, who approves it and in what order (Approval Workflow Control): 1-2 steps, each
+// held by the Department Head, HR, or either of them. GET /approval-summary describes those pipelines and every
+// request of such a kind carries its own `approval` progress block. Both are absent on an older backend, so screens
+// read them through lib/approval.ts, which falls back to the old behaviour.
+export type ApprovalRole = 'hod' | 'hr'
+export type ApprovalWorkflowKey =
+  | 'leave' | 'permission' | 'casual_leave' | 'missing_punch' | 'on_duty' | 'on_duty_punch'
+  | 'attendance_correction' | 'outpass' | 'request' | 'resignation' | 'advance'
+export type ApprovalStepState = 'approved' | 'skipped' | 'pending' | 'waiting' | 'rejected'
+
+export interface ApprovalStep {
+  roles: ApprovalRole[]
+  /** An optional step is skipped when the next step's role decides first; the last step is always mandatory. */
+  mandatory: boolean
+  /** The server's short label ("HOD" | "HR" | "HOD or HR"); employee-facing wording goes through lib/approval.ts. */
+  label: string
+}
+
+export interface ApprovalProgressStep extends ApprovalStep {
+  index: number
+  /** 'pending' is the step the request is at now, 'waiting' a later one. */
+  state: ApprovalStepState
+  by?: string | null
+  at?: string | null
+  comment?: string | null
+  decidedBy?: ApprovalRole
+}
+
+export interface ApprovalProgress {
+  workflow: string
+  label: string
+  enabled: boolean
+  steps: ApprovalProgressStep[]
+  /** Index of the step the request is at while it is pending, else null. */
+  currentStep: number | null
+  waitingFor: ApprovalRole[]
+  /** Whether that role could approve or reject it right now under the pipeline (not counting who the individual HOD is). */
+  canAct: Record<ApprovalRole, boolean>
+  /** canAct plus a rejection allowed out of turn (a resignation's HR). */
+  canReject?: Record<ApprovalRole, boolean>
+}
+
+/** One entry of GET /approval-summary (also `approvalWorkflows` on /manager/me and /manager/pending-requests). */
+export interface ApprovalSummaryItem {
+  label: string
+  /** false: HR has switched the workflow off, so NEW requests are refused (waiting ones can still be decided). */
+  enabled: boolean
+  requestedBy: 'Employee' | 'HR'
+  steps: ApprovalStep[]
+  /** "Employee → HOD → HR" */
+  path: string
+}
+
+export type ApprovalSummary = Partial<Record<ApprovalWorkflowKey, ApprovalSummaryItem>>
+
 export interface AuthUser {
   role: 'employee'
   employeeId: string
@@ -64,6 +120,8 @@ export interface LeaveRequest {
   reason: string
   hrComment?: string
   createdAt: string
+  /** Where the request stands in its approval pipeline; absent on an older backend (see lib/approval.ts). */
+  approval?: ApprovalProgress | null
 }
 
 // The 3 permission types (backend models/leave.py::EmployeePermission). Each is
@@ -103,6 +161,7 @@ export interface PermissionRequest {
   // replaced them; the backend now just echoes monthlyLimit). Nothing reads these.
   dailyLimit?: number
   weeklyLimit?: number
+  approval?: ApprovalProgress | null
 }
 
 export interface CasualLeaveRequest {
@@ -112,10 +171,11 @@ export interface CasualLeaveRequest {
   reason: string
   status: RequestStatus
   createdAt: string
+  approval?: ApprovalProgress | null
 }
 
-// See backend/api/outpass_request_views.py::_outpass_request_json. Approving
-// (from either HOD or HR) sets approvedAt/expiresAt -expiresAt is always
+// See backend/api/outpass_request_views.py::_outpass_request_json. The final
+// approval (whoever the pipeline makes it) sets approvedAt/expiresAt -expiresAt is always
 // exactly approvedAt + 60 minutes, computed server-side so the client never
 // has to guess the window.
 export type OutpassSource = 'manual' | 'on_duty'
@@ -151,6 +211,8 @@ export interface OutpassRequest {
   returnQrExpiresAt?: string | null
   canGenerateReturnQr?: boolean
   scanStatus?: OutpassScanStatus
+  /** null for a pass raised by an On-Duty approval: it has no pipeline of its own. */
+  approval?: ApprovalProgress | null
 }
 
 // See backend/api/tea_break_views.py. A permanent, no-approval, per-employee
@@ -198,6 +260,17 @@ export interface MissingPunchRequest {
   hrReviewedBy?: string | null
   hrReviewComment?: string | null
   createdAt: string
+  approval?: ApprovalProgress | null
+}
+
+/** One month an employee can still request casual leave in (see CasualLeaveEligibility.months). */
+export interface CasualLeaveMonthEligibility {
+  /** 'YYYY-MM' */
+  month: string
+  /** 'September 2026' */
+  label: string
+  eligible: boolean
+  reason: string | null
 }
 
 export interface CasualLeaveEligibility {
@@ -207,6 +280,11 @@ export interface CasualLeaveEligibility {
   yearlyEntitlement?: number
   usedThisYear?: number
   remainingThisYear?: number
+  /**
+   * The previous month while the grace days are open, then the current month, each with its own verdict. Absent on an
+   * older backend: then `eligible` decides on its own.
+   */
+  months?: CasualLeaveMonthEligibility[]
 }
 
 export interface Notification {
@@ -376,10 +454,17 @@ export interface ShiftDeductionSummary {
 export interface ShiftPolicy {
   morningLateInEnabled?: boolean
   eveningEarlyOutEnabled?: boolean
-  // "HH:MM". Morning half = any punch before halfDayFirstHalfEnd; evening half =
-  // any punch at/after halfDaySecondHalfStart. Both = Full Day, one = Half Day.
+  // "HH:MM". Evening half = any punch at/after halfDaySecondHalfStart. Both halves = Full Day, one = Half Day.
+  // halfDayFirstHalfEnd is the OLD fixed cut-off for the morning half (an older backend still decides by it).
   halfDayFirstHalfEnd?: string
   halfDaySecondHalfStart?: string
+  // The arrival timeline of the current backend, measured from each shift's own start + grace: Late up to
+  // lateWindowMinutes, an approved Late-In permission excuses a further permissionWindowMinutes, then arrivalExtraMinutes
+  // more still count as the morning half (the day earning 1 - arrivalQuarterDeduction shift); later is the second half.
+  lateWindowMinutes?: number
+  permissionWindowMinutes?: number
+  arrivalExtraMinutes?: number
+  arrivalQuarterDeduction?: number
   permissionMonthlyCap?: number
   freeAllowance?: number
   permissionDurationMinutes?: number
@@ -526,6 +611,8 @@ export interface ManagerFlags {
   canApproveOnDuty?: boolean
   canApproveMissingPunch?: boolean
   pendingApprovalsCount: number
+  /** The pipelines in force, same shape as GET /approval-summary; absent on an older backend. */
+  approvalWorkflows?: ApprovalSummary
 }
 
 // leaveRequests/permissions get a nested `employee{}` object added by the
@@ -555,6 +642,7 @@ export interface PendingAttendanceRequest {
   reason: string
   status: RequestStatus
   createdAt: string
+  approval?: ApprovalProgress | null
 }
 export interface PendingResignation {
   id: string
@@ -566,6 +654,7 @@ export interface PendingResignation {
   lastWorkingDate: string | null
   status: RequestStatus
   createdAt: string
+  approval?: ApprovalProgress | null
 }
 
 export type PendingOnDutySession = OnDutySession
@@ -583,6 +672,7 @@ export interface PendingMissingPunchRequest {
   reason: string
   status: MissingPunchStatus
   createdAt: string
+  approval?: ApprovalProgress | null
 }
 
 export interface PendingRequestsResponse {
@@ -595,6 +685,8 @@ export interface PendingRequestsResponse {
   missingPunchRequests: PendingMissingPunchRequest[]
   outpassRequests: PendingOutpassRequest[]
   totalPending: number
+  /** The pipelines in force, refreshed with every poll; absent on an older backend. */
+  approvalWorkflows?: ApprovalSummary
 }
 
 export interface Resignation {
@@ -614,6 +706,7 @@ export interface Resignation {
   surveyQ2Answer?: string | null
   surveyQ3Answer?: string | null
   createdAt: string
+  approval?: ApprovalProgress | null
 }
 
 export interface ChatChannel {
@@ -682,7 +775,7 @@ export interface GeoPunchLogEntry {
 
 // ---- On-Duty sessions (backend/api/geo_attendance_views.py) ----
 // A day of off-site work: the employee starts a session with a destination
-// and can punch straight away (HOD -> HR approve it in the background). Each
+// and can punch straight away (the approval pipeline decides it in the background). Each
 // punch is a selfie + GPS "verification" that only becomes attendance once
 // HR approves both the session and the punch.
 export type OnDutySessionStatus = 'pending_hod' | 'pending_hr' | 'active' | 'completed' | 'rejected'
@@ -714,6 +807,7 @@ export interface OnDutySession {
   completedBy: string | null
   completionReason: string | null
   createdAt: string | null
+  approval?: ApprovalProgress | null
 }
 
 /** One of the day's 4 punch slots: IN/OUT/IN/OUT by position. */

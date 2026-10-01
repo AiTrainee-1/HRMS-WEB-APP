@@ -156,6 +156,10 @@ export function parseShiftPolicy(raw: unknown): ShiftPolicy | null {
     eveningEarlyOutEnabled: flag(r.eveningEarlyOutEnabled),
     halfDayFirstHalfEnd: time(r.halfDayFirstHalfEnd),
     halfDaySecondHalfStart: time(r.halfDaySecondHalfStart),
+    lateWindowMinutes: count(r.lateWindowMinutes),
+    permissionWindowMinutes: count(r.permissionWindowMinutes),
+    arrivalExtraMinutes: count(r.arrivalExtraMinutes),
+    arrivalQuarterDeduction: count(r.arrivalQuarterDeduction),
     permissionMonthlyCap: count(r.permissionMonthlyCap),
     freeAllowance: count(r.freeAllowance),
     permissionDurationMinutes: count(r.permissionDurationMinutes),
@@ -181,11 +185,28 @@ export function earlyOutShown(policy?: ShiftPolicy | null): boolean {
   return policy?.eveningEarlyOutEnabled !== false
 }
 
+const shiftsText = (n: number) => String(Number(n.toFixed(2)))
+
+/** What counts as the morning half. The current backend measures it from each shift's own start and grace (the timeline
+ * numbers in the policy); an older one only has the fixed cut-off time. Null when the policy has neither. */
+function morningHalfRule(policy: ShiftPolicy): string | null {
+  const { lateWindowMinutes: late, permissionWindowMinutes: perm, arrivalExtraMinutes: extra, arrivalQuarterDeduction: q } = policy
+  if (late !== undefined && perm !== undefined && extra !== undefined && q !== undefined) {
+    const notes = [`Late up to ${late} min`]
+    if (perm > 0) notes.push(`excused up to ${late + perm} min with an approved Late-In permission`)
+    if (q > 0) notes.push(`after that the day counts ${shiftsText(1 - q)} shift`)
+    return `any punch up to ${late + perm + extra} min after your grace time ends (${notes.join('; ')})`
+  }
+  return policy.halfDayFirstHalfEnd ? `any punch before ${policy.halfDayFirstHalfEnd}` : null
+}
+
 /** The company's half-day rule, or null unless the policy carries BOTH times (never guess a time). */
 export function halfDayRule(policy?: ShiftPolicy | null): { morning: string; evening: string; outcome: string } | null {
-  if (!policy?.halfDayFirstHalfEnd || !policy.halfDaySecondHalfStart) return null
+  if (!policy?.halfDaySecondHalfStart) return null
+  const morning = morningHalfRule(policy)
+  if (!morning) return null
   return {
-    morning: `Morning half: any punch before ${policy.halfDayFirstHalfEnd}`,
+    morning: `Morning half: ${morning}`,
     evening: `Evening half: any punch from ${policy.halfDaySecondHalfStart}`,
     outcome: 'Both = Full Day, one = Half Day, none = Absent',
   }
