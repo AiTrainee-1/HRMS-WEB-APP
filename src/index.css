@@ -371,6 +371,56 @@
   .dark .chip-excess {
     color: #fb923c;
   }
+  /* Compensation kinds (attendance calendar markers and the Compensation page): each has its own hue, apart from the
+     status tones above. Light mode uses the 700 shade for contrast, dark mode the 300 shade. */
+  .chip-teal {
+    background: rgb(20 184 166 / 0.12);
+    border-color: rgb(20 184 166 / 0.32);
+    color: #0f766e;
+  }
+  .chip-sky {
+    background: rgb(14 165 233 / 0.12);
+    border-color: rgb(14 165 233 / 0.32);
+    color: #0369a1;
+  }
+  .chip-indigo {
+    background: rgb(99 102 241 / 0.12);
+    border-color: rgb(99 102 241 / 0.32);
+    color: #4338ca;
+  }
+  .chip-pink {
+    background: rgb(236 72 153 / 0.12);
+    border-color: rgb(236 72 153 / 0.32);
+    color: #be185d;
+  }
+  .chip-fuchsia {
+    background: rgb(217 70 239 / 0.12);
+    border-color: rgb(217 70 239 / 0.32);
+    color: #a21caf;
+  }
+  .chip-violet {
+    background: rgb(139 92 246 / 0.12);
+    border-color: rgb(139 92 246 / 0.32);
+    color: #6d28d9;
+  }
+  .dark .chip-teal {
+    color: #5eead4;
+  }
+  .dark .chip-sky {
+    color: #7dd3fc;
+  }
+  .dark .chip-indigo {
+    color: #a5b4fc;
+  }
+  .dark .chip-pink {
+    color: #f9a8d4;
+  }
+  .dark .chip-fuchsia {
+    color: #f0abfc;
+  }
+  .dark .chip-violet {
+    color: #c4b5fd;
+  }
   .pip {
     display: inline-block;
     width: 6px;

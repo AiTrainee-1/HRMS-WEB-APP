@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   AlertCircle, ArrowRight, Eye, EyeOff, Factory, IdCard, KeyRound, Lock,
-  MapPin, MessageCircle, ShieldCheck, Wallet, CalendarCheck,
+  MapPin, ShieldCheck, Wallet, CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { authApi, type LoginOptions } from '@/api/resources'
 import { OtpFlow } from '@/components/auth/OtpFlow'
+import { ChannelIcon } from '@/components/auth/ChannelIcon'
+import { loginIntro, normalizeChannel, switchToCodeLabel } from '@/lib/otp-channel'
 import { SupportContactCard } from '@/components/support/SupportContactCard'
 import { ApiError } from '@/api/client'
 import heroImage from '@/assets/company/infrastructure.png'
@@ -51,6 +53,8 @@ export default function Login() {
   }, [])
   const showOtp = mode === 'otp' && options?.otpLogin === true
   const canSwitch = options?.otpLogin === true && options.passwordLogin
+  // How the server sends codes (SMS or WhatsApp); null when it did not say (an older server): the words are then neutral.
+  const channel = normalizeChannel(options?.otpChannel)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -156,13 +160,14 @@ export default function Login() {
             <h2 className="font-display mt-6 text-[30px] leading-tight font-semibold [@media(max-height:720px)]:mt-4">Employee Sign In</h2>
             <p className="mt-2 text-[14.5px] text-muted-foreground [@media(max-height:720px)]:hidden">
               {showOtp
-                ? 'Sign in with a one-time code sent to your registered WhatsApp number.'
+                ? loginIntro(channel)
                 : 'Use your employee code, registered phone or email to access your shifts, requests and payroll records.'}
             </p>
 
             {showOtp ? (
               <OtpFlow
                 purpose="login"
+                channel={channel}
                 submitLabel="Verify & sign in"
                 submittingLabel="Signing in…"
                 onSubmit={async (employeeCode, otp) => {
@@ -274,7 +279,7 @@ export default function Login() {
                   </>
                 ) : (
                   <>
-                    <MessageCircle className="size-3.5" /> Sign in with a WhatsApp code
+                    <ChannelIcon channel={channel} className="size-3.5" /> {switchToCodeLabel(channel)}
                   </>
                 )}
               </button>

@@ -1,9 +1,12 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
+import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
 import {
-  dayStatusLabel, earlyOutShown, getDayFlags, getDayMarkers, halfDayRule, lateInShown,
+  dayHeadline, earlyOutShown, getCompensationMarker, getDayFlags, getDayMarkers, halfDayRule, isPunchlessRelaxation,
+  lateInShown,
 } from '@/lib/attendance-flags'
+import { cn } from '@/lib/utils'
 import type { AttendanceDay, ShiftPolicy } from '@/types'
 import { format, parseISO } from 'date-fns'
 
@@ -25,7 +28,9 @@ function dayNotes(day: AttendanceDay, policy?: ShiftPolicy | null): string[] {
   if (f.earlyOut && earlyOutShown(policy) && !f.lateReason) {
     notes.push('Early Out: your last punch was before shift end minus grace.')
   }
-  if (f.halfDay && !f.legacy) {
+  // A compensation day taken (relaxation) with no punches is a Half Day / Present only because HR topped the date up:
+  // "you have a punch in only one half" would be untrue, and the compensation line above says what happened.
+  if (f.halfDay && !f.legacy && !isPunchlessRelaxation(day)) {
     // The company's real windows when the backend states them; never a guessed time.
     const rule = halfDayRule(policy)
     notes.push(
@@ -62,6 +67,8 @@ export function DayDetailPanel({
   policy?: ShiftPolicy | null
 }) {
   const notes = day ? dayNotes(day, policy) : []
+  // What compensation did to this day: its colour + symbol + the server's sentence (or a fixed one for the kind).
+  const compensation = day ? getCompensationMarker(day) : null
   return (
     <Dialog open={!!day} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-sm">
@@ -70,7 +77,7 @@ export function DayDetailPanel({
             <DialogHeader>
               <DialogTitle>{format(parseISO(day.date), 'EEEE, MMMM d, yyyy')}</DialogTitle>
               <DialogDescription className="flex items-center gap-2 flex-wrap">
-                <span>{dayStatusLabel(day.status)}</span>
+                <span>{dayHeadline(day)}</span>
                 <DayMarkerChips markers={getDayMarkers(day, policy)} />
                 {day.isCompensationDay && (
                   <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-600">
@@ -80,7 +87,12 @@ export function DayDetailPanel({
               </DialogDescription>
             </DialogHeader>
             {day.status === 'no_record' || day.status === 'future' || !day.firstPunch ? (
-              <p className="text-sm text-muted-foreground">No attendance record for this day.</p>
+              // A compensation day (birthday leave, a relaxation day) is a real, paid record without any punch.
+              <p className="text-sm text-muted-foreground">
+                {compensation && day.status !== 'no_record' && day.status !== 'future'
+                  ? 'No punches on this day.'
+                  : 'No attendance record for this day.'}
+              </p>
             ) : (
               <div className="flex flex-col gap-2 text-sm">
                 <div className="flex justify-between">
@@ -96,6 +108,18 @@ export function DayDetailPanel({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Punches</span>
                   <span className="font-medium">{day.totalPunches ?? 0}</span>
+                </div>
+              </div>
+            )}
+            {compensation && (
+              <div
+                data-testid="day-compensation"
+                className={cn('flex items-start gap-2 rounded-md p-3 text-xs ring-1 ring-inset', compensation.ring)}
+              >
+                <MarkerSymbol name={compensation.symbol} className={cn('mt-0.5 size-4', compensation.text)} />
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className="text-[13px] font-semibold text-foreground">{compensation.label}</p>
+                  {compensation.detail && <p className="text-muted-foreground">{compensation.detail}</p>}
                 </div>
               </div>
             )}

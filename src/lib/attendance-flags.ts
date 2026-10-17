@@ -1,4 +1,5 @@
-import type { DayLateFlags, EmployeeShiftStats, ShiftPolicy } from '@/types'
+// Relative (not '@/types'): `npm test` and tsconfig.node.json load this file without the app's path alias.
+import type { DayLateFlags, EmployeeShiftStats, ShiftPolicy } from '../types/index.ts'
 
 // The one place a per-day attendance object (attendance history records[] and
 // shift-stats dailyLogs[]) is turned into Late / Early Out / Half Day /
@@ -65,8 +66,24 @@ export function getDayFlags(day: DayLike): DayFlags {
   }
 }
 
+/** The Late / Early Out / Permission markers. */
+export type FlagMarkerKey = 'late' | 'earlyOut' | 'permission' | 'excess' | 'middle'
+
+/** What compensation shaped a day (the day record's `compensationKind`); 'compensation' is any kind this app does not know. */
+export type CompensationMarkerKey =
+  | 'ot_allowance'
+  | 'window_late_in'
+  | 'window_early_out'
+  | 'birthday'
+  | 'relaxation'
+  | 'compensation'
+
+/** Icons a marker or a compensation kind can carry; drawn by components/employee/MarkerSymbol.tsx. Colour is never the
+ * only cue: every compensation marker also has a symbol. */
+export type MarkerSymbolName = 'timer' | 'sunrise' | 'sunset' | 'cake' | 'bed' | 'hourglass' | 'handCoins' | 'party' | 'gift'
+
 export interface DayMarker {
-  key: 'late' | 'earlyOut' | 'permission' | 'excess' | 'middle'
+  key: FlagMarkerKey | CompensationMarkerKey
   label: string
   /** Small corner dot on the calendar grid (Tailwind class). */
   dot: string
@@ -74,9 +91,15 @@ export interface DayMarker {
   fill: string
   /** Chip tone (index.css) for the detail panel, dashboard and shift log. */
   chip: string
+  /** Compensation markers only: the symbol drawn in the calendar cell (instead of a dot). */
+  symbol?: MarkerSymbolName
+  /** Compensation markers only: text colour of that symbol. */
+  text?: string
+  /** Compensation markers only: ring around the calendar cell. */
+  ring?: string
 }
 
-export const DAY_MARKERS: Record<DayMarker['key'], DayMarker> = {
+export const DAY_MARKERS: Record<FlagMarkerKey, DayMarker> = {
   late: { key: 'late', label: 'Late-In', dot: 'bg-warning', fill: 'var(--warning)', chip: 'chip-warning' },
   earlyOut: { key: 'earlyOut', label: 'Early Out', dot: 'bg-destructive', fill: 'var(--destructive)', chip: 'chip-danger' },
   permission: { key: 'permission', label: 'Permission applied', dot: 'bg-primary', fill: 'var(--primary)', chip: 'chip-info' },
@@ -87,17 +110,121 @@ export const DAY_MARKERS: Record<DayMarker['key'], DayMarker> = {
 /** Compensation Day has always had its own violet marker; kept here so the grid, chart and legend agree. */
 export const COMPENSATION_MARKER = { label: 'Compensation day', dot: 'bg-violet-500', fill: '#8b5cf6' }
 
+// ── Compensation (day record keys compensationKind / compensationMinutes / compensationNote) ──
+// Five colours, each with its own symbol, none of them the Present / Half Day / Late / Early Out / Permission colours:
+// teal + timer (a next-day late-in allowance was used), sky + sunrise (the company's announced late-in time applied),
+// indigo + sunset (the announced early-out time applied), pink + cake (birthday leave), fuchsia + bed (a compensation day
+// taken). A kind this app has never seen is drawn as a violet gift ("Compensation"), never dropped.
+
+export const COMPENSATION_KIND_MARKERS: Record<Exclude<CompensationMarkerKey, 'compensation'>, DayMarker> = {
+  ot_allowance: {
+    key: 'ot_allowance', label: 'Late-in allowance used', dot: 'bg-teal-500', fill: '#14b8a6', chip: 'chip-teal',
+    symbol: 'timer', text: 'text-teal-600 dark:text-teal-300', ring: 'ring-teal-500/70',
+  },
+  window_late_in: {
+    key: 'window_late_in', label: 'Company late-in time', dot: 'bg-sky-500', fill: '#0ea5e9', chip: 'chip-sky',
+    symbol: 'sunrise', text: 'text-sky-600 dark:text-sky-300', ring: 'ring-sky-500/70',
+  },
+  window_early_out: {
+    key: 'window_early_out', label: 'Company early-out time', dot: 'bg-indigo-500', fill: '#6366f1', chip: 'chip-indigo',
+    symbol: 'sunset', text: 'text-indigo-600 dark:text-indigo-300', ring: 'ring-indigo-500/70',
+  },
+  birthday: {
+    key: 'birthday', label: 'Birthday leave', dot: 'bg-pink-500', fill: '#ec4899', chip: 'chip-pink',
+    symbol: 'cake', text: 'text-pink-600 dark:text-pink-300', ring: 'ring-pink-500/70',
+  },
+  relaxation: {
+    key: 'relaxation', label: 'Relaxation day', dot: 'bg-fuchsia-500', fill: '#d946ef', chip: 'chip-fuchsia',
+    symbol: 'bed', text: 'text-fuchsia-600 dark:text-fuchsia-300', ring: 'ring-fuchsia-500/70',
+  },
+}
+
+const GENERIC_COMPENSATION_MARKER: DayMarker = {
+  key: 'compensation', label: 'Compensation', dot: 'bg-violet-500', fill: '#8b5cf6', chip: 'chip-violet',
+  symbol: 'gift', text: 'text-violet-600 dark:text-violet-300', ring: 'ring-violet-500/70',
+}
+
+/** The compensation markers a calendar legend lists (the five kinds the server sends today). */
+export function compensationLegend(): DayMarker[] {
+  return Object.values(COMPENSATION_KIND_MARKERS)
+}
+
+type CompensationFields = Pick<DayLateFlags, 'compensationKind' | 'compensationMinutes' | 'compensationNote'>
+
+/** The day's compensation kind as the server sent it, or null when nothing compensation-related shaped the day. */
+export function compensationKindOf(day: CompensationFields): string | null {
+  const kind = typeof day.compensationKind === 'string' ? day.compensationKind.trim() : ''
+  return kind || null
+}
+
+/** True when the backend sends the compensation keys on at least one of these days (a newer backend, even if every
+ * value is null); false means an older backend, which has nothing to explain. */
+export function hasCompensationKeys(days: CompensationFields[]): boolean {
+  return days.some((d) => d.compensationKind !== undefined)
+}
+
+/** The one plain sentence that explains the day's compensation marker: the server's note, else a fixed sentence for the
+ * kind. Null when no compensation shaped the day. */
+export function compensationLine(day: CompensationFields): string | null {
+  const kind = compensationKindOf(day)
+  if (!kind) return null
+  const note = typeof day.compensationNote === 'string' ? day.compensationNote.trim() : ''
+  if (note) return note
+  const minutes = typeof day.compensationMinutes === 'number' && day.compensationMinutes > 0 ? day.compensationMinutes : 0
+  switch (kind) {
+    case 'ot_allowance':
+      return `You arrived within your late-in allowance${minutes ? ` (${minutes} minutes used)` : ''}, so you were not marked late.`
+    case 'window_late_in':
+      return 'The company announced a late-in time for this day: your own shift start and grace did not apply, and you were not marked late.'
+    case 'window_early_out':
+      return 'The company announced an early-out time for this day: your own shift end and grace did not apply, and you were not marked as leaving early.'
+    case 'birthday':
+      return 'Paid birthday leave: no attendance rule applies on your birthday, whether you came to work or not.'
+    case 'relaxation':
+      return 'HR gave you a compensation day (relaxation) for this date.'
+    default:
+      return 'Compensation was applied to this day.'
+  }
+}
+
+/** The compensation marker for a day (colour + symbol + the explaining sentence as `detail`), or null. Independent of
+ * the day's status: a relaxation day with no punches still has one. */
+export function getCompensationMarker(day: CompensationFields): DayMarkerHit | null {
+  const kind = compensationKindOf(day)
+  if (!kind) return null
+  // Own keys only: a kind named like something every object inherits ('constructor') is not a known kind.
+  const marker = Object.hasOwn(COMPENSATION_KIND_MARKERS, kind)
+    ? COMPENSATION_KIND_MARKERS[kind as keyof typeof COMPENSATION_KIND_MARKERS]
+    : GENERIC_COMPENSATION_MARKER
+  return { ...marker, detail: compensationLine(day) ?? undefined }
+}
+
+type PunchFields = { status: string; firstPunch?: string | null; totalPunches?: number }
+
+/** A compensation day taken (relaxation) that has no punches: HR topped the date up, the employee did not work it. Its
+ * status reads Half Day or Present, but neither the half-day rule nor "no attendance record" describes it. */
+export function isPunchlessRelaxation(day: CompensationFields & PunchFields): boolean {
+  return compensationKindOf(day) === 'relaxation' && !day.firstPunch && !((day.totalPunches ?? 0) > 0)
+}
+
+/** The day's headline status: its status label, except a punchless relaxation day, which is not "Half Day" only. */
+export function dayHeadline(day: CompensationFields & PunchFields): string {
+  return isPunchlessRelaxation(day) ? 'Compensation day (relaxation)' : dayStatusLabel(day.status)
+}
+
 /** A marker on one particular day, with the extra explanation (if any) for a tooltip. */
 export interface DayMarkerHit extends DayMarker {
   detail?: string
 }
 
-/** Markers to draw for a day, most important first. Only worked days get any.
- * With a policy, a Late-In / Early Out check the company has switched off draws nothing. */
+/** Markers to draw for a day, most important first. Flag markers (Late-In, Early Out, permissions) only appear on worked
+ * days; a compensation marker comes first and appears whatever the status. With a policy, a Late-In / Early Out check the
+ * company has switched off draws nothing. */
 export function getDayMarkers(day: DayLike, policy?: ShiftPolicy | null): DayMarkerHit[] {
-  if (day.status !== 'present' && day.status !== 'half_shift') return []
+  const compensation = getCompensationMarker(day)
+  if (day.status !== 'present' && day.status !== 'half_shift') return compensation ? [compensation] : []
   const f = getDayFlags(day)
-  const out: DayMarkerHit[] = []
+  const out: DayMarkerHit[] = compensation ? [compensation] : []
   const showLate = f.late && lateInShown(policy)
   const showEarlyOut = f.earlyOut && earlyOutShown(policy)
   // The reason explains whichever deadline was missed, so it rides on the first of the two chips.

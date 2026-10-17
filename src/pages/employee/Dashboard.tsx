@@ -16,7 +16,7 @@ import { useAuth } from '@/context/AuthContext'
 import { casualLeaveApi, dashboardApi, employeeApi, holidayApi, idCardApi } from '@/api/resources'
 import { ApiError } from '@/api/client'
 import { verifyUrl } from '@/lib/verify'
-import { countEarlyOuts, dayStatusLabel, earlyOutShown, getDayMarkers, lateInShown } from '@/lib/attendance-flags'
+import { countEarlyOuts, dayHeadline, earlyOutShown, getDayMarkers, lateInShown } from '@/lib/attendance-flags'
 import { useTodayAttendance } from '@/hooks/useTodayAttendance'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
@@ -563,7 +563,7 @@ export default function Dashboard() {
                 return (
                   <div
                     key={key}
-                    title={rec ? [dayStatusLabel(rec.status), ...getDayMarkers(rec, policy).map((m) => m.label)].join(' · ') : 'No record'}
+                    title={rec ? [dayHeadline(rec), ...getDayMarkers(rec, policy).map((m) => m.label)].join(' · ') : 'No record'}
                     className={cn(
                       'flex flex-col items-center gap-2 rounded-md py-2',
                       isToday ? 'border border-primary/60 bg-primary/15' : 'bg-foreground/[0.04]',

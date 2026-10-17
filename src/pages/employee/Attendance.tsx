@@ -14,7 +14,10 @@ import { attendanceApi, casualLeaveApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useAttendanceSyncStatus } from '@/hooks/useGeoAttendance'
-import { countEarlyOuts, earlyOutShown, halfDayRule, hasCurrentPermissionFlags, lateInShown } from '@/lib/attendance-flags'
+import { useEmploymentType } from '@/hooks/useEmploymentType'
+import {
+  countEarlyOuts, earlyOutShown, halfDayRule, hasCompensationKeys, hasCurrentPermissionFlags, lateInShown,
+} from '@/lib/attendance-flags'
 import { isCasualLeaveEligible } from '@/lib/casual-leave'
 import type { AttendanceDay } from '@/types'
 
@@ -33,6 +36,10 @@ export default function Attendance() {
 
   const { data: shiftSummary } = useMyShiftSummary(month, year)
   const { data: syncStatus } = useAttendanceSyncStatus()
+  // Compensation is for staff: the calendar's compensation legend is listed for a staff employee on a backend that sends
+  // the day markers (a production employee, or an older backend, has nothing to explain).
+  const { isStaff } = useEmploymentType()
+  const showCompensationLegend = isStaff && hasCompensationKeys(data?.records ?? [])
   const { data: eligibility } = useQuery({
     queryKey: ['cl-eligibility', user?.employeeId],
     queryFn: () => casualLeaveApi.eligibility(),
@@ -202,6 +209,7 @@ export default function Attendance() {
               days={data?.records ?? []}
               onSelectDay={setSelectedDay}
               policy={policy}
+              showCompensationLegend={showCompensationLegend}
             />
           )}
           {newRules && <p className="mt-4 text-xs text-muted-foreground">{rulesNote}</p>}

@@ -1,91 +1,17 @@
-import { Clock, Headset, Info, LifeBuoy, Mail, MessageCircle, Phone, type LucideIcon } from 'lucide-react'
+import { Clock, Headset, Info, LifeBuoy } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useSupportContact } from '@/hooks/useSupportContact'
 import {
   DEFAULT_CONTACT_LABEL,
   contactFor,
-  dialHref,
   fallbackSentence,
-  mailHref,
   usableContactFor,
-  whatsappHref,
-  type SupportContactBlock,
   type SupportSituation,
 } from '@/lib/support-contact'
-
-interface Method {
-  key: 'call' | 'whatsapp' | 'email'
-  testId: string
-  icon: LucideIcon
-  /** Row caption in the full card. */
-  name: string
-  /** Button caption. */
-  action: string
-  /** As HR entered it (never the normalised digits). */
-  value: string
-  /** '' when the field is set but nothing can be linked from it. */
-  href: string
-  external: boolean
-}
-
-/** The ways to reach this contact, only for the fields that are set. */
-function methodsOf(block: SupportContactBlock): Method[] {
-  const methods: Method[] = []
-  if (block.phone) {
-    methods.push({
-      key: 'call',
-      testId: 'support-call',
-      icon: Phone,
-      name: 'Phone',
-      action: 'Call',
-      value: block.phone,
-      href: dialHref(block.phoneDial),
-      external: false,
-    })
-  }
-  if (block.whatsapp) {
-    methods.push({
-      key: 'whatsapp',
-      testId: 'support-whatsapp',
-      icon: MessageCircle,
-      name: 'WhatsApp',
-      action: 'WhatsApp',
-      value: block.whatsapp,
-      href: whatsappHref(block.whatsappNumber),
-      external: true,
-    })
-  }
-  if (block.email) {
-    methods.push({
-      key: 'email',
-      testId: 'support-email',
-      icon: Mail,
-      name: 'Email',
-      action: 'Email',
-      value: block.email,
-      href: mailHref(block.email),
-      external: false,
-    })
-  }
-  return methods
-}
-
-function ActionLink({ method, className, children }: { method: Method; className?: string; children: React.ReactNode }) {
-  return (
-    <Button asChild variant="outline" size="sm" className={className}>
-      <a
-        href={method.href}
-        data-testid={method.testId}
-        {...(method.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      >
-        {children}
-      </a>
-    </Button>
-  )
-}
+import { methodsOf } from './contact-methods'
+import { ActionLink } from './ContactActionLink'
 
 /**
  * Who to contact for this situation, from what HR configured (Settings -> HR Contact); never hard-coded.

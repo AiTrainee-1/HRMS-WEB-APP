@@ -1,8 +1,9 @@
 import * as React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'wouter'
 import {
   Bell, CalendarClock, Send, Timer, FileSignature, MessageCircle, CalendarCheck,
-  Briefcase, Fingerprint, FileText, CheckCheck,
+  Briefcase, Fingerprint, FileText, CheckCheck, HandCoins, PartyPopper,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/employee/EmptyState'
 import { Reveal } from '@/components/employee/Reveal'
 import { notificationApi } from '@/api/resources'
+import { notificationTarget } from '@/lib/notifications'
 import { cn } from '@/lib/utils'
 import { format, formatDistanceToNow, isToday, parseISO } from 'date-fns'
 import type { Notification } from '@/types'
@@ -28,6 +30,10 @@ const ICONS: Record<string, typeof Bell> = {
   on_duty: Briefcase,
   missing_punch: Fingerprint,
   employee_request: FileText,
+  // Compensation overhaul: the employee's claim was decided (`compensation`) / a claim waits for the Department Head
+  // (`holiday_work`).
+  compensation: HandCoins,
+  holiday_work: PartyPopper,
 }
 
 export default function Notifications() {
@@ -53,6 +59,8 @@ export default function Notifications() {
 
   function renderItem(n: Notification) {
     const Icon = ICONS[n.type] ?? Bell
+    // A notification of a type with a page of its own links to it (compensation -> the Compensation page).
+    const target = notificationTarget(n.type)
     return (
       <Card key={n.id} className={cn(!n.isRead && 'border-l-4 border-l-brand-blue bg-brand-blue-tint/40')}>
         <CardContent className="flex items-start gap-3 py-1">
@@ -67,6 +75,11 @@ export default function Notifications() {
           <div className="min-w-0 flex-1">
             <p className="text-sm">{n.message}</p>
             <p className="text-muted-foreground text-xs mt-1">{formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true })}</p>
+            {target && (
+              <Link href={target.href} className="font-label mt-1.5 inline-block text-[12.5px] font-semibold text-brand-blue hover:underline">
+                {target.label}
+              </Link>
+            )}
           </div>
           {!n.isRead && (
             <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)}>

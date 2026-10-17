@@ -25,6 +25,8 @@ const CasualLeave = lazy(() => import('@/pages/employee/CasualLeave'))
 const Outpass = lazy(() => import('@/pages/employee/Outpass'))
 const MissingPunch = lazy(() => import('@/pages/employee/MissingPunch'))
 const Approvals = lazy(() => import('@/pages/employee/Approvals'))
+const Compensation = lazy(() => import('@/pages/employee/Compensation'))
+const HodAssignment = lazy(() => import('@/pages/employee/HodAssignment'))
 const Notifications = lazy(() => import('@/pages/employee/Notifications'))
 const Profile = lazy(() => import('@/pages/employee/Profile'))
 const Salary = lazy(() => import('@/pages/employee/Salary'))
@@ -86,6 +88,8 @@ function AppRoutes() {
         <Route path="/employee/outpass">{() => <EmployeePage Component={Outpass} />}</Route>
         <Route path="/employee/missing-punch">{() => <EmployeePage Component={MissingPunch} />}</Route>
         <Route path="/employee/approvals">{() => <EmployeePage Component={Approvals} />}</Route>
+        <Route path="/employee/compensation">{() => <EmployeePage Component={Compensation} />}</Route>
+        <Route path="/employee/hod">{() => <EmployeePage Component={HodAssignment} />}</Route>
         <Route path="/employee/notifications">{() => <EmployeePage Component={Notifications} />}</Route>
         <Route path="/employee/profile">{() => <EmployeePage Component={Profile} />}</Route>
         <Route path="/employee/salary/:id">{() => <EmployeePage Component={SalaryDetail} />}</Route>

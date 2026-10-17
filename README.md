@@ -33,4 +33,6 @@ See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rule
 
 ## Tests
 
-`npm test` runs the shared request-window vectors with Node's built-in test runner on the `.ts` files directly, so it needs Node 22.18+ or 24.
+`npm test` runs every `src/lib/*.test.ts` with Node's built-in test runner on the `.ts` files directly, so it needs Node 22.18+ or 24. That is the shared request-window vectors plus the pure logic of the Compensation page (`lib/compensation.ts`), the HOD Assignment page (`lib/hod.ts`), the holiday-work approvals (`lib/holiday-work.ts`), the attendance-calendar markers (`lib/attendance-flags.ts`) the contact block (`lib/contact-block.ts`) and the one-time-code screens (`lib/otp-channel.ts`: the words for a code sent by SMS, by WhatsApp or by an older server that names neither, and the error sentences).
+
+A module under `src/lib` that a test loads must stay loadable by Node: relative imports with the `.ts` extension (never the `@/` alias), type-only imports from `../types/index.ts`, and no React, Vite or browser globals. `tsconfig.node.json` type-checks the tests and everything they import, so `npx tsc -b` catches a slip.

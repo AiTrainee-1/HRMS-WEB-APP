@@ -8,24 +8,30 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AuthShell } from '@/components/layout/AuthShell'
 import { OtpFlow } from '@/components/auth/OtpFlow'
+import { activateIntro, normalizeChannel, type OtpChannel } from '@/lib/otp-channel'
 import { SupportContactCard } from '@/components/support/SupportContactCard'
 import { ApiError } from '@/api/client'
 
 /**
- * First-time access. A new employee first confirms a code WhatsApped to the number HR registered for
- * them, then chooses a password. The plain form below is only used when the server has activation
- * codes switched off (or can't send them), so nobody is locked out.
+ * First-time access. A new employee first confirms a code sent (by SMS or WhatsApp, as the server is set up) to
+ * the number HR registered for them, then chooses a password. The plain form below is only used when the server
+ * has activation codes switched off (or can't send them), so nobody is locked out.
  */
 export default function SetPassword() {
   const [, navigate] = useLocation()
   // null until the server answers; if it can't be reached, assume codes are needed (the request will
   // then report the connection problem itself).
   const [otpActivate, setOtpActivate] = React.useState<boolean | null>(null)
+  // The channel the server sends codes on; null when it did not say (an older server): the words are then neutral.
+  const [channel, setChannel] = React.useState<OtpChannel | null>(null)
 
   React.useEffect(() => {
     authApi
       .loginOptions()
-      .then((o) => setOtpActivate(o.otpActivate))
+      .then((o) => {
+        setChannel(normalizeChannel(o.otpChannel))
+        setOtpActivate(o.otpActivate)
+      })
       .catch(() => setOtpActivate(true))
   }, [])
 
@@ -43,7 +49,7 @@ export default function SetPassword() {
           'New to the portal? Choose a password using your employee code, registered phone or email.'
         ) : (
           <>
-            New to the portal? Confirm your WhatsApp number, then choose a password. Forgotten an existing password?{' '}
+            {activateIntro(channel)} Forgotten an existing password?{' '}
             <Link href="/forgot-password" className="font-semibold text-brand-gold underline">
               Reset it here
             </Link>
@@ -53,7 +59,7 @@ export default function SetPassword() {
       </p>
 
       {otpActivate === null && <div className="mt-5 h-28 animate-pulse rounded-md bg-foreground/[0.04]" aria-hidden />}
-      {otpActivate === true && <ActivateWithOtp onDone={() => navigate('/employee-login')} />}
+      {otpActivate === true && <ActivateWithOtp channel={channel} onDone={() => navigate('/employee-login')} />}
       {otpActivate === false && <DirectForm onDone={() => navigate('/employee-login')} />}
 
       <SupportContactCard situation="hr" compact title="Can't set your password?" className="mt-5" />
@@ -68,7 +74,7 @@ export default function SetPassword() {
   )
 }
 
-function ActivateWithOtp({ onDone }: { onDone: () => void }) {
+function ActivateWithOtp({ channel, onDone }: { channel: OtpChannel | null; onDone: () => void }) {
   const [password, setPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
   const passwordsOk = password.length >= 8 && password === confirm
@@ -76,6 +82,7 @@ function ActivateWithOtp({ onDone }: { onDone: () => void }) {
   return (
     <OtpFlow
       purpose="activate"
+      channel={channel}
       submitLabel="Set password & activate"
       submittingLabel="Saving…"
       extraValid={passwordsOk}
@@ -120,7 +127,7 @@ function ActivateWithOtp({ onDone }: { onDone: () => void }) {
   )
 }
 
-/** The pre-WhatsApp form: used only while activation codes are switched off on the server. */
+/** The pre-OTP form (no code needed): used only while activation codes are switched off on the server. */
 function DirectForm({ onDone }: { onDone: () => void }) {
   const [identifier, setIdentifier] = React.useState('')
   const [password, setPassword] = React.useState('')

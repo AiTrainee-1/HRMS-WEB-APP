@@ -1,7 +1,9 @@
 import { cn } from '@/lib/utils'
 import {
-  COMPENSATION_MARKER, DAY_STATUS_LABEL, getDayMarkers, hasCurrentPermissionFlags, legendMarkers,
+  COMPENSATION_MARKER, DAY_STATUS_LABEL, compensationLegend, dayHeadline, getDayMarkers, hasCurrentPermissionFlags,
+  legendMarkers,
 } from '@/lib/attendance-flags'
+import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
 import type { AttendanceDay, ShiftPolicy } from '@/types'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -22,6 +24,7 @@ export function AttendanceCalendarGrid({
   days,
   onSelectDay,
   policy,
+  showCompensationLegend = false,
 }: {
   month: number
   year: number
@@ -29,6 +32,9 @@ export function AttendanceCalendarGrid({
   onSelectDay: (day: AttendanceDay) => void
   /** Company rules, when the backend sends them: a check that is switched off gets no dot and no legend entry. */
   policy?: ShiftPolicy | null
+  /** List the compensation colours and symbols in the legend (a staff employee on a backend that sends them). A day that
+   * carries a compensation marker is drawn with it whatever this says. */
+  showCompensationLegend?: boolean
 }) {
   const byDate = new Map(days.map((d) => [d.date, d]))
   const firstOfMonth = new Date(year, month - 1, 1)
@@ -59,13 +65,18 @@ export function AttendanceCalendarGrid({
           // each gets its own small dot along the bottom edge instead of a
           // second status colour. Legend below.
           const markers = getDayMarkers(cell, policy)
+          // A compensation marker is a coloured ring plus a symbol in the corner (so colour is not the only cue); the
+          // other markers stay dots along the bottom edge.
+          const dots = markers.filter((m) => !m.symbol)
+          const compensation = markers.find((m) => m.symbol)
           return (
             <button
               key={cell.date}
               onClick={() => onSelectDay(cell)}
+              title={compensation?.detail}
               aria-label={[
                 cell.date,
-                DAY_STATUS_LABEL[cell.status],
+                dayHeadline(cell),
                 ...markers.map((m) => m.label.toLowerCase()),
                 cell.isCompensationDay ? 'compensation day' : null,
                 cell.totalPunches ? `${cell.totalPunches} punches` : null,
@@ -73,12 +84,16 @@ export function AttendanceCalendarGrid({
               className={cn(
                 'relative aspect-square rounded-md border text-xs font-medium flex flex-col items-center justify-center transition-colors hover:opacity-80',
                 statusStyles[cell.status] ?? statusStyles.no_record,
+                compensation && ['ring-2 ring-inset', compensation.ring],
               )}
             >
               <span>{dayNum}</span>
-              {markers.length > 0 && (
+              {compensation && (
+                <MarkerSymbol name={compensation.symbol} className={cn('absolute top-0.5 right-0.5 size-3 sm:top-1 sm:right-1 sm:size-4', compensation.text)} />
+              )}
+              {dots.length > 0 && (
                 <span className="absolute bottom-0.5 inset-x-0 flex justify-center gap-0.5">
-                  {markers.map((m) => (
+                  {dots.map((m) => (
                     <span key={m.key} className={cn('size-1.5 rounded-full border border-background', m.dot)} />
                   ))}
                 </span>
@@ -106,6 +121,19 @@ export function AttendanceCalendarGrid({
           </div>
         ))}
       </div>
+      {showCompensationLegend && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2 text-xs" data-testid="compensation-legend">
+          <span className="font-medium text-foreground/80">Compensation</span>
+          {compensationLegend().map((m) => (
+            <div key={m.key} className="flex items-center gap-1.5">
+              <span className={cn('grid size-5 place-items-center rounded-[5px] ring-2 ring-inset', m.ring)}>
+                <MarkerSymbol name={m.symbol} className={cn('size-3', m.text)} />
+              </span>
+              <span className="text-muted-foreground">{m.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -20,6 +20,8 @@ import {
   FileSignature,
   DoorOpen,
   LifeBuoy,
+  HandCoins,
+  UserCheck,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -28,6 +30,8 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   managerOnly?: boolean
+  /** Only for staff employees (production employees never see the entry); see hooks/useEmploymentType.ts. */
+  staffOnly?: boolean
 }
 
 export interface NavGroup {
@@ -53,6 +57,7 @@ export const navGroups: NavGroup[] = [
       { label: 'Leave', href: '/employee/leave', icon: Send },
       { label: 'Permission', href: '/employee/permissions', icon: Timer },
       { label: 'Casual Leave', href: '/employee/casual-leave', icon: CalendarClock },
+      { label: 'Compensation', href: '/employee/compensation', icon: HandCoins, staffOnly: true },
       { label: 'Missing Punch', href: '/employee/missing-punch', icon: Fingerprint },
       { label: 'Manager Approvals', href: '/employee/approvals', icon: ClipboardCheck, managerOnly: true },
       { label: 'Documents', href: '/employee/documents', icon: FolderOpen },
@@ -71,6 +76,7 @@ export const navGroups: NavGroup[] = [
     heading: 'System & Directory',
     items: [
       { label: 'Holidays', href: '/employee/holidays', icon: PartyPopper },
+      { label: 'HOD Assignment', href: '/employee/hod', icon: UserCheck },
       { label: 'Team Chat', href: '/employee/chat', icon: MessageCircle },
       { label: 'Notifications', href: '/employee/notifications', icon: Bell },
       { label: 'Digital ID', href: '/employee/id-card', icon: BadgeCheck },

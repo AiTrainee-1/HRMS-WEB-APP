@@ -1,8 +1,20 @@
 import * as React from 'react'
-import { AlertCircle, ArrowRight, IdCard, MessageCircle } from 'lucide-react'
+import { AlertCircle, ArrowRight, IdCard } from 'lucide-react'
 import { authApi, type OtpRequestResult } from '@/api/resources'
-import { ApiError } from '@/api/client'
 import { useCountdown } from '@/hooks/useCountdown'
+import { ChannelIcon } from '@/components/auth/ChannelIcon'
+import {
+  EXPIRED_NOTICE,
+  cleanSeconds,
+  describeOtpFailure,
+  digitsOnly,
+  expiryText,
+  resolveChannel,
+  sendButtonLabel,
+  sendHint,
+  sentNoticeParts,
+  type OtpChannel,
+} from '@/lib/otp-channel'
 
 const inputClass =
   'h-12 w-full rounded-md border border-input bg-background/70 text-[15px] text-foreground caret-primary outline-none transition placeholder:text-muted-foreground/60 hover:border-foreground/25 focus:border-primary focus:ring-[3px] focus:ring-primary/20'
@@ -19,12 +31,20 @@ function ErrorNote({ message }: { message: string }) {
 }
 
 /**
- * The two steps every WhatsApp-code flow shares: ask for a code by Employee Code, then enter it.
- * `children` is whatever else the final step needs (nothing for sign-in, a new-password pair for a
- * reset), and `onSubmit` receives the code the employee typed.
+ * The two steps every one-time-code flow shares: ask for a code by Employee Code, then enter it. The server
+ * delivers the code by SMS or by WhatsApp (HR chooses) and says which: the words follow that (lib/otp-channel.ts),
+ * and read neutrally ("a code") when the server did not say, e.g. an older server.
+ * `children` is whatever else the final step needs (nothing for sign-in, a new-password pair for a reset), and
+ * `onSubmit` receives the code the employee typed.
+ *
+ * The code is only ever held in this component's state until it is sent back to the server: it is never logged,
+ * stored, or put in a URL. (A WebOTP auto-fill, navigator.credentials.get({ otp }), is deliberately not used: it
+ * needs the SMS to end with "@host #code", which the registered SMS template does not have. The input still offers
+ * the one-time-code hint, so iOS and Android keyboards suggest the code from the SMS.)
  */
 export function OtpFlow({
   purpose,
+  channel: advertisedChannel = null,
   submitLabel,
   submittingLabel,
   extraValid = true,
@@ -33,6 +53,8 @@ export function OtpFlow({
   onCodeSent,
 }: {
   purpose: 'login' | 'reset' | 'activate'
+  /** The channel login-options named for this server (a request's own answer takes over once there is one). */
+  channel?: OtpChannel | null
   submitLabel: string
   submittingLabel: string
   /** False while the extra fields (e.g. a new password) aren't valid yet. */
@@ -47,6 +69,10 @@ export function OtpFlow({
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
   const resend = useCountdown()
+  const expiry = useCountdown()
+
+  // What the server's last answer said, else what login-options said, else "not known" (neutral words).
+  const channel = resolveChannel(sent?.channel, advertisedChannel)
 
   async function requestCode(e?: React.FormEvent) {
     e?.preventDefault()
@@ -57,13 +83,15 @@ export function OtpFlow({
       const result = await authApi.requestOtp(employeeCode.trim(), purpose)
       setSent(result)
       setOtp('')
-      resend.start(result.resendAfterSeconds)
+      resend.start(cleanSeconds(result.resendAfterSeconds))
+      expiry.start(cleanSeconds(result.expiresInSeconds))
       onCodeSent?.()
     } catch (err) {
-      // Asking again too soon comes back with how long to wait.
-      const wait = err instanceof ApiError ? (err.data as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds : undefined
-      if (wait) resend.start(wait)
-      setError(err instanceof ApiError ? err.message : 'Could not send the code. Please try again.')
+      // The server's own sentence (cooldown, hourly limit, "couldn't send", "temporarily unavailable", turned
+      // off), and for a cooldown how long to wait.
+      const failure = describeOtpFailure(err, 'request')
+      if (failure.retryAfterSeconds > 0) resend.start(failure.retryAfterSeconds)
+      setError(failure.message)
     } finally {
       setBusy(false)
     }
@@ -77,13 +105,14 @@ export function OtpFlow({
     try {
       await onSubmit(employeeCode.trim(), otp)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That did not work. Please try again.')
+      setError(describeOtpFailure(err, 'verify').message)
     } finally {
       setBusy(false)
     }
   }
 
   if (!sent) {
+    const waiting = resend.seconds > 0
     return (
       <form onSubmit={requestCode} className="mt-5 flex flex-col gap-4" noValidate>
         <div>
@@ -97,29 +126,46 @@ export function OtpFlow({
               value={employeeCode}
               autoFocus
               autoComplete="username"
-              onChange={(e) => setEmployeeCode(e.target.value)}
+              onChange={(e) => {
+                setEmployeeCode(e.target.value)
+                // A wait the server asked for belongs to the code it was asked for.
+                if (resend.seconds > 0) resend.start(0)
+              }}
               placeholder="e.g. UKT-4092"
               className={`${inputClass} pr-4 pl-11`}
             />
           </div>
-          <p className="mt-2 text-[12.5px] text-muted-foreground">
-            We'll send a 6-digit code to the WhatsApp number registered with HR.
-          </p>
+          <p className="mt-2 text-[12.5px] text-muted-foreground">{sendHint(channel)}</p>
         </div>
         {error && <ErrorNote message={error} />}
-        <button type="submit" disabled={busy} className={buttonClass}>
-          <MessageCircle className="size-4" /> {busy ? 'Sending…' : 'Send code on WhatsApp'}
+        <button type="submit" disabled={busy || waiting} className={buttonClass}>
+          <ChannelIcon channel={channel} className="size-4" />{' '}
+          {busy ? 'Sending…' : waiting ? `Send code again in ${resend.seconds}s` : sendButtonLabel(channel)}
         </button>
       </form>
     )
   }
 
+  const maskedPhone = typeof sent.maskedPhone === 'string' ? sent.maskedPhone.trim() : ''
+  const notice = sentNoticeParts(channel, maskedPhone !== '')
+  const expiresText = expiryText(sent.expiresInSeconds)
+  // The window the server gave has passed. Only a hint: the server decides what is still valid.
+  const expired = cleanSeconds(sent.expiresInSeconds) > 0 && expiry.seconds === 0
+
   return (
     <form onSubmit={submit} className="mt-5 flex flex-col gap-4" noValidate>
-      <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[13px] text-foreground/90" role="status">
-        Code sent to WhatsApp number <b className="tabular-nums">{sent.maskedPhone}</b>. It expires in{' '}
-        {Math.round(sent.expiresInSeconds / 60)} minutes.
-      </div>
+      {expired ? (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[13px] text-foreground/90" role="status" id="otp-notice">
+          {EXPIRED_NOTICE}
+        </div>
+      ) : (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-[13px] text-foreground/90" role="status" id="otp-notice">
+          {notice.before}
+          {maskedPhone && <b className="tabular-nums">{maskedPhone}</b>}
+          {notice.after}
+          {expiresText && ` ${expiresText}`}
+        </div>
+      )}
       <div>
         <label htmlFor="otp-code" className="label-caps mb-2 block text-foreground/85">
           6-digit code
@@ -128,10 +174,23 @@ export function OtpFlow({
           id="otp-code"
           value={otp}
           autoFocus
+          type="text"
           inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete="one-time-code"
+          enterKeyHint="done"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           maxLength={6}
-          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+          aria-describedby="otp-notice"
+          onChange={(e) => setOtp(digitsOnly(e.target.value))}
+          // "123 456" or "123-456" pasted into a 6-character box would lose its last digit before onChange runs.
+          onPaste={(e) => {
+            e.preventDefault()
+            const digits = digitsOnly(e.clipboardData.getData('text'))
+            if (digits) setOtp(digits)
+          }}
           placeholder="••••••"
           className={`${inputClass} px-4 text-center font-mono text-[22px] tracking-[0.5em]`}
         />
@@ -152,6 +211,7 @@ export function OtpFlow({
             setSent(null)
             setOtp('')
             setError(null)
+            expiry.start(0)
           }}
           className="font-label font-semibold text-muted-foreground hover:text-foreground hover:underline"
         >

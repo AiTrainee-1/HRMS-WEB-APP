@@ -43,9 +43,12 @@ import type {
 export interface LoginOptions {
   otpLogin: boolean
   otpReset: boolean
-  // A new employee must confirm a WhatsApp code before choosing a first password.
+  // A new employee must confirm a one-time code (SMS or WhatsApp) before choosing a first password.
   otpActivate: boolean
   passwordLogin: boolean
+  // How the server delivers codes: 'sms' | 'whatsapp'. Absent on an older server, so read it with
+  // normalizeChannel() (lib/otp-channel.ts): unknown means "a code", never a guess.
+  otpChannel?: string
 }
 
 export interface OtpRequestResult {
@@ -53,14 +56,24 @@ export interface OtpRequestResult {
   maskedPhone: string
   expiresInSeconds: number
   resendAfterSeconds: number
+  // The channel this code really went out on ('sms' | 'whatsapp'). Absent on an older server.
+  channel?: string
 }
 
 export const authApi = {
-  // Which sign-in methods the server has switched on (WhatsApp OTP, password).
+  // Which sign-in methods the server has switched on (code by SMS or WhatsApp, password).
   loginOptions: () => apiRequest<LoginOptions>({ method: 'GET', url: '/auth/login-options' }),
-  // Sends a 6-digit code to the WhatsApp number registered for this employee code.
+  // Sends a 6-digit code, by SMS or WhatsApp as the server is set up, to the mobile number registered for this
+  // employee code. skipOfflineDetection: a 502 ("couldn't send") or 503 ("SMS temporarily unavailable") from this
+  // call is the message carrier having a problem, not the server being down, so it must not raise the app-wide
+  // "server unavailable" banner; the form shows the server's own sentence instead.
   requestOtp: (employeeCode: string, purpose: 'login' | 'reset' | 'activate') =>
-    apiRequest<OtpRequestResult>({ method: 'POST', url: '/auth/otp/request', data: { employeeCode, purpose } }),
+    apiRequest<OtpRequestResult>({
+      method: 'POST',
+      url: '/auth/otp/request',
+      data: { employeeCode, purpose },
+      skipOfflineDetection: true,
+    }),
   loginWithOtp: (employeeCode: string, otp: string) =>
     apiRequest<LoginResponse>({ method: 'POST', url: '/auth/otp/login', data: { employeeCode, otp } }),
   resetPasswordWithOtp: (employeeCode: string, otp: string, password: string) =>
@@ -69,7 +82,7 @@ export const authApi = {
       url: '/auth/otp/reset-password',
       data: { employeeCode, otp, password },
     }),
-  // First-time password for a new employee, after confirming the WhatsApp code.
+  // First-time password for a new employee, after confirming the code (SMS or WhatsApp).
   activateWithOtp: (employeeCode: string, otp: string, password: string) =>
     apiRequest<{ message: string }>({
       method: 'POST',
@@ -337,6 +350,25 @@ export const managerApi = {
     apiRequest({ method: 'PATCH', url: `/manager/missing-punch-requests/${id}/status`, data: { status, comment } }),
   updateOutpassStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/outpass-requests/${id}/status`, data: { status, comment } }),
+  // The Department Head's decision on a Holiday / Sunday work compensation claim HR raised (see holiday_work_views.py):
+  // approving adds the claimed shifts to the employee's compensation balance, once; rejecting changes nothing else and
+  // is final. A refusal (403 APPROVE_COMPENSATION_DISABLED, 403 not in your approval scope, 400 already decided) comes
+  // back with a user-ready `error`, which apiRequest surfaces as ApiError.message.
+  updateHolidayWorkStatus: (id: string, status: RequestStatus, comment?: string) =>
+    apiRequest({ method: 'PATCH', url: `/manager/holiday-work/${id}/status`, data: { status, comment } }),
+}
+
+// ---- Compensation (staff only) ----
+// Returned unvalidated: hooks/useCompensation.ts parses it with lib/compensation.ts (an older backend has no such route,
+// and a proxy can answer with an HTML page).
+export const compensationApi = {
+  mine: () => apiRequest<unknown>({ method: 'GET', url: '/employee/compensation' }),
+}
+
+// ---- Department Head assignment (every employee) ----
+// Returned unvalidated: hooks/useHod.ts parses it with lib/hod.ts.
+export const hodApi = {
+  mine: () => apiRequest<unknown>({ method: 'GET', url: '/employee/hod' }),
 }
 
 // ---- Chat ----

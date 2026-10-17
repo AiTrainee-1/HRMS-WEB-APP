@@ -13,6 +13,7 @@ import { useManagerStatus } from '@/hooks/useManagerStatus'
 import { useApprovalSummary } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
 import { approveEffect, hodCanAct, hodCanReject, parseApprovalSummary, takesPart, waitingText } from '@/lib/approval'
+import { describeClaim } from '@/lib/holiday-work'
 import { permissionDurationLabel, permissionOutcome, permissionTypeLabel } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import type {
@@ -20,6 +21,7 @@ import type {
   MissingPunchSlot,
   PendingAttendanceRequest,
   PendingCasualLeaveRequest,
+  PendingHolidayWorkClaim,
   PendingLeaveRequest,
   PendingMissingPunchRequest,
   PendingOutpassRequest,
@@ -178,6 +180,29 @@ const CATEGORIES = [
       note: item.approval ? undefined : 'Approving forwards this to HR for final sign-off.',
     }),
   },
+  {
+    // A Holiday / Sunday work compensation claim: HR raises it, the head approves it, and an approval adds the shifts to
+    // the employee's compensation balance. Like Attendance it is HR-raised, so the employee fields are flat on the item.
+    // Absent on an older backend (the tab then just stays empty); empty when the head's "approve compensation" switch is off.
+    key: 'holidayWorkClaims' as const,
+    label: 'Holiday Work',
+    workflow: 'holiday_work' as const,
+    flag: 'canApproveCompensation' as const,
+    action: managerApi.updateHolidayWorkStatus,
+    describe: (item: PendingHolidayWorkClaim) => {
+      const claim = describeClaim(item)
+      return {
+        name: claim.name,
+        code: claim.code,
+        department: claim.department,
+        // describeClaim only hands over a real calendar date (date-fns throws on an impossible one).
+        dateRange: claim.workDate ? formatDateRange(claim.workDate) : claim.workDateText,
+        reason: claim.reason,
+        badge: claim.badge,
+        note: claim.note,
+      }
+    },
+  },
 ] as const
 
 export default function Approvals() {
@@ -225,9 +250,11 @@ export default function Approvals() {
   }
 
   const data = query.data
-  const count = (key: (typeof CATEGORIES)[number]['key']) => ((data?.[key] ?? []) as unknown[]).length
+  // A category an older backend does not send (holidayWorkClaims) is just empty, never an error.
+  const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
+  const count = (key: (typeof CATEGORIES)[number]['key']) => asList(data?.[key]).length
   const cat = CATEGORIES.find((c) => c.key === active) ?? CATEGORIES[0]
-  const items = (data?.[cat.key] ?? []) as unknown[]
+  const items = asList(data?.[cat.key])
   const disabled = flags ? (flags as unknown as Record<string, boolean | undefined>)[cat.flag] === false : false
   // The pipelines in force: the copy the poll just returned, else the summary (both absent on an older backend).
   const workflow = (parseApprovalSummary(data?.approvalWorkflows) ?? summaryQuery.data)?.[cat.workflow]

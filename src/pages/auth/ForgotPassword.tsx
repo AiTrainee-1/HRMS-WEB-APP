@@ -1,25 +1,36 @@
 import * as React from 'react'
 import { Link, useLocation } from 'wouter'
 import { toast } from 'sonner'
-import { ArrowLeft, MessageCircle } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { authApi } from '@/api/resources'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AuthShell } from '@/components/layout/AuthShell'
 import { OtpFlow } from '@/components/auth/OtpFlow'
+import { ChannelIcon } from '@/components/auth/ChannelIcon'
+import { normalizeChannel, resetBadge, resetIntro, resetUnavailable, type OtpChannel } from '@/lib/otp-channel'
 import { SupportContactCard } from '@/components/support/SupportContactCard'
 
-/** Forgot / reset password: a WhatsApp code proves it's really you, then choose a new password. */
+/**
+ * Forgot / reset password: a code (sent by SMS or WhatsApp, as the server is set up) proves it's really you, then
+ * choose a new password. The words name the channel the server reports and stay neutral ("a code") when it reports none.
+ */
 export default function ForgotPassword() {
   const [, navigate] = useLocation()
   const [password, setPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
+  // null until the server answers; if it can't be reached, assume codes work (the request will then report the
+  // connection problem itself) and keep the words neutral.
   const [available, setAvailable] = React.useState<boolean | null>(null)
+  const [channel, setChannel] = React.useState<OtpChannel | null>(null)
 
   React.useEffect(() => {
     authApi
       .loginOptions()
-      .then((o) => setAvailable(o.otpReset))
+      .then((o) => {
+        setChannel(normalizeChannel(o.otpChannel))
+        setAvailable(o.otpReset)
+      })
       .catch(() => setAvailable(true))
   }, [])
 
@@ -29,18 +40,18 @@ export default function ForgotPassword() {
     <AuthShell width="max-w-lg">
       <p className="label-caps flex items-center gap-2 text-brand-gold">
         <span className="grid size-7 place-items-center rounded-md border border-amber-500/30 bg-amber-500/10">
-          <MessageCircle className="size-3.5" />
+          <ChannelIcon channel={channel} className="size-3.5" />
         </span>
-        Reset with WhatsApp
+        {resetBadge(channel)}
       </p>
       <h1 className="font-display mt-3 text-[28px] leading-tight font-semibold">Forgot your password?</h1>
-      <p className="mt-1.5 text-[14px] text-muted-foreground">
-        Enter your employee code and we'll WhatsApp you a code. Enter it here to choose a new password.
-      </p>
+      <p className="mt-1.5 text-[14px] text-muted-foreground">{resetIntro(channel)}</p>
 
-      {available === false ? (
+      {available === null ? (
+        <div className="mt-5 h-28 animate-pulse rounded-md bg-foreground/[0.04]" aria-hidden />
+      ) : available === false ? (
         <div className="mt-5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-[13.5px]">
-          Resetting with WhatsApp isn't available right now. Please ask HR to reset your password, or{' '}
+          {resetUnavailable(channel)} Please ask HR to reset your password, or{' '}
           <Link href="/set-password" className="font-semibold text-brand-gold underline">
             set it up here
           </Link>{' '}
@@ -49,6 +60,7 @@ export default function ForgotPassword() {
       ) : (
         <OtpFlow
           purpose="reset"
+          channel={channel}
           submitLabel="Set new password"
           submittingLabel="Saving…"
           extraValid={passwordsOk}

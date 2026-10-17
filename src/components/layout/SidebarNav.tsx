@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { navGroups } from './nav-config'
 import { useAuth } from '@/context/AuthContext'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
+import { useEmploymentType } from '@/hooks/useEmploymentType'
 import { useTheme } from '@/context/ThemeContext'
 import { Switch } from '@/components/ui/switch'
 
@@ -11,6 +12,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const [location] = useLocation()
   const { logout } = useAuth()
   const { isManager, flags } = useManagerStatus()
+  const { isStaff } = useEmploymentType()
   const { isDark, mode, setMode, toggle } = useTheme()
   const pendingApprovals = flags?.pendingApprovalsCount ?? 0
 
@@ -29,7 +31,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
         {navGroups.map((group) => {
-          const items = group.items.filter((item) => !item.managerOnly || isManager)
+          const items = group.items.filter((item) => (!item.managerOnly || isManager) && (!item.staffOnly || isStaff))
           if (items.length === 0) return null
           return (
             <div key={group.heading} className="mb-4">

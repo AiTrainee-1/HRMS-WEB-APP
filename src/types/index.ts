@@ -8,7 +8,7 @@ export type RequestStatus = 'pending' | 'approved' | 'rejected'
 export type ApprovalRole = 'hod' | 'hr'
 export type ApprovalWorkflowKey =
   | 'leave' | 'permission' | 'casual_leave' | 'missing_punch' | 'on_duty' | 'on_duty_punch'
-  | 'attendance_correction' | 'outpass' | 'request' | 'resignation' | 'advance'
+  | 'attendance_correction' | 'outpass' | 'request' | 'resignation' | 'advance' | 'holiday_work'
 export type ApprovalStepState = 'approved' | 'skipped' | 'pending' | 'waiting' | 'rejected'
 
 export interface ApprovalStep {
@@ -375,6 +375,15 @@ export interface DayLateFlags {
   permissionAfternoonWithRequest?: boolean
   permissionDeparture?: boolean
   permissionDepartureWithRequest?: boolean
+  // Compensation overhaul: what compensation shaped the day (null = nothing). All three are absent on an older
+  // backend, so read them through lib/attendance-flags.ts (getCompensationMarker, compensationLine). The kind is one of
+  // 'ot_allowance' | 'window_late_in' | 'window_early_out' | 'birthday' | 'relaxation' today, but stays a plain string:
+  // a kind this app has never seen is drawn generically, never rejected.
+  compensationKind?: string | null
+  // The allowance minutes the arrival used (ot_allowance); 0 for the other kinds.
+  compensationMinutes?: number | null
+  // One plain sentence from the server explaining the marker.
+  compensationNote?: string | null
 }
 
 export interface AttendanceDay extends DayLateFlags {
@@ -610,6 +619,10 @@ export interface ManagerFlags {
   canApproveResignations?: boolean
   canApproveOnDuty?: boolean
   canApproveMissingPunch?: boolean
+  /** Holiday / Sunday work compensation claims (HR raises them, the Department Head approves). Absent on an older backend. */
+  canApproveCompensation?: boolean
+  /** Already inside pendingApprovalsCount. */
+  pendingCompensationCount?: number
   pendingApprovalsCount: number
   /** The pipelines in force, same shape as GET /approval-summary; absent on an older backend. */
   approvalWorkflows?: ApprovalSummary
@@ -659,6 +672,35 @@ export interface PendingResignation {
 
 export type PendingOnDutySession = OnDutySession
 
+/**
+ * A Holiday / Sunday work compensation claim waiting for the Department Head (backend holiday_work_views.py::claim_json,
+ * workflow `holiday_work`). HR raises it, the head approves it, and the shifts then join the employee's compensation
+ * balance. Fields are flat like the other HR-style categories; everything but `id` may be absent on a future backend,
+ * so lib/holiday-work.ts reads them defensively.
+ */
+export interface PendingHolidayWorkClaim {
+  id: number | string
+  employeeId?: number | string
+  employeeCode?: string
+  employeeName?: string
+  department?: string | null
+  designation?: string | null
+  branch?: string | null
+  /** YYYY-MM-DD, the Sunday or holiday that was worked. */
+  workDate: string
+  dayKind?: 'sunday' | 'holiday' | string
+  holidayName?: string | null
+  /** 0.25 | 0.5 | 0.75 | 1 */
+  shifts?: number | string
+  reason?: string | null
+  status?: RequestStatus
+  /** The HR user who raised it. */
+  requestedBy?: string | null
+  createdAt?: string | null
+  hodName?: string | null
+  approval?: ApprovalProgress | null
+}
+
 export interface PendingMissingPunchRequest {
   id: string
   employeeId: string
@@ -681,6 +723,8 @@ export interface PendingRequestsResponse {
   resignations: PendingResignation[]
   attendanceRequests: PendingAttendanceRequest[]
   casualLeaves: PendingCasualLeaveRequest[]
+  /** Absent on an older backend; empty when the head's "approve compensation" switch is off. */
+  holidayWorkClaims?: PendingHolidayWorkClaim[]
   onDutySessions: PendingOnDutySession[]
   missingPunchRequests: PendingMissingPunchRequest[]
   outpassRequests: PendingOutpassRequest[]

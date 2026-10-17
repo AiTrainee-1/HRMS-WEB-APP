@@ -11,19 +11,14 @@
  * This module is pure apart from the two localStorage helpers, which never throw.
  */
 
-export type SupportSituation = 'hr' | 'server'
+import { normalizeBlock, type SupportContactBlock } from './contact-block.ts'
 
-export interface SupportContactBlock {
-  label: string
-  phone: string
-  phoneDial: string
-  whatsapp: string
-  whatsappNumber: string
-  email: string
-  hours: string
-  hasContact: boolean
-  usesHrFallback: boolean
-}
+// The block-level pieces live in contact-block.ts (pure, so Node's test runner can load it); everything that was
+// importable from here still is.
+export { contactMethods, dialHref, mailHref, normalizeContactBlock, whatsappHref } from './contact-block.ts'
+export type { ContactMethod, SupportContactBlock } from './contact-block.ts'
+
+export type SupportSituation = 'hr' | 'server'
 
 export interface SupportContact {
   hr: SupportContactBlock
@@ -58,24 +53,6 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeBlock(raw: PlainObject): SupportContactBlock {
-  const phone = text(raw.phone)
-  const whatsapp = text(raw.whatsapp)
-  const email = text(raw.email)
-  return {
-    label: text(raw.label),
-    phone,
-    // The server sends the normalised number; if it ever did not, the digits of what HR typed still dial.
-    phoneDial: text(raw.phoneDial) || phone.replace(/[^\d+]/g, ''),
-    whatsapp,
-    whatsappNumber: text(raw.whatsappNumber),
-    email,
-    hours: text(raw.hours),
-    hasContact: Boolean(phone || whatsapp || email),
-    usesHrFallback: raw.usesHrFallback === true,
-  }
-}
-
 /** Validates a response (or a stored copy) and coerces every field to its expected type; null when it is not one. */
 export function parseSupportContact(value: unknown): SupportContact | null {
   if (!isSupportContact(value)) return null
@@ -107,25 +84,6 @@ export function writeCachedSupportContact(contact: SupportContact): void {
   } catch {
     // Storage blocked or full: the live copy still works, there is just nothing to fall back on later.
   }
-}
-
-// ---- Links ----------------------------------------------------------------------------------------------------
-
-/** tel: link from the normalised number ('' when there is nothing dialable). */
-export function dialHref(phoneDial: string): string {
-  const number = (phoneDial || '').replace(/[^\d+]/g, '')
-  return /\d/.test(number) ? `tel:${number}` : ''
-}
-
-/** https://wa.me link from the country-code number ('' when there is none). */
-export function whatsappHref(whatsappNumber: string): string {
-  const digits = (whatsappNumber || '').replace(/\D/g, '')
-  return digits ? `https://wa.me/${digits}` : ''
-}
-
-export function mailHref(email: string): string {
-  const address = (email || '').trim()
-  return address ? `mailto:${address}` : ''
 }
 
 // ---- Choosing what to show ------------------------------------------------------------------------------------

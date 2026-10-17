@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/employee/EmptyState'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
 import { LateDeductionCard } from '@/components/employee/LateDeductionCard'
 import {
-  countEarlyOuts, dayStatusLabel, earlyOutShown, getDayFlags, getDayMarkers, halfDayRule, lateInShown,
+  compensationLine, countEarlyOuts, dayHeadline, earlyOutShown, getDayFlags, getDayMarkers, halfDayRule, lateInShown,
 } from '@/lib/attendance-flags'
 import { Clock } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -154,9 +154,13 @@ export default function MyShift() {
                       <td className="px-4 py-2">{format(parseISO(log.date), 'MMM d, yyyy')}</td>
                       <td className="px-4 py-2">{log.firstPunch ?? '—'}</td>
                       <td className="px-4 py-2">{log.lastPunch ?? '—'}</td>
-                      <td className="px-4 py-2">{dayStatusLabel(log.status)}</td>
+                      <td className="px-4 py-2">{dayHeadline(log)}</td>
                       <td className="px-4 py-2">
                         <DayMarkerChips markers={getDayMarkers(log, policy)} />
+                        {/* What compensation did to the day (an allowance used, a birthday, a relaxation day) */}
+                        {compensationLine(log) && (
+                          <p className="mt-1 text-xs text-muted-foreground">{compensationLine(log)}</p>
+                        )}
                         {/* The backend's plain-language deadline explanation, whenever it sends one */}
                         {getDayFlags(log).lateReason && (
                           <p className="mt-1 text-xs text-muted-foreground">{getDayFlags(log).lateReason}</p>
