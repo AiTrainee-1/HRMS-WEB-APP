@@ -24,12 +24,14 @@ export default function SetPassword() {
   const [otpActivate, setOtpActivate] = React.useState<boolean | null>(null)
   // The channel the server sends codes on; null when it did not say (an older server): the words are then neutral.
   const [channel, setChannel] = React.useState<OtpChannel | null>(null)
+  const [codeLength, setCodeLength] = React.useState<number | null>(null)
 
   React.useEffect(() => {
     authApi
       .loginOptions()
       .then((o) => {
         setChannel(normalizeChannel(o.otpChannel))
+        setCodeLength(o.codeLength ?? null)
         setOtpActivate(o.otpActivate)
       })
       .catch(() => setOtpActivate(true))
@@ -59,7 +61,7 @@ export default function SetPassword() {
       </p>
 
       {otpActivate === null && <div className="mt-5 h-28 animate-pulse rounded-md bg-foreground/[0.04]" aria-hidden />}
-      {otpActivate === true && <ActivateWithOtp channel={channel} onDone={() => navigate('/employee-login')} />}
+      {otpActivate === true && <ActivateWithOtp channel={channel} codeLength={codeLength} onDone={() => navigate('/employee-login')} />}
       {otpActivate === false && <DirectForm onDone={() => navigate('/employee-login')} />}
 
       <SupportContactCard situation="hr" compact title="Can't set your password?" className="mt-5" />
@@ -74,7 +76,15 @@ export default function SetPassword() {
   )
 }
 
-function ActivateWithOtp({ channel, onDone }: { channel: OtpChannel | null; onDone: () => void }) {
+function ActivateWithOtp({
+  channel,
+  codeLength,
+  onDone,
+}: {
+  channel: OtpChannel | null
+  codeLength: number | null
+  onDone: () => void
+}) {
   const [password, setPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
   const passwordsOk = password.length >= 8 && password === confirm
@@ -83,6 +93,7 @@ function ActivateWithOtp({ channel, onDone }: { channel: OtpChannel | null; onDo
     <OtpFlow
       purpose="activate"
       channel={channel}
+      codeLength={codeLength}
       submitLabel="Set password & activate"
       submittingLabel="Saving…"
       extraValid={passwordsOk}

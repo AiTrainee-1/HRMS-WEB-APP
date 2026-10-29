@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { formatDistanceToNowStrict, parseISO } from 'date-fns'
 import {
   Briefcase, Building2, Camera, CheckCircle2, Crosshair, Flag, Loader2, LocateFixed, MapPin,
-  Navigation, Play, Radar, ShieldAlert, XCircle,
+  Navigation, Play, Radar, ShieldAlert, Smartphone, XCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import {
 import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { ApiError } from '@/api/client'
 import { pipelineSentence, waitingText } from '@/lib/approval'
+import { completePhotos, ON_DUTY_WEB_TRACKING_NOTE, punchErrorMessage, requiredPhotoCount } from '@/lib/onduty-photos'
 import { cn } from '@/lib/utils'
 import type { GeoPunchPrecheckResult, OnDutySession, PunchSlot } from '@/types'
 
@@ -283,6 +284,9 @@ function OnDuty() {
   const [destination, setDestination] = React.useState('')
   const [pendingSlot, setPendingSlot] = React.useState<number | null>(null)
   const [cameraOpen, setCameraOpen] = React.useState(false)
+  // How many photos the punch being taken needs: read from the status when the punch begins and then kept, so a
+  // status refresh (HR changing the policy) cannot change the camera under the employee's hands.
+  const [photoCount, setPhotoCount] = React.useState(1)
   const fixRef = React.useRef<Fix | null>(null)
   const [locating, setLocating] = React.useState<number | null>(null)
 
@@ -305,11 +309,12 @@ function OnDuty() {
     }
   }
 
-  // Location first (fails fast if blocked), then the selfie, then submit.
+  // Location first (fails fast if blocked), then the selfie(s), then submit.
   const beginPunch = async (slot: number) => {
     setLocating(slot)
     try {
       fixRef.current = await getPosition()
+      setPhotoCount(requiredPhotoCount(data))
       setPendingSlot(slot)
       setCameraOpen(true)
     } catch (err) {
@@ -319,16 +324,21 @@ function OnDuty() {
     }
   }
 
-  const submitPunch = async (photo: Blob) => {
+  // `photos` are in order: the first goes as `photo`, the second (when HR's policy asks for two) as `photo2`. A punch
+  // never goes out with fewer photos than the policy it was begun under asked for.
+  const submitPunch = async (photos: Blob[]) => {
     setCameraOpen(false)
-    if (!fixRef.current || pendingSlot == null) return
+    const all = completePhotos(photos, photoCount)
+    if (!fixRef.current || pendingSlot == null || !all) return
     try {
-      const r = await punch.mutateAsync({ ...fixRef.current, photo, punchNumber: pendingSlot })
+      const r = await punch.mutateAsync({ ...fixRef.current, photo: all[0], photo2: all[1], punchNumber: pendingSlot })
       toast.success(`Punch ${r.punchNumber} (${r.punchType}) submitted`, {
         description: r.sessionEnded ? 'All 4 punches are in, so your session has ended for today.' : 'It counts once HR approves it.',
       })
     } catch (err) {
-      toast.error(errMsg(err, 'Could not submit the punch'))
+      // PHOTO2_REQUIRED (HR switched the policy to two photos after this page loaded) gets its own sentence; the
+      // refetch below then makes the next punch ask for both.
+      toast.error(punchErrorMessage(err, 'Could not submit the punch'))
     } finally {
       setPendingSlot(null)
       fixRef.current = null
@@ -348,6 +358,7 @@ function OnDuty() {
   if (isLoading) return <Skeleton className="h-72 w-full rounded-lg" />
 
   const slots = data?.punchSlots ?? []
+  const requiredPhotos = requiredPhotoCount(data)
   const baseChip = session ? approvalChip[session.approvalStatus] ?? { label: session.approvalStatus, cls: 'chip-muted' } : null
   // While the session waits on the pipeline, say who it waits for (the status alone only knows the old fixed order).
   const chip = baseChip && { ...baseChip, label: waitingText(session?.approval) ?? baseChip.label }
@@ -377,6 +388,9 @@ function OnDuty() {
           )}
           <ApprovalTrail approval={liveSession.approval} className="mt-3" />
 
+          {requiredPhotos === 2 && (
+            <p className="mt-4 text-[12.5px] text-muted-foreground">Each punch takes two selfies, one after the other.</p>
+          )}
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {slots.map((s) => {
               const c = slotChip[s.status] ?? { label: s.status, cls: 'chip-muted' }
@@ -435,7 +449,10 @@ function OnDuty() {
             <h3 className="font-display text-[22px] font-semibold">Start an On-Duty session</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Working off-site today, like a client visit, supplier mill or field travel? Start a session and punch from wherever you are. Each punch
-              needs a selfie and your location.
+              needs {requiredPhotos === 2 ? 'two selfies' : 'a selfie'} and your location.
+            </p>
+            <p className="mt-2 flex items-start gap-2 text-[12.5px] text-muted-foreground">
+              <Smartphone className="mt-0.5 size-3.5 shrink-0" /> {ON_DUTY_WEB_TRACKING_NOTE}
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -476,7 +493,8 @@ function OnDuty() {
           setPendingSlot(null)
         }}
         onCapture={submitPunch}
-        title={pendingSlot ? `Selfie for punch ${pendingSlot}` : undefined}
+        total={photoCount}
+        title={pendingSlot ? `${photoCount > 1 ? 'Selfies' : 'Selfie'} for punch ${pendingSlot}` : undefined}
       />
     </div>
   )

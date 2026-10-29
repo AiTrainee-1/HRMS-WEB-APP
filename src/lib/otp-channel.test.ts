@@ -5,14 +5,18 @@ import { readFileSync } from 'node:fs'
 import { describe, test } from 'node:test'
 import {
   EXPIRED_NOTICE,
+  OTP_LENGTH_BY_CHANNEL,
   activateIntro,
   cleanSeconds,
+  codeLabel,
   describeOtpFailure,
   digitsOnly,
+  enterCodeMessage,
   expiryText,
   formatDuration,
   loginIntro,
   normalizeChannel,
+  otpLength,
   resetBadge,
   resetIntro,
   resetUnavailable,
@@ -71,6 +75,7 @@ describe('the words follow the channel', () => {
     for (const text of allWords('sms')) assert.doesNotMatch(text, /whatsapp/i, text)
     assert.match(sendButtonLabel('sms'), /SMS/)
     assert.match(sendHint('sms'), /SMS/)
+    assert.equal(sendHint('sms'), "We'll send a 4-digit code by SMS to the mobile number registered with HR.")
     assert.match(loginIntro('sms'), /SMS/)
     assert.match(switchToCodeLabel('sms'), /SMS/)
     assert.match(resetBadge('sms'), /SMS/)
@@ -110,8 +115,17 @@ describe('the words follow the channel', () => {
     }
   })
 
-  test('the 6-digit hint is on screen for every channel', () => {
-    for (const channel of CHANNELS) assert.match(sendHint(channel), /6-digit/)
+  test('the hint names the digits of the channel: 4 by SMS, 6 on WhatsApp and when not known', () => {
+    assert.match(sendHint('sms'), /4-digit/)
+    assert.match(sendHint('whatsapp'), /6-digit/)
+    assert.match(sendHint(null), /6-digit/)
+  })
+
+  test('the hint follows the server codeLength when it sent one', () => {
+    assert.match(sendHint('sms', 4), /4-digit/)
+    assert.match(sendHint('whatsapp', 6), /6-digit/)
+    assert.match(sendHint('sms', 6), /6-digit/)
+    assert.match(sendHint(null, 4), /4-digit/)
   })
 })
 
@@ -165,6 +179,51 @@ describe('cleanSeconds', () => {
     for (const value of [0, -1, Number.NaN, Infinity, undefined, null, '', ' ', 'abc', {}, [], true]) {
       assert.equal(cleanSeconds(value), 0, String(value))
     }
+  })
+})
+
+describe('the code length: 4 digits by SMS, 6 on WhatsApp', () => {
+  test('the table', () => {
+    assert.deepEqual(OTP_LENGTH_BY_CHANNEL, { sms: 4, whatsapp: 6 })
+  })
+
+  test('the server codeLength first, else the channel, else six', () => {
+    assert.equal(otpLength(4, 'sms'), 4)
+    assert.equal(otpLength(6, 'whatsapp'), 6)
+    assert.equal(otpLength('4', 'sms'), 4)
+    assert.equal(otpLength(undefined, 'sms'), 4)
+    assert.equal(otpLength(undefined, 'whatsapp'), 6)
+    assert.equal(otpLength(null, 'SMS'), 4)
+    assert.equal(otpLength(undefined, undefined), 6)
+    assert.equal(otpLength(undefined, 'carrier-pigeon'), 6)
+    assert.equal(otpLength(6, 'sms'), 6)
+    assert.equal(otpLength(4, 'whatsapp'), 4)
+  })
+
+  test('a nonsense codeLength is ignored and the channel decides', () => {
+    for (const bad of [0, 1, 3, 9, 100, -4, 4.5, Number.NaN, Number.POSITIVE_INFINITY, '', 'abc', {}, [], true]) {
+      assert.equal(otpLength(bad, 'sms'), 4, String(bad))
+      assert.equal(otpLength(bad, 'whatsapp'), 6, String(bad))
+      assert.equal(otpLength(bad, null), 6, String(bad))
+    }
+  })
+
+  test('the label and the "enter the code" sentence carry the length', () => {
+    assert.equal(codeLabel(4), '4-digit code')
+    assert.equal(codeLabel(6), '6-digit code')
+    assert.equal(enterCodeMessage(4), 'Enter the 4-digit code.')
+    assert.equal(enterCodeMessage(6), 'Enter the 6-digit code.')
+  })
+
+  test('the code box keeps four digits for SMS (a pasted six-digit text is cut) and six for WhatsApp', () => {
+    const sms = otpLength(undefined, 'sms')
+    assert.equal(digitsOnly('4829', sms), '4829')
+    assert.equal(digitsOnly('48 29', sms), '4829')
+    assert.equal(digitsOnly('Your code is 4829.', sms), '4829')
+    assert.equal(digitsOnly('482913', sms), '4829')
+    const wa = otpLength(undefined, 'whatsapp')
+    assert.equal(digitsOnly('482913', wa), '482913')
+    assert.equal(digitsOnly('123 456', wa), '123456')
   })
 })
 
@@ -307,10 +366,11 @@ describe('the code never leaves the box', () => {
     }
   })
 
-  test('the code box asks the keyboard for the SMS code, digits only, six characters', () => {
+  test('the code box asks the keyboard for the SMS code, digits only, as many characters as the code has', () => {
     assert.match(source, /autoComplete="one-time-code"/)
     assert.match(source, /inputMode="numeric"/)
     assert.match(source, /pattern="\[0-9\]\*"/)
-    assert.match(source, /maxLength=\{6\}/)
+    assert.match(source, /maxLength=\{length\}/)
+    assert.doesNotMatch(source, /6-digit|\{6\}|!== 6/) // no length is hard-wired: it comes from otpLength
   })
 })

@@ -1,8 +1,10 @@
 // The words and small rules of the one-time-code (OTP) screens: sign in with a code, reset a forgotten password,
 // first-time password. The server sends the code by SMS or by WhatsApp (HR chooses) and tells us which one:
-//   GET  /auth/login-options   -> { ..., otpChannel: 'sms' | 'whatsapp' }
-//   POST /auth/otp/request     -> { message, maskedPhone, expiresInSeconds, resendAfterSeconds, channel }
-// An older server sends neither key (it only ever had WhatsApp). Whatever the answer, a screen must still make
+//   GET  /auth/login-options   -> { ..., otpChannel: 'sms' | 'whatsapp', codeLength: 4 | 6 }
+//   POST /auth/otp/request     -> { message, maskedPhone, expiresInSeconds, resendAfterSeconds, channel, codeLength }
+// The code's length follows the channel: 4 digits by SMS (the approved template says XXXX), 6 on WhatsApp. The server
+// says which in `codeLength`; without it the channel decides (sms 4, whatsapp 6, unknown 6): see otpLength.
+// An older server sends none of these keys (it only ever had WhatsApp, 6 digits). Whatever the answer, a screen must still make
 // sense, so every sentence here has three forms: SMS, WhatsApp, and a neutral one ("a code") for "not known".
 //
 // Pure on purpose (no React, no imports): Node's test runner loads it directly, see otp-channel.test.ts.
@@ -26,6 +28,33 @@ export function resolveChannel(...candidates: unknown[]): OtpChannel | null {
   return null
 }
 
+/** Digits of a code by channel: SMS 4, WhatsApp 6. */
+export const OTP_LENGTH_BY_CHANNEL: Record<OtpChannel, number> = { sms: 4, whatsapp: 6 }
+
+/** The length when the server named neither a code length nor a channel: what codes had before the SMS channel. */
+export const DEFAULT_OTP_LENGTH = 6
+
+/**
+ * How many digits the code has: the server's `codeLength` when it is a whole number from 4 to 8, else what the
+ * channel implies (sms 4, whatsapp 6), else 6. A nonsense number from the server is ignored, never trusted.
+ */
+export function otpLength(codeLength: unknown, channel?: unknown): number {
+  const n = typeof codeLength === 'string' && codeLength.trim() !== '' ? Number(codeLength) : codeLength
+  if (typeof n === 'number' && Number.isInteger(n) && n >= 4 && n <= 8) return n
+  const ch = normalizeChannel(channel)
+  return ch ? OTP_LENGTH_BY_CHANNEL[ch] : DEFAULT_OTP_LENGTH
+}
+
+/** The label of the code box: "4-digit code". */
+export function codeLabel(length: number): string {
+  return `${length}-digit code`
+}
+
+/** What the form says when the code typed is not complete: "Enter the 4-digit code." */
+export function enterCodeMessage(length: number): string {
+  return `Enter the ${length}-digit code.`
+}
+
 type Form = OtpChannel | 'neutral'
 const form = (channel: OtpChannel | null): Form => channel ?? 'neutral'
 
@@ -34,12 +63,13 @@ export function sendButtonLabel(channel: OtpChannel | null): string {
   return { sms: 'Send code by SMS', whatsapp: 'Send code on WhatsApp', neutral: 'Send code' }[form(channel)]
 }
 
-/** The line under the employee-code field, before any code has been asked for. */
-export function sendHint(channel: OtpChannel | null): string {
+/** The line under the employee-code field, before any code has been asked for. `codeLength` is the server's, if it sent one. */
+export function sendHint(channel: OtpChannel | null, codeLength?: unknown): string {
+  const n = otpLength(codeLength, channel)
   return {
-    sms: "We'll send a 6-digit code by SMS to the mobile number registered with HR.",
-    whatsapp: "We'll send a 6-digit code to the WhatsApp number registered with HR.",
-    neutral: "We'll send a 6-digit code to the mobile number registered with HR.",
+    sms: `We'll send a ${n}-digit code by SMS to the mobile number registered with HR.`,
+    whatsapp: `We'll send a ${n}-digit code to the WhatsApp number registered with HR.`,
+    neutral: `We'll send a ${n}-digit code to the mobile number registered with HR.`,
   }[form(channel)]
 }
 
@@ -89,7 +119,7 @@ export function cleanSeconds(value: unknown): number {
 }
 
 /** Only the digits of what was typed or pasted ("123 456" and "123-456" both become 123456), at most `max` of them. */
-export function digitsOnly(value: unknown, max = 6): string {
+export function digitsOnly(value: unknown, max = DEFAULT_OTP_LENGTH): string {
   return typeof value === 'string' ? value.replace(/\D/g, '').slice(0, max) : ''
 }
 

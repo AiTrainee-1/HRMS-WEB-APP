@@ -878,6 +878,8 @@ export interface OnDutyPunchVerification {
   accuracyM: number | null
   isMocked: boolean
   hasPhoto: boolean
+  /** Whether the punch also has a second photo (the two-photo policy). Absent on an older server. */
+  hasPhoto2?: boolean
   status: 'pending' | 'approved' | 'rejected' | string
   hrReviewedBy: string | null
   hrReviewComment: string | null
@@ -889,6 +891,11 @@ export interface OnDutyStatusResponse {
   session: OnDutySession | null
   punchVerifications: OnDutyPunchVerification[]
   punchSlots?: PunchSlot[]
+  /**
+   * How many selfies a punch takes (HR's policy): 1 or 2. Absent on an older server, which only ever took one: read it
+   * with requiredPhotoCount() (lib/onduty-photos.ts), never directly.
+   */
+  requiredPhotos?: 1 | 2
 }
 
 export interface OnDutyStartResult {

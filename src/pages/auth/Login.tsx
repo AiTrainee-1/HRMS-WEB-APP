@@ -168,6 +168,7 @@ export default function Login() {
               <OtpFlow
                 purpose="login"
                 channel={channel}
+                codeLength={options?.codeLength}
                 submitLabel="Verify & sign in"
                 submittingLabel="Signing in…"
                 onSubmit={async (employeeCode, otp) => {

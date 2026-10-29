@@ -23,12 +23,14 @@ export default function ForgotPassword() {
   // connection problem itself) and keep the words neutral.
   const [available, setAvailable] = React.useState<boolean | null>(null)
   const [channel, setChannel] = React.useState<OtpChannel | null>(null)
+  const [codeLength, setCodeLength] = React.useState<number | null>(null)
 
   React.useEffect(() => {
     authApi
       .loginOptions()
       .then((o) => {
         setChannel(normalizeChannel(o.otpChannel))
+        setCodeLength(o.codeLength ?? null)
         setAvailable(o.otpReset)
       })
       .catch(() => setAvailable(true))
@@ -61,6 +63,7 @@ export default function ForgotPassword() {
         <OtpFlow
           purpose="reset"
           channel={channel}
+          codeLength={codeLength}
           submitLabel="Set new password"
           submittingLabel="Saving…"
           extraValid={passwordsOk}

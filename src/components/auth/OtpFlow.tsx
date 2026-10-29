@@ -6,9 +6,12 @@ import { ChannelIcon } from '@/components/auth/ChannelIcon'
 import {
   EXPIRED_NOTICE,
   cleanSeconds,
+  codeLabel,
   describeOtpFailure,
   digitsOnly,
+  enterCodeMessage,
   expiryText,
+  otpLength,
   resolveChannel,
   sendButtonLabel,
   sendHint,
@@ -45,6 +48,7 @@ function ErrorNote({ message }: { message: string }) {
 export function OtpFlow({
   purpose,
   channel: advertisedChannel = null,
+  codeLength: advertisedLength = null,
   submitLabel,
   submittingLabel,
   extraValid = true,
@@ -55,6 +59,8 @@ export function OtpFlow({
   purpose: 'login' | 'reset' | 'activate'
   /** The channel login-options named for this server (a request's own answer takes over once there is one). */
   channel?: OtpChannel | null
+  /** How many digits the code has (login-options `codeLength`; 4 by SMS, 6 on WhatsApp). A request's own answer takes over. */
+  codeLength?: number | null
   submitLabel: string
   submittingLabel: string
   /** False while the extra fields (e.g. a new password) aren't valid yet. */
@@ -73,6 +79,8 @@ export function OtpFlow({
 
   // What the server's last answer said, else what login-options said, else "not known" (neutral words).
   const channel = resolveChannel(sent?.channel, advertisedChannel)
+  // The same for the code's length: the request's answer, else login-options, else what the channel implies.
+  const length = otpLength(sent?.codeLength ?? advertisedLength, channel)
 
   async function requestCode(e?: React.FormEvent) {
     e?.preventDefault()
@@ -100,7 +108,7 @@ export function OtpFlow({
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!/^\d{6}$/.test(otp)) return setError('Enter the 6-digit code.')
+    if (otp.length !== length || !/^\d+$/.test(otp)) return setError(enterCodeMessage(length))
     setBusy(true)
     try {
       await onSubmit(employeeCode.trim(), otp)
@@ -168,7 +176,7 @@ export function OtpFlow({
       )}
       <div>
         <label htmlFor="otp-code" className="label-caps mb-2 block text-foreground/85">
-          6-digit code
+          {codeLabel(length)}
         </label>
         <input
           id="otp-code"
@@ -182,22 +190,22 @@ export function OtpFlow({
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          maxLength={6}
+          maxLength={length}
           aria-describedby="otp-notice"
-          onChange={(e) => setOtp(digitsOnly(e.target.value))}
-          // "123 456" or "123-456" pasted into a 6-character box would lose its last digit before onChange runs.
+          onChange={(e) => setOtp(digitsOnly(e.target.value, length))}
+          // "123 456" or "123-456" pasted into a box of `length` characters would lose its last digit before onChange runs.
           onPaste={(e) => {
             e.preventDefault()
-            const digits = digitsOnly(e.clipboardData.getData('text'))
+            const digits = digitsOnly(e.clipboardData.getData('text'), length)
             if (digits) setOtp(digits)
           }}
-          placeholder="••••••"
+          placeholder={'•'.repeat(length)}
           className={`${inputClass} px-4 text-center font-mono text-[22px] tracking-[0.5em]`}
         />
       </div>
       {extraFields}
       {error && <ErrorNote message={error} />}
-      <button type="submit" disabled={busy || !extraValid || otp.length !== 6} className={buttonClass}>
+      <button type="submit" disabled={busy || !extraValid || otp.length !== length} className={buttonClass}>
         {busy ? submittingLabel : (
           <>
             {submitLabel} <ArrowRight className="size-4" />

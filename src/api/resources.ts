@@ -1,4 +1,5 @@
 import { apiRequest, ApiError } from './client'
+import { buildPunchForm, type PunchBody } from '@/lib/onduty-photos'
 import type {
   Advance,
   AttendanceMonthResponse,
@@ -49,6 +50,9 @@ export interface LoginOptions {
   // How the server delivers codes: 'sms' | 'whatsapp'. Absent on an older server, so read it with
   // normalizeChannel() (lib/otp-channel.ts): unknown means "a code", never a guess.
   otpChannel?: string
+  // How many digits the code has: 4 when the channel is 'sms', 6 for 'whatsapp'. Absent on an older server: read it
+  // with otpLength() (lib/otp-channel.ts), which falls back on the channel.
+  codeLength?: number
 }
 
 export interface OtpRequestResult {
@@ -58,12 +62,14 @@ export interface OtpRequestResult {
   resendAfterSeconds: number
   // The channel this code really went out on ('sms' | 'whatsapp'). Absent on an older server.
   channel?: string
+  // Digits in the code that went out (4 by SMS, 6 on WhatsApp). Absent on an older server.
+  codeLength?: number
 }
 
 export const authApi = {
   // Which sign-in methods the server has switched on (code by SMS or WhatsApp, password).
   loginOptions: () => apiRequest<LoginOptions>({ method: 'GET', url: '/auth/login-options' }),
-  // Sends a 6-digit code, by SMS or WhatsApp as the server is set up, to the mobile number registered for this
+  // Sends a code (4 digits by SMS, 6 on WhatsApp, as the server is set up) to the mobile number registered for this
   // employee code. skipOfflineDetection: a 502 ("couldn't send") or 503 ("SMS temporarily unavailable") from this
   // call is the message carrier having a problem, not the server being down, so it must not raise the app-wide
   // "server unavailable" banner; the form shows the server's own sentence instead.
@@ -152,22 +158,13 @@ export const onDutyApi = {
   start: (destination: string) =>
     apiRequest<OnDutyStartResult>({ method: 'POST', url: '/on-duty-sessions/request', data: { destination } }),
   complete: () => apiRequest<OnDutySession>({ method: 'POST', url: '/on-duty-sessions/complete' }),
-  punch: (body: {
-    latitude: number; longitude: number; accuracy?: number; isMocked?: boolean
-    photo: Blob; punchNumber?: number
-  }) => {
-    const form = new FormData()
-    form.append('latitude', String(body.latitude))
-    form.append('longitude', String(body.longitude))
-    if (body.accuracy != null) form.append('accuracy', String(body.accuracy))
-    form.append('isMocked', String(!!body.isMocked))
-    if (body.punchNumber != null) form.append('punchNumber', String(body.punchNumber))
-    form.append('photo', body.photo, 'selfie.jpg')
-    return apiRequest<OnDutyPunchResult>({
-      method: 'POST', url: '/on-duty-sessions/punch', data: form,
+  // `photo` is the first (or only) selfie; `photo2` is the second, sent when HR's policy asks for two
+  // (status.requiredPhotos, see lib/onduty-photos.ts). The multipart body is built there, where it is tested.
+  punch: (body: PunchBody) =>
+    apiRequest<OnDutyPunchResult>({
+      method: 'POST', url: '/on-duty-sessions/punch', data: buildPunchForm(body),
       headers: { 'Content-Type': 'multipart/form-data' },
-    })
-  },
+    }),
 }
 
 // ---- Leave ----
