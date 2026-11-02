@@ -16,14 +16,16 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        'flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background/60 px-3 py-2 text-sm text-foreground transition-all duration-200 outline-none hover:border-foreground/25 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground',
+        // Phones: the app's 48px white field, 16px text.
+        'max-md:h-12 max-md:rounded-lg max-md:bg-card max-md:px-3.5 max-md:text-base',
+        'group flex h-10 w-full items-center justify-between gap-2 rounded-md border border-input bg-background/60 px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)] transition-[border-color,box-shadow,background-color] duration-200 outline-none hover:border-foreground/25 focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/25 data-[state=open]:border-primary aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground',
         className,
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
+        <ChevronDownIcon className="size-4 opacity-60 transition-transform duration-200 group-data-[state=open]:rotate-180" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
@@ -40,7 +42,7 @@ function SelectContent({
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          'bg-popover/95 backdrop-blur-xl text-popover-foreground relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--glass-border)] shadow-clay-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+          'ui-pop bg-popover/95 backdrop-blur-xl text-popover-foreground relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--glass-border)] shadow-clay-lg',
           position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
           className,
         )}
@@ -60,12 +62,12 @@ function SelectItem({ className, children, ...props }: React.ComponentProps<type
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        'focus:bg-primary/15 focus:text-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+        'focus:bg-primary/12 focus:text-foreground data-[state=checked]:font-semibold relative flex w-full cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2.5 text-sm outline-none select-none pointer-coarse:min-h-11 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className,
       )}
       {...props}
     >
-      <span className="absolute right-2 flex size-3.5 items-center justify-center">
+      <span className="absolute right-2 flex size-3.5 items-center justify-center text-brand-blue">
         <SelectPrimitive.ItemIndicator>
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>

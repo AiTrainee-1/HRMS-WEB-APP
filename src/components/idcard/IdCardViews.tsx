@@ -1,10 +1,24 @@
 import { QRCodeSVG } from 'qrcode.react'
 import type { IdCardData } from '@/types'
 import { verifyUrl } from '@/lib/verify'
+import { cardDate } from '@/lib/id-card'
 
 const PRIMARY = '#006496'
 const SECONDARY = '#4fb8f0'
 
+
+/** The "NOT ACTIVE" stamp across a card whose holder is no longer employed (inactive, resigned, ...). Part of the card
+ * itself, so a downloaded PNG carries it too. */
+function NotActiveStamp({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center" aria-hidden="true">
+      <div className="-rotate-[18deg] rounded-md border-[3px] border-[#b91c1c] bg-white/80 px-3 py-1 text-center shadow-lg">
+        <p className="text-[18px] leading-none font-black tracking-[0.18em] text-[#b91c1c]">NOT ACTIVE</p>
+        {label && <p className="mt-0.5 text-[8px] font-bold tracking-widest text-[#b91c1c] uppercase">{label}</p>}
+      </div>
+    </div>
+  )
+}
 
 function KeyValueRow({ label, value }: { label: string; value?: string }) {
   return (
@@ -15,7 +29,7 @@ function KeyValueRow({ label, value }: { label: string; value?: string }) {
   )
 }
 
-export function IdCardFront({ data, scale = 1 }: { data: IdCardData; scale?: number }) {
+export function IdCardFront({ data, scale = 1, stamp }: { data: IdCardData; scale?: number; stamp?: string | null }) {
   const isStaff = data.employmentType !== 'production'
   const w = isStaff ? 240 : 380
   const h = isStaff ? 380 : 240
@@ -23,7 +37,7 @@ export function IdCardFront({ data, scale = 1 }: { data: IdCardData; scale?: num
   return (
     <div
       className="relative overflow-hidden rounded-xl border shadow-md bg-white"
-      style={{ width: w * scale, height: h * scale, transform: scale !== 1 ? undefined : undefined }}
+      style={{ width: w * scale, height: h * scale }}
     >
       <div
         className="flex items-center gap-2 px-3 py-2"
@@ -70,7 +84,7 @@ export function IdCardFront({ data, scale = 1 }: { data: IdCardData; scale?: num
           </div>
           <div className="mt-2 w-full">
             <KeyValueRow label="Department" value={data.department} />
-            <KeyValueRow label="Joined" value={data.joinDate} />
+            <KeyValueRow label="Joined" value={cardDate(data.joinDate)} />
           </div>
         </div>
       ) : (
@@ -90,12 +104,13 @@ export function IdCardFront({ data, scale = 1 }: { data: IdCardData; scale?: num
             <div className="mt-1.5">
               <KeyValueRow label="Code" value={data.code} />
               <KeyValueRow label="Department" value={data.department} />
-              <KeyValueRow label="Joined" value={data.joinDate} />
+              <KeyValueRow label="Joined" value={cardDate(data.joinDate)} />
             </div>
           </div>
         </div>
       )}
 
+      {stamp != null && <NotActiveStamp label={stamp} />}
       <div
         className="absolute bottom-0 h-1.5 w-full"
         style={{ background: `linear-gradient(90deg, ${PRIMARY}, ${SECONDARY}, ${PRIMARY})` }}
@@ -104,7 +119,7 @@ export function IdCardFront({ data, scale = 1 }: { data: IdCardData; scale?: num
   )
 }
 
-export function IdCardBack({ data, scale = 1 }: { data: IdCardData; scale?: number }) {
+export function IdCardBack({ data, scale = 1, stamp }: { data: IdCardData; scale?: number; stamp?: string | null }) {
   const isStaff = data.employmentType !== 'production'
   const w = isStaff ? 240 : 380
   const h = isStaff ? 380 : 240
@@ -117,7 +132,7 @@ export function IdCardBack({ data, scale = 1 }: { data: IdCardData; scale?: numb
       <div className={isStaff ? 'flex flex-col gap-2' : 'flex gap-4'}>
         <div className="flex-1">
           <KeyValueRow label="Blood Group" value={data.bloodGroup} />
-          <KeyValueRow label="DOB" value={data.dateOfBirth} />
+          <KeyValueRow label="DOB" value={cardDate(data.dateOfBirth)} />
           <KeyValueRow label="Emergency Contact" value={data.emergencyContact} />
           <KeyValueRow label="Address" value={data.address} />
         </div>
@@ -142,6 +157,7 @@ export function IdCardBack({ data, scale = 1 }: { data: IdCardData; scale?: numb
         )}
         <span className="text-[7px] text-slate-400">Authorised Signatory</span>
       </div>
+      {stamp != null && <NotActiveStamp label={stamp} />}
     </div>
   )
 }

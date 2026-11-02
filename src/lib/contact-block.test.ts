@@ -2,7 +2,7 @@
 // `hr`), and the ways to reach it that SupportContactCard and ContactBlockCard both draw.
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { contactMethods, normalizeContactBlock } from './contact-block.ts'
+import { contactMethodLabel, contactMethods, normalizeContactBlock, primaryContactMethod } from './contact-block.ts'
 
 const FULL = {
   label: 'HR Desk', phone: '0421 430 0800', phoneDial: '04214300800', whatsapp: '98765 43210', whatsappNumber: '919876543210',
@@ -47,5 +47,31 @@ describe('contactMethods', () => {
     const phoneOnlyText = contactMethods(normalizeContactBlock({ phone: 'ask reception' })!)
     assert.equal(phoneOnlyText.length, 1)
     assert.equal(phoneOnlyText[0].href, '')
+  })
+})
+
+describe('primaryContactMethod (the one-line "Need help?" link)', () => {
+  test('the first linkable way, in the order call, WhatsApp, email', () => {
+    assert.equal(primaryContactMethod(normalizeContactBlock(FULL))!.key, 'call')
+    assert.equal(primaryContactMethod(normalizeContactBlock({ whatsapp: '98765 43210', whatsappNumber: '919876543210', email: 'a@b.c' }))!.key, 'whatsapp')
+  })
+
+  test('an unlinkable phone gives way to a linkable one further down', () => {
+    assert.equal(primaryContactMethod(normalizeContactBlock({ phone: 'ask reception', email: 'a@b.c' }))!.key, 'email')
+  })
+
+  test('only unlinkable text: that, shown as plain text; nothing set or no block: null', () => {
+    const plain = primaryContactMethod(normalizeContactBlock({ phone: 'ask reception' }))!
+    assert.equal(plain.key, 'call')
+    assert.equal(plain.href, '')
+    assert.equal(primaryContactMethod(normalizeContactBlock({})), null)
+    assert.equal(primaryContactMethod(null), null)
+    assert.equal(primaryContactMethod(undefined), null)
+  })
+
+  test('contactMethodLabel says who and how', () => {
+    assert.equal(contactMethodLabel({ key: 'call', value: '0421 430 0800' }, 'HR Department'), 'Call HR Department on 0421 430 0800')
+    assert.equal(contactMethodLabel({ key: 'whatsapp', value: '98765 43210' }, 'HR Desk'), 'Message HR Desk on WhatsApp at 98765 43210')
+    assert.equal(contactMethodLabel({ key: 'email', value: 'hr@example.com' }, 'HR Desk'), 'Email HR Desk at hr@example.com')
   })
 })

@@ -56,6 +56,9 @@ function readStored(): ThemeMode {
   } catch {
     // Private mode / storage disabled -fall through to the default below.
   }
+  // Phones open in light like the employee mobile app (owner 2026-11-02); desktop keeps its default. An explicit choice
+  // (stored above) always wins.
+  if (typeof window !== 'undefined' && window.matchMedia?.('(width < 48rem)').matches) return 'light';
   return DEFAULT_MODE;
 }
 

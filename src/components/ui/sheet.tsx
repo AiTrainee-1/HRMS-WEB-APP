@@ -13,21 +13,25 @@ function SheetOverlay({ className, ...props }: React.ComponentProps<typeof Sheet
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
-      className={cn('fixed inset-0 z-50 bg-[#020617]/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0', className)}
+      className={cn('ui-fade fixed inset-0 z-50 bg-[#020617]/60 backdrop-blur-sm max-md:bg-[rgb(15_30_45/0.5)] max-md:backdrop-blur-none', className)}
       {...props}
     />
   )
 }
 
+// Slides in from its side (.ui-slide-* in index.css, keyed on data-state).
+// Phones (< 768px): a solid surface (no frosting); side="bottom" is the mobile app's BottomSheet (24px corners, handle,
+// at most 88% tall, clears the home indicator).
 const sheetVariants = cva(
-  'bg-popover/95 backdrop-blur-2xl border-[var(--glass-border)] fixed z-50 flex flex-col gap-4 shadow-clay-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500',
+  'bg-popover/95 backdrop-blur-2xl border-[var(--glass-border)] fixed z-50 flex flex-col gap-4 shadow-clay-lg max-md:bg-popover max-md:backdrop-blur-none',
   {
     variants: {
       side: {
-        top: 'inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top',
-        bottom: 'inset-x-0 bottom-0 rounded-t-lg border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
-        left: 'inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm',
-        right: 'inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm',
+        top: 'ui-slide-top inset-x-0 top-0 border-b',
+        bottom:
+          'ui-slide-bottom inset-x-0 bottom-0 rounded-t-xl border-t max-md:max-h-[88dvh] max-md:rounded-t-3xl max-md:pt-5 max-md:pb-[env(safe-area-inset-bottom)]',
+        left: 'ui-slide-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm',
+        right: 'ui-slide-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm',
       },
     },
     defaultVariants: { side: 'right' },
@@ -44,8 +48,14 @@ function SheetContent({
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content data-slot="sheet-content" className={cn(sheetVariants({ side }), className)} {...props}>
+        {side === 'bottom' && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none hidden max-md:absolute max-md:top-3 max-md:left-1/2 max-md:block max-md:h-1 max-md:w-9 max-md:-translate-x-1/2 max-md:rounded-full max-md:bg-input"
+          />
+        )}
         {children}
-        <SheetPrimitive.Close className="absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 outline-none">
+        <SheetPrimitive.Close className="absolute top-2.5 right-2.5 grid size-10 place-items-center rounded-md text-foreground/70 transition-colors outline-none hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

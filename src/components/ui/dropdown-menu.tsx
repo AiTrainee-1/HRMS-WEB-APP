@@ -20,7 +20,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          'bg-popover/95 backdrop-blur-xl text-popover-foreground z-50 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--glass-border)] p-1 shadow-clay-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          'ui-pop bg-popover/95 backdrop-blur-xl text-popover-foreground z-50 min-w-[8rem] overflow-hidden rounded-xl border border-[var(--glass-border)] p-1 shadow-clay-lg',
           className,
         )}
         {...props}
@@ -41,7 +41,7 @@ function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8",
+        "focus:bg-primary/12 focus:text-foreground data-[variant=destructive]:text-rejected data-[variant=destructive]:focus:bg-rejected-bg relative flex cursor-default items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none select-none pointer-coarse:min-h-11 [&_svg]:size-4 [&_svg]:shrink-0 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8",
         className,
       )}
       {...props}
@@ -137,7 +137,7 @@ function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<ty
     <DropdownMenuPrimitive.SubContent
       data-slot="dropdown-menu-sub-content"
       className={cn(
-        'bg-popover/95 backdrop-blur-xl text-popover-foreground z-50 min-w-[8rem] overflow-hidden rounded-lg border border-[var(--glass-border)] p-1 shadow-clay-lg data-[state=open]:animate-in data-[state=closed]:animate-out',
+        'ui-pop bg-popover/95 backdrop-blur-xl text-popover-foreground z-50 min-w-[8rem] overflow-hidden rounded-xl border border-[var(--glass-border)] p-1 shadow-clay-lg',
         className,
       )}
       {...props}

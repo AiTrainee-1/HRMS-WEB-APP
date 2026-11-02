@@ -70,5 +70,8 @@ export function useMyShiftSummary(month: number, year: number) {
       }
     },
     enabled: !!user,
+    // Three requests behind one key, shared by the Dashboard, Attendance and My Shift: a shift and its rules change
+    // rarely, so moving between those pages reuses the answer instead of asking again every 30 s.
+    staleTime: 5 * 60_000,
   })
 }

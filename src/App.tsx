@@ -1,6 +1,11 @@
 import { lazy, Suspense } from 'react'
-import { Redirect, Route, Switch } from 'wouter'
+import { Link, Redirect, Route, Switch } from 'wouter'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MotionConfig } from 'framer-motion'
+import { Compass } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/kit/States'
+import { WeaveBackground } from '@/components/kit/WeaveBackground'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
@@ -63,6 +68,25 @@ function EmployeePage({ Component }: { Component: React.ComponentType }) {
   )
 }
 
+function NotFound() {
+  return (
+    <div className="relative grid min-h-screen place-items-center overflow-hidden p-6">
+      <WeaveBackground fade="radial" />
+      <EmptyState
+        icon={Compass}
+        title="This page does not exist"
+        description="The link may be old or mistyped."
+        action={
+          <Button asChild>
+            <Link href="/">Go to my dashboard</Link>
+          </Button>
+        }
+        className="glass relative max-w-md border-solid"
+      />
+    </div>
+  )
+}
+
 function RootRedirect() {
   const { user } = useAuth()
   return <Redirect to={user ? '/employee/dashboard' : '/employee-login'} />
@@ -104,9 +128,7 @@ function AppRoutes() {
         <Route path="/employee/company">{() => <EmployeePage Component={Company} />}</Route>
         <Route path="/employee/help">{() => <EmployeePage Component={Help} />}</Route>
 
-        <Route>
-          <div className="flex min-h-screen items-center justify-center text-muted-foreground">Page not found</div>
-        </Route>
+        <Route component={NotFound} />
       </Switch>
     </Suspense>
   )
@@ -115,15 +137,19 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-          <ConnectivityNotice />
-          <Toaster position="top-right" richColors />
-        </AuthProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
+      {/* One reduced-motion gate for every Framer animation: with the OS setting on, transforms are skipped and
+          states change at once (CSS and the weave canvas are gated in index.css / kit/useReducedMotion). */}
+      <MotionConfig reducedMotion="user">
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <AuthProvider>
+              <AppRoutes />
+              <ConnectivityNotice />
+              <Toaster position="top-right" richColors />
+            </AuthProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </MotionConfig>
     </ErrorBoundary>
   )
 }

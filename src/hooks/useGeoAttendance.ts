@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi, geoAttendanceApi, onDutyApi } from '@/api/resources'
+import { MY_PENDING_KEY } from '@/hooks/useMyPendingRequests'
 
 export function useGeoPunchStatus() {
   return useQuery({
@@ -56,6 +57,9 @@ function useInvalidateOnDuty() {
   return () => {
     queryClient.invalidateQueries({ queryKey: ['on-duty-status'] })
     queryClient.invalidateQueries({ queryKey: ['geo-punch-status'] })
+    // An On-Duty session is one of "my requests waiting" while it awaits approval (Dashboard row + Department Head >
+    // My Requests): starting, punching under or completing it can change that list.
+    queryClient.invalidateQueries({ queryKey: MY_PENDING_KEY })
   }
 }
 

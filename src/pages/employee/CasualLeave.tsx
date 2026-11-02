@@ -1,208 +1,427 @@
 import * as React from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { Plus, CalendarClock, Info } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { CalendarClock, CalendarHeart, ChevronLeft, ChevronRight, Clock, Plus, Sunrise, Sunset, Sun, XCircle, CalendarCheck2, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { RequestTabs } from '@/components/employee/RequestTabs'
-import { TextareaField } from '@/components/employee/TextareaField'
-import { StatusBadge } from '@/components/employee/StatusBadge'
-import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
-import { WorkflowOffNotice } from '@/components/employee/WorkflowOffNotice'
-import { EmptyState } from '@/components/employee/EmptyState'
-import { casualLeaveApi } from '@/api/resources'
-import { useAuth } from '@/context/AuthContext'
-import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
-import { ApiError } from '@/api/client'
+import {
+  ErrorState,
+  GlassCard,
+  KpiTile,
+  PageHero,
+  PageShell,
+  RingMeter,
+  SectionHeader,
+  SkeletonBlock,
+  StatusPill,
+  TONE_SOFT,
+  TONE_TEXT,
+  deciderFromFields,
+  useRequestViews,
+  type ViewOptions,
+} from '@/components/kit'
+import { ClApplyDialog } from '@/components/requests/ClApplyDialog'
+import { ClBalanceHistory } from '@/components/requests/ClBalanceHistory'
+import { FocusMissNote } from '@/components/requests/FocusMissNote'
+import { CL_STATE } from '@/components/requests/cl-state'
+import { ClLegend, ClMonthCalendar, ClYearGrid } from '@/components/requests/ClYearView'
+import { OffNotice } from '@/components/requests/FormBits'
+import { RequestCard } from '@/components/requests/RequestCard'
+import { RequestList } from '@/components/requests/RequestList'
+import { HERO_NO_ACTIONS_ON_PHONE, HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
+import { showView } from '@/components/requests/show-view'
+import type { CasualLeaveRow } from '@/api/requests-api'
+import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
+import { useCasualLeaveEligibility, useCasualLeaveRequests } from '@/hooks/useCasualLeave'
+import { useFocusItem } from '@/hooks/useFocusItem'
+import { useSelectedMonth } from '@/hooks/useSelectedMonth'
 import { pipelineSentence } from '@/lib/approval'
-import { isCasualLeaveEligible } from '@/lib/casual-leave'
-import { checkRequestDate, getRequestWindow, windowHint } from '@/lib/request-window'
-import type { CasualLeaveRequest } from '@/types'
-import { format, parseISO } from 'date-fns'
+import { currentMonth, inMonthText, laterMonth, latestMonthOf, monthOf } from '@/lib/month-switch'
+import {
+  PORTION_DAYS,
+  PORTION_LONG,
+  balanceBreakdown,
+  balanceSinceDate,
+  balanceSinceText,
+  clCardState,
+  clock12,
+  daysText,
+  halfNum,
+  isYearlyBalance,
+  mergeUsageRows,
+  yearMonths,
+  yearRange,
+  yearTotals,
+  type CLPortion,
+  type CLRow,
+} from '@/lib/casual-leave'
+import { dayText } from '@/lib/my-requests'
+import { cn } from '@/lib/utils'
+
+/** 1.5 -> "1½", 0.5 -> "½", 2 -> "2" (also while a KPI counts up). */
+const halfDays = (n: number) => {
+  const r = Math.round(n * 2) / 2
+  return r % 1 ? `${Math.floor(r) || ''}½` : String(r)
+}
+
+const PORTION_ICON: Record<CLPortion, LucideIcon> = { full: Sun, first_half: Sunrise, second_half: Sunset }
 
 export default function CasualLeave() {
-  const { user } = useAuth()
-  const qc = useQueryClient()
-  const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [form, setForm] = React.useState({ date: '', reason: '' })
-  const [formError, setFormError] = React.useState<string | null>(null)
+  const thisYear = new Date().getFullYear()
+  const [applyOpen, setApplyOpen] = React.useState(false)
+  // The month switcher (owner 2026-11-02) drives the month calendar and the list; the year view follows its year. A tap
+  // on a month tile, or the year arrows, move the same month.
+  const [month, setMonth] = useSelectedMonth()
+  const year = month.year
+  const selectedMonth = month.month
   // The pipeline HR configured for casual leave, and the note when HR has switched it off.
   const { workflow, offNote } = useApprovalWorkflow('casual_leave')
-  const pipeline = pipelineSentence(workflow)
+  const pipeline = pipelineSentence(workflow, 'Casual Leave request')
 
-  const eligibilityQuery = useQuery({
-    queryKey: ['cl-eligibility', user?.employeeId],
-    queryFn: () => casualLeaveApi.eligibility(),
-    enabled: !!user,
-  })
+  // Every request the employee ever made (a few a year): one call, so switching years is instant.
+  const list = useCasualLeaveRequests()
+  const elig = useCasualLeaveEligibility()
 
-  const listQuery = useQuery({
-    queryKey: ['casual-leaves', user?.employeeId],
-    queryFn: () => casualLeaveApi.list(user!.employeeId),
-    enabled: !!user,
-  })
+  const all = React.useMemo(() => list.data ?? [], [list.data])
+  const rows: CLRow[] = React.useMemo(() => all.map((r) => ({ id: r.id, date: r.date, portion: r.portion, status: r.status, source: r.source })), [all])
+  const range = yearRange(rows, thisYear)
+  // The yearly balance (owner 2026-11-02): 12 days a year, any month while it lasts. For the year the server counted,
+  // the year view draws its monthsUsage (which also holds a Casual Leave HR proposed on an attendance edit that still
+  // waits); every other year, and an older server, the request list.
+  const yearly = isYearlyBalance(elig.data)
+  const balance = yearly ? elig.data!.balance! : null
+  const yearRows = React.useMemo(() => mergeUsageRows(rows, elig.data?.monthsUsage), [rows, elig.data?.monthsUsage])
+  const months = React.useMemo(() => yearMonths(yearRows, year), [yearRows, year])
+  const totals = React.useMemo(() => yearTotals(yearRows, year), [yearRows, year])
+  // The balance figures belong to the balance's own year; another year on screen keeps the counts of its requests.
+  const balanceShown = balance && balance.year === year ? balance : null
+  const since = balanceShown ? balanceSinceText(balanceShown) : null
+  const sorted = React.useMemo(() => (list.data ? [...list.data].sort((a, b) => b.date.localeCompare(a.date)) : undefined), [list.data])
+  const baseOptions: ViewOptions<CasualLeaveRow> = { statusOf: (r) => r.status, month: { dateOf: (r) => r.date, kind: 'taken' } }
+  // The four views hold only the Casual Leave of the chosen month (by its date).
+  const viewOptions: ViewOptions<CasualLeaveRow> = { ...baseOptions, scope: { ...month, daysOf: (r) => r.date } }
+  const views = useRequestViews(sorted, viewOptions)
+  // The KPI tiles (owner 2026-11-02): Waiting and Rejected follow the month on screen (the four views' counts; a tile
+  // opens its view in that month); "Taken" and "Months used" stay yearly (the year of that month) and say so.
+  const inMonth = inMonthText(month)
+  // The arrows reach as far as the year arrows do (back to January of the first year; as in the mobile app), and past
+  // the current month only when a Casual Leave lies in a later month.
+  const firstMonth = { year: range.min, month: 1 }
+  const lastMonth = laterMonth(currentMonth(), latestMonthOf(all, (r) => r.date) ?? currentMonth())
+  // A notification's View button opens ?focus=<request id>: its month (and so its year), the view holding it, scrolled
+  // to and ringed.
+  const focus = useFocusItem({ scope: 'cl', rows: list.data, idOf: (r) => r.id, views, viewOptions, setMonth })
 
-  const applyMutation = useMutation({
-    mutationFn: casualLeaveApi.apply,
-    onSuccess: () => {
-      toast.success('Casual leave request submitted')
-      qc.invalidateQueries({ queryKey: ['casual-leaves', user?.employeeId] })
-      // The per-month verdicts (and the yearly balance) change with this request: the prefix also refreshes the
-      // Attendance and Dashboard copies of the same query.
-      qc.invalidateQueries({ queryKey: ['cl-eligibility'] })
-      setDialogOpen(false)
-      setForm({ date: '', reason: '' })
-    },
-    onError: (err) => {
-      // The server's own sentence (a 400 request_window_closed, a month not eligible...) belongs in the dialog too, not only a toast.
-      const message = err instanceof ApiError ? err.message : 'Could not submit casual leave request'
-      setFormError(message)
-      toast.error(message)
-      refreshIfWorkflowOff(qc, err)
-    },
-  })
-
-  // Per-month verdicts (the previous month while the grace days are open, then the current month). An older backend
-  // sends none: then only the overall `eligible` flag below decides.
-  const months = eligibilityQuery.data?.months
-  const pickedMonth = months?.find((m) => m.month === form.date.slice(0, 7))
-  const monthBlock = pickedMonth && !pickedMonth.eligible
-    ? (pickedMonth.reason ?? `You are not eligible for casual leave in ${pickedMonth.label}.`)
-    : null
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setFormError(null)
-    if (!form.date) return setFormError('Date is required.')
-    // 'Now' is read here, when the form is submitted, never cached: the dialog can sit open across midnight.
-    const outside = checkRequestDate(form.date, new Date())
-    if (outside) return setFormError(outside)
-    // The picked month is not eligible: its reason is already shown in the dialog (dialogError), so just stop here.
-    if (monthBlock) return
-    if (form.reason.trim().length < 5) return setFormError('Reason must be at least 5 characters.')
-    if (form.reason.length > 200) return setFormError('Reason is too long (max 200 characters).')
-    applyMutation.mutate({ employeeId: user!.employeeId, ...form })
+  function changeYear(next: number) {
+    // Switching years opens the month that matters: this month for this year, else the first month with Casual Leave
+    // (else the same month of that year).
+    if (next === thisYear) setMonth(currentMonth())
+    else setMonth({ year: next, month: yearMonths(rows, next).find((m) => m.shape !== 'none')?.month ?? selectedMonth })
   }
 
-  const all = listQuery.data ?? []
-  const live = all.filter((r) => r.status === 'pending')
-  const confirmed = all.filter((r) => r.status !== 'pending')
-  // With per-month verdicts the Apply button stays on while any open month is eligible; without them (an older
-  // backend) the overall flag decides, as it always did.
-  const ineligible = eligibilityQuery.data && !isCasualLeaveEligible(eligibilityQuery.data)
-  // A persistent problem in the dialog beats a toast that fades: the picked month's reason, else a validation / server
-  // error, else "switched off".
-  const dialogError = monthBlock ?? formError ?? offNote
-  // The dates an employee may request, from the clock as of this render (the server enforces the same window).
-  const requestWindow = getRequestWindow(new Date())
-
-  function renderItem(item: CasualLeaveRequest) {
-    return (
-      <Card key={item.id}>
-        <CardContent className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{format(parseISO(item.date), 'MMM d, yyyy')}</span>
-            <StatusBadge status={item.status} approval={item.approval} />
-          </div>
-          <p className="text-sm">{item.reason}</p>
-          <ApprovalTrail approval={item.approval} className="mt-1" />
-        </CardContent>
-      </Card>
-    )
-  }
+  const state = elig.data ? clCardState(elig.data, new Date()) : null
+  const canApply = !!state && (state.tone === 'open' || state.tone === 'half' || (elig.data?.months ?? []).some((m) => m.eligible && m.left !== 'nothing'))
+  const meta = state ? CL_STATE[state.tone] : null
+  const StateIcon = meta?.icon ?? CalendarClock
+  const entitlement = elig.data?.yearlyEntitlement ?? 12
+  const usedYear = elig.data?.usedThisYear ?? totals.takenDays
+  const shift = elig.data?.shift
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Casual Leave"
-        subtitle="Eligibility-based short leave, one per calendar month"
-        icon={<CalendarClock />}
-        actions={
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              setDialogOpen(open)
-              if (open) setFormError(null)
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button className="bg-white dark:bg-card/95 text-brand-blue hover:bg-white/90 dark:hover:bg-white/10 shadow-clay" disabled={!!ineligible || !!offNote}>
-                <Plus /> Apply Casual Leave
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Apply for Casual Leave</DialogTitle>
-              {pipeline && <DialogDescription>{pipeline}</DialogDescription>}
-            </DialogHeader>
-            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cl-date">Date</Label>
-                <Input
-                  id="cl-date"
-                  type="date"
-                  min={requestWindow.min}
-                  max={requestWindow.max}
-                  aria-describedby="cl-date-hint"
-                  value={form.date}
-                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+    <>
+      <PageShell>
+        {/* Phones: no KPI tiles (the counts are in "Your year" and on the four count cards) and the Apply button sits in the
+            This month card, as in the mobile app. */}
+        <PageHero
+          icon={<CalendarClock />}
+          className={cn(HERO_NO_KPIS_ON_PHONE, HERO_NO_ACTIONS_ON_PHONE)}
+          title="Casual Leave"
+          subtitle={
+            yearly ? (
+              <>
+                <span className="max-md:hidden">
+                  {halfNum(balance!.total)} paid days a year - take full days or half-days on any dates while your balance lasts. Unused days lapse on 31 Dec.
+                </span>
+                <span className="hidden max-md:inline">{halfNum(balance!.total)} paid days a year, full or half days</span>
+              </>
+            ) : (
+              <>
+                <span className="max-md:hidden">One paid day a month - take it as a full day, or as two half-days on any dates of that month.</span>
+                <span className="hidden max-md:inline">One paid day a month, or two half-days</span>
+              </>
+            )
+          }
+          actions={
+            <Button size="lg" onClick={() => setApplyOpen(true)} disabled={!canApply || !!offNote}>
+              <Plus aria-hidden="true" /> Apply for Casual Leave
+            </Button>
+          }
+          kpis={
+            balanceShown ? (
+              // The yearly balance (2026-11-02): what is left and what was taken come from the server's balance (the
+              // whole year, from the cut-over in 2026); Waiting / Rejected still follow the month on screen.
+              <>
+                <KpiTile label={`Left in ${year}`} value={balanceShown.remaining} format={halfDays} unit={`of ${halfNum(balanceShown.total)} days`} icon={CalendarHeart} tone="violet" hint="the whole year · resets on 1 Jan" />
+                <KpiTile label="Waiting" value={list.data ? views.counts.waiting : null} icon={Clock} tone="amber" hint={`for a decision · ${inMonth}`} onClick={() => showView(views, 'waiting', 'cl')} />
+                <KpiTile
+                  label={`Taken in ${year}`}
+                  value={balanceShown.used}
+                  format={halfDays}
+                  unit={`of ${halfNum(balanceShown.total)} days`}
+                  icon={CalendarCheck2}
+                  tone="emerald"
+                  hint={since ? `approved · ${since.charAt(0).toLowerCase()}${since.slice(1)}` : 'approved · the whole year'}
                 />
-                <p id="cl-date-hint" className="text-xs text-muted-foreground">{windowHint(requestWindow)}</p>
+                <KpiTile label="Rejected" value={list.data ? views.counts.rejected : null} icon={XCircle} tone="rose" hint={inMonth} onClick={() => showView(views, 'rejected', 'cl')} />
+              </>
+            ) : (
+              <>
+                <KpiTile label={`Taken in ${year}`} value={list.data ? totals.takenDays : null} format={halfDays} unit={`of ${entitlement} days`} icon={CalendarCheck2} tone="violet" hint="approved · the whole year" />
+                <KpiTile label="Waiting" value={list.data ? views.counts.waiting : null} icon={Clock} tone="amber" hint={`for a decision · ${inMonth}`} onClick={() => showView(views, 'waiting', 'cl')} />
+                <KpiTile label="Months used" value={list.data ? totals.monthsUsed : null} unit="of 12" icon={CalendarHeart} tone="emerald" hint={`in ${year} · the whole year`} />
+                <KpiTile label="Rejected" value={list.data ? views.counts.rejected : null} icon={XCircle} tone="rose" hint={inMonth} onClick={() => showView(views, 'rejected', 'cl')} />
+              </>
+            )
+          }
+        >
+          {offNote && <OffNotice text={offNote} />}
+        </PageHero>
+
+        {/* This month */}
+        {elig.isError && !elig.data ? (
+          <ErrorState error={elig.error} what="this month's Casual Leave" onRetry={() => void elig.refetch()} retrying={elig.isFetching} title="Could not check this month's Casual Leave" />
+        ) : (
+          <>
+            <GlassCard variant="stitched" tone="violet" padding="lg" className="flex flex-col gap-5 max-md:hidden sm:flex-row sm:items-center">
+              {balance ? (
+                // The yearly balance: the ring fills with what is taken or waiting; the centre says what is left.
+                <RingMeter value={balance.used + balance.pending} max={balance.total} silk size={116} thickness={11} label={`Casual Leave days left in ${balance.year}: ${halfNum(balance.remaining)} of ${halfNum(balance.total)}`}>
+                  <span className="metric text-2xl">{halfDays(balance.remaining)}</span>
+                  <span className="text-[11px] text-muted-foreground">of {halfNum(balance.total)} left</span>
+                </RingMeter>
+              ) : (
+                <RingMeter value={usedYear} max={entitlement} silk size={116} thickness={11} label={`Casual Leave days taken in ${elig.data?.year ?? thisYear}`}>
+                  <span className="metric text-2xl">{halfDays(usedYear)}</span>
+                  <span className="text-[11px] text-muted-foreground">of {entitlement} days</span>
+                </RingMeter>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="label-caps text-violet">{balance ? `Your ${balance.year} balance` : 'This month'}</p>
+                {!state ? (
+                  <div className="mt-2 flex flex-col gap-2" aria-hidden="true">
+                    <SkeletonBlock className="h-6 w-48" />
+                    <SkeletonBlock className="h-3.5 w-72 max-w-full" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <StateIcon className={cn('size-5', TONE_TEXT[meta?.tone ?? 'violet'])} aria-hidden="true" />
+                      <h2 className="font-display text-2xl font-semibold">{state.title}</h2>
+                      {meta && <StatusPill tone={meta.status} size="sm">{meta.word}</StatusPill>}
+                    </div>
+                    <p className="mt-1 text-[14px] text-muted-foreground">{state.detail}</p>
+                    {balance && (
+                      <p className="mt-2 text-[13px] font-medium text-foreground/85 tabular-nums">
+                        {balanceBreakdown(balance)} · resets on 1 Jan
+                        {balanceSinceText(balance) ? ` · ${balanceSinceText(balance)}` : ''}
+                      </p>
+                    )}
+                  </>
+                )}
+                {shift && (
+                  <p className="mt-3 text-[13px] text-foreground/80">
+                    Your shift is {clock12(shift.start)} - {clock12(shift.end)}. First half ends {clock12(shift.firstHalfEnd)}; second half starts{' '}
+                    {clock12(shift.secondHalfStart)}.
+                  </p>
+                )}
+                <p className="mt-1 text-[12.5px] text-muted-foreground">
+                  Approved Casual Leave counts as a paid day (a half-day as half a day; the other half counts by your punches).
+                </p>
               </div>
-              <TextareaField
-                id="cl-reason"
-                label="Reason"
-                rows={3}
-                minLength={5}
-                maxLength={200}
-                value={form.reason}
-                onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-              />
-              {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
-              <DialogFooter>
-                <Button type="submit" variant="gradient" disabled={applyMutation.isPending || !!offNote}>
-                  {applyMutation.isPending ? 'Submitting…' : 'Submit'}
+            </GlassCard>
+
+            {/* Phones: the mobile app's This month card, with the Apply button in it. */}
+            <div className="hidden max-md:flex max-md:flex-col max-md:gap-3 max-md:rounded-xl max-md:border max-md:border-border max-md:bg-card max-md:p-4 max-md:shadow-[var(--m-shadow-mid)]">
+              {!state ? (
+                <div className="max-md:flex max-md:flex-col max-md:gap-2.5" aria-hidden="true">
+                  <SkeletonBlock className="max-md:h-3.5 max-md:w-[40%]" />
+                  <SkeletonBlock className="max-md:h-[22px] max-md:w-[70%]" />
+                  <SkeletonBlock className="max-md:h-3 max-md:w-[90%]" />
+                </div>
+              ) : (
+                <>
+                  <p className="label-caps text-muted-foreground max-md:font-[800]! max-md:tracking-[0.1em]!">{balance ? `Your ${balance.year} balance` : 'This month'}</p>
+                  <div className="max-md:flex max-md:items-center max-md:gap-3">
+                    <span className={cn('max-md:grid max-md:size-12 max-md:shrink-0 max-md:place-items-center max-md:rounded-full', TONE_SOFT[meta?.tone ?? 'violet'])} aria-hidden="true">
+                      <StateIcon className="max-md:size-6" />
+                    </span>
+                    <div className="max-md:min-w-0 max-md:flex-1">
+                      <h2 className="font-display max-md:text-[19px] max-md:leading-6 max-md:font-bold">{state.title}</h2>
+                      <p className="max-md:mt-[3px] max-md:text-[12.5px] max-md:leading-[18px] max-md:text-secondary-foreground">{state.detail}</p>
+                    </div>
+                  </div>
+                  {balance ? (
+                    <p className="max-md:text-[12px] max-md:text-muted-foreground max-md:tabular-nums">
+                      {balanceBreakdown(balance)} · resets on 1 Jan
+                    </p>
+                  ) : (
+                    elig.data && (
+                      <p className="max-md:text-[12px] max-md:text-muted-foreground max-md:tabular-nums">
+                        {daysText(usedYear)} of {entitlement} days taken in {elig.data.year ?? thisYear}
+                      </p>
+                    )
+                  )}
+                  {shift && (
+                    <p className="max-md:text-[12px] max-md:leading-[17px] max-md:text-secondary-foreground">
+                      Your shift is {clock12(shift.start)} - {clock12(shift.end)}. First half ends {clock12(shift.firstHalfEnd)}; second half starts{' '}
+                      {clock12(shift.secondHalfStart)}.
+                    </p>
+                  )}
+                  <p className="max-md:text-[11.5px] max-md:leading-4 max-md:text-muted-foreground">
+                    Approved Casual Leave counts as a paid day (a half-day as half a day; the other half counts by your punches).
+                  </p>
+                  <Button onClick={() => setApplyOpen(true)} disabled={!canApply || !!offNote} className="max-md:w-full max-md:text-[13.5px]">
+                    <Plus aria-hidden="true" /> Apply for Casual Leave
+                  </Button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* The year */}
+        <section aria-labelledby="cl-year-title" className="flex flex-col gap-4">
+          <SectionHeader
+            id="cl-year-title"
+            icon={CalendarHeart}
+            tone="violet"
+            title="Your year"
+            description="Tap a month to see its days."
+            action={
+              <div className="glass flex items-center gap-1 rounded-xl p-1 max-md:gap-0 max-md:rounded-full max-md:p-0.5">
+                <Button variant="ghost" size="icon" className="size-11 sm:size-9" aria-label="Previous year" disabled={year <= range.min} onClick={() => changeYear(year - 1)}>
+                  <ChevronLeft aria-hidden="true" />
                 </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-          </Dialog>
-        }
-      />
+                <span className="metric min-w-14 text-center text-base max-md:min-w-10 max-md:text-[14px]" aria-live="polite">{year}</span>
+                <Button variant="ghost" size="icon" className="size-11 sm:size-9" aria-label="Next year" disabled={year >= range.max} onClick={() => changeYear(year + 1)}>
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+              </div>
+            }
+          />
+          {list.isError && !list.data ? (
+            <ErrorState error={list.error} what="your Casual Leave" onRetry={() => void list.refetch()} retrying={list.isFetching} />
+          ) : list.isPending ? (
+            <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]" aria-hidden="true">
+              <SkeletonBlock className="h-56 w-full rounded-xl" />
+              <SkeletonBlock className="h-56 w-full rounded-xl" />
+            </div>
+          ) : (
+            <div className="grid gap-4 max-md:gap-2.5 lg:grid-cols-[1.3fr_1fr]">
+              {/* Phones: the app's stats row above the month cells. */}
+              <div className="hidden max-md:flex max-md:rounded-xl max-md:border max-md:border-border max-md:bg-card max-md:py-3">
+                {(balanceShown
+                  ? [
+                      { label: 'Left', value: `${halfNum(balanceShown.remaining)} of ${halfNum(balanceShown.total)}`, tone: 'max-md:text-primary' },
+                      { label: 'Taken', value: daysText(balanceShown.used), tone: 'max-md:text-approved' },
+                      { label: 'Waiting', value: daysText(balanceShown.pending), tone: 'max-md:text-waiting' },
+                      { label: 'Rejected', value: String(totals.rejected), tone: 'max-md:text-rejected' },
+                    ]
+                  : [
+                      { label: 'Taken', value: daysText(totals.takenDays), tone: 'max-md:text-primary' },
+                      { label: 'Waiting', value: daysText(totals.waitingDays), tone: 'max-md:text-waiting' },
+                      { label: 'Months used', value: String(totals.monthsUsed), tone: 'max-md:text-approved' },
+                      { label: 'Rejected', value: String(totals.rejected), tone: 'max-md:text-rejected' },
+                    ]
+                ).map((c) => (
+                  <div key={c.label} className="max-md:flex max-md:min-w-0 max-md:flex-1 max-md:flex-col max-md:items-center max-md:gap-0.5 max-md:px-1 max-md:text-center">
+                    <span className={cn('font-display max-md:text-[15px] max-md:leading-5 max-md:font-bold max-md:tabular-nums', c.tone)}>{c.value}</span>
+                    <span className="max-md:text-[10.5px] max-md:leading-[14px] max-md:font-semibold max-md:text-muted-foreground">{c.label}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Phones: the month cells sit straight on the page (no card around them), as in the app. */}
+              <GlassCard className="flex flex-col gap-4 max-md:gap-2.5 max-md:border-0! max-md:bg-transparent! max-md:p-0! max-md:shadow-none!">
+                <ClYearGrid months={months} year={year} selected={selectedMonth} onSelect={(m) => setMonth({ year, month: m })} calendarId="cl-month-calendar" pickUntil={lastMonth} />
+                <ClLegend yearly={yearly} />
+                <p className="text-[13px] text-muted-foreground">
+                  In {year}: <span className="font-semibold text-foreground">{daysText(totals.takenDays)}</span> taken
+                  {totals.waitingDays > 0 && (
+                    <>
+                      , <span className="font-semibold text-waiting">{daysText(totals.waitingDays)}</span> waiting
+                    </>
+                  )}
+                  , {totals.applications} {totals.applications === 1 ? 'application' : 'applications'}.
+                  {balanceShown && balanceSinceDate(balanceShown) && <> Casual Leave before {balanceSinceDate(balanceShown)} is not counted in the balance.</>}
+                </p>
+              </GlassCard>
+              <GlassCard className="max-md:p-3.5!">
+                <ClMonthCalendar id="cl-month-calendar" year={year} month={selectedMonth} rows={yearRows} />
+              </GlassCard>
+            </div>
+          )}
+        </section>
 
-      {offNote && <WorkflowOffNotice text={offNote} />}
+        {/* The balance's running story (2026-11-02); left out on an older server (no balance, no history endpoint). */}
+        {elig.data?.balance && <ClBalanceHistory year={year} />}
 
-      {ineligible && (
-        <Card className="border-warning/50 bg-warning/10">
-          <CardContent className="flex items-center gap-2 py-1 text-sm">
-            <Info className="size-4 shrink-0" />
-            {eligibilityQuery.data?.reason ?? months?.find((m) => m.reason)?.reason ?? 'You are not currently eligible for casual leave.'}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="bg-accent/40">
-        <CardContent className="py-1 text-sm text-muted-foreground">
-          Approved casual leave days count as a paid present day on your attendance calendar; rejected requests are marked as unpaid leave.
-        </CardContent>
-      </Card>
-
-      {listQuery.isLoading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <RequestTabs
-          liveItems={live}
-          confirmedItems={confirmed}
-          renderItem={renderItem}
-          emptyLive={<EmptyState icon={CalendarClock} title="No pending casual leave requests" />}
-          emptyConfirmed={<EmptyState icon={CalendarClock} title="No confirmed casual leave requests yet" />}
+        <RequestList<CasualLeaveRow>
+          id="cl"
+          title="Your applications"
+          icon={CalendarClock}
+          tone="violet"
+          noun="Casual Leave requests"
+          monthKind="taken"
+          labels={{ month: 'Taken this month' }}
+          views={views}
+          monthSwitch={{ onChange: setMonth, min: firstMonth, max: lastMonth }}
+          query={list}
+          keyOf={(r) => r.id}
+          dateOf={(r) => r.date}
+          notice={focus.missing ? <FocusMissNote onDismiss={focus.dismiss} /> : undefined}
+          emptyIcon={CalendarClock}
+          emptyAction={
+            canApply && !offNote ? (
+              <Button variant="outline" onClick={() => setApplyOpen(true)}>
+                <Plus aria-hidden="true" /> Apply for Casual Leave
+              </Button>
+            ) : undefined
+          }
+          renderItem={(r) => (
+            <RequestCard
+              icon={PORTION_ICON[r.portion]}
+              tone="violet"
+              title={dayText(r.date)}
+              when={
+                <>
+                  {PORTION_LONG[r.portion]}
+                  <span className="text-foreground/75"> · {daysText(PORTION_DAYS[r.portion])}</span>
+                  {/* 2026-11-02: written by an approved HR attendance edit. */}
+                  {r.source === 'hr_edit' && <span className="font-semibold text-info"> · given by HR</span>}
+                </>
+              }
+              pill={r.status === 'approved' ? <StatusPill tone="approved" size="sm">Approved</StatusPill> : r.status === 'rejected' ? <StatusPill tone="rejected" size="sm">Rejected</StatusPill> : undefined}
+              reason={r.reason}
+              status={r.status}
+              approval={r.approval}
+              sentAt={r.createdAt}
+              comment={r.reviewComment}
+              fallback={deciderFromFields({ status: r.status, name: r.reviewedBy, role: r.reviewerRole, at: r.reviewedAt })}
+            />
+          )}
         />
-      )}
-    </div>
+      </PageShell>
+      <ClApplyDialog
+        open={applyOpen}
+        onOpenChange={setApplyOpen}
+        months={elig.data?.months}
+        balance={balance}
+        shift={shift}
+        pipeline={pipeline}
+        offNote={offNote}
+        // The new request: its month (and year), in Waiting.
+        onSent={(day) => {
+          setMonth(monthOf(day) ?? currentMonth())
+          views.setView('waiting')
+        }}
+      />
+    </>
   )
 }

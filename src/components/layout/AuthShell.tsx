@@ -2,9 +2,10 @@ import * as React from 'react'
 import { motion } from 'framer-motion'
 import { AuthBackground } from '@/components/backgrounds/AuthBackground'
 
-/** Shared chrome for the signed-out pages (set password, deactivated,
- *  verification): a centred frosted-violet panel carrying the logo over the
- *  GradientWaves backdrop, matching the Login screen. */
+/** Shared chrome for the signed-out pages that are not sign-in (account
+ *  deactivated, public verification): a centred frosted-violet panel carrying
+ *  the logo over the GradientWaves backdrop. The three sign-in pages (login,
+ *  set password, forgot password) use components/auth/AuthShell instead. */
 export function AuthShell({ children, badge, width = 'max-w-md' }: { children: React.ReactNode; badge?: React.ReactNode; width?: string }) {
   return (
     <div className="dark auth-theme relative isolate flex min-h-dvh flex-col text-foreground sm:h-dvh sm:overflow-hidden">

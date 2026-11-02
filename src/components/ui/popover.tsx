@@ -9,7 +9,7 @@ const PopoverAnchor = PopoverPrimitive.Anchor
 function PopoverContent({
   className,
   align = 'center',
-  sideOffset = 4,
+  sideOffset = 6,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -19,7 +19,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'bg-popover/95 backdrop-blur-xl text-popover-foreground z-50 w-72 rounded-lg border border-[var(--glass-border)] p-4 shadow-clay-lg outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          'ui-pop bg-popover/95 backdrop-blur-xl text-popover-foreground z-50 w-72 rounded-xl border border-[var(--glass-border)] p-4 shadow-clay-lg outline-none',
           className,
         )}
         {...props}

@@ -1,362 +1,239 @@
 import * as React from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { Plus, Send, Sun, Sunset } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Link } from 'wouter'
+import { useQuery } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { CalendarCheck, CalendarDays, ChevronRight, Clock, Ellipsis, HeartHandshake, PartyPopper, Plus, Send, Siren, Stethoscope, Umbrella, XCircle, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { RequestTabs } from '@/components/employee/RequestTabs'
-import { TextareaField } from '@/components/employee/TextareaField'
-import { StatusBadge } from '@/components/employee/StatusBadge'
-import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
-import { WorkflowOffNotice } from '@/components/employee/WorkflowOffNotice'
-import { EmptyState } from '@/components/employee/EmptyState'
-import { formatDateRange } from '@/components/employee/ApprovalCard'
-import { leaveApi } from '@/api/resources'
+import { KpiTile, PageHero, PageShell, StatusPill, useRequestViews, type ViewOptions } from '@/components/kit'
+import { ClEntryCard } from '@/components/requests/ClEntryCard'
+import { FocusMissNote } from '@/components/requests/FocusMissNote'
+import { OffNotice } from '@/components/requests/FormBits'
+import { LeaveApplyDialog } from '@/components/requests/LeaveApplyDialog'
+import { RequestCard } from '@/components/requests/RequestCard'
+import { RequestList } from '@/components/requests/RequestList'
+import { HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
+import { showView } from '@/components/requests/show-view'
+import { leaveRequestsApi, type LeaveRow } from '@/api/requests-api'
+import { holidayApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
-import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
-import { ApiError } from '@/api/client'
-import { hasTrail, pipelineSentence } from '@/lib/approval'
-import { checkRequestDate, checkRequestRange, getRequestWindow, windowHint } from '@/lib/request-window'
-import { cn } from '@/lib/utils'
-import type { HalfDaySlot, LeaveRequest, LeaveType } from '@/types'
+import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
+import { useCasualLeaveEligibility, useCasualLeaveRequests } from '@/hooks/useCasualLeave'
+import { useFocusItem } from '@/hooks/useFocusItem'
+import { useIsPhone } from '@/hooks/useIsPhone'
+import { useSelectedMonth } from '@/hooks/useSelectedMonth'
+import { pipelineSentence } from '@/lib/approval'
+import { currentMonth, inMonthText, laterMonth, latestMonthOf, monthOf, monthTileLabel } from '@/lib/month-switch'
+import { asPortion, asStatus, clCardState, isYearlyBalance, mergeUsageRows, yearMonths, yearTotals } from '@/lib/casual-leave'
+import { leaveDayForMonth, leaveDaysText, leaveTitle, type ReasonCategory } from '@/lib/leave-form'
+import { dayRangeText, newestFirst } from '@/lib/my-requests'
+import { statusGroup } from '@/lib/request-views'
 
-// Backend has no leave types configured — use these until an admin sets some up.
-// Mirrors the mobile app's FALLBACK_LEAVE_TYPES (src/hooks/useLeave.ts) so both
-// clients degrade the same way.
-const FALLBACK_LEAVE_TYPES: LeaveType[] = [
-  { id: '1', name: 'Annual Leave' },
-  { id: '2', name: 'Sick Leave' },
-  { id: '3', name: 'Casual Leave' },
-  { id: '4', name: 'Emergency Leave' },
-  { id: '5', name: 'Maternity Leave' },
-  { id: '6', name: 'Paternity Leave' },
-]
-
-const HALF_DAY_LABEL: Record<HalfDaySlot, string> = {
-  morning: 'Morning (first half)',
-  afternoon: 'Afternoon (second half)',
-}
-
-const EMPTY_FORM = {
-  type: '',
-  startDate: '',
-  endDate: '',
-  reason: '',
-  isHalfDay: false,
-  halfDaySlot: 'morning' as HalfDaySlot,
-}
+const CATEGORY_ICON: Record<ReasonCategory, LucideIcon> = { sick: Stethoscope, emergency: Siren, personal: HeartHandshake, other: Ellipsis }
+const HALF_WORDS: Record<string, string> = { morning: 'morning', afternoon: 'afternoon' }
 
 export default function Leave() {
   const { user } = useAuth()
-  const qc = useQueryClient()
-  const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [form, setForm] = React.useState(EMPTY_FORM)
-  const [formError, setFormError] = React.useState<string | null>(null)
+  const [applyOpen, setApplyOpen] = React.useState(false)
   // The pipeline HR configured for leave, and the note when HR has switched leave requests off.
   const { workflow, offNote } = useApprovalWorkflow('leave')
-  const pipeline = pipelineSentence(workflow)
+  const { offNote: clOffNote } = useApprovalWorkflow('casual_leave')
+  const pipeline = pipelineSentence(workflow, 'leave request')
 
-  const listQuery = useQuery({
+  const list = useQuery({
     queryKey: ['leave-requests', user?.employeeId],
-    queryFn: () => leaveApi.list(user!.employeeId),
+    queryFn: () => leaveRequestsApi.list(user!.employeeId),
     enabled: !!user,
   })
+  const rows = React.useMemo(() => (list.data ? newestFirst(list.data, (r) => r.startDate) : undefined), [list.data])
 
-  const typesQuery = useQuery({
-    queryKey: ['leave-types'],
-    queryFn: async () => {
-      const data = await leaveApi.types()
-      return data.length > 0 ? data : FALLBACK_LEAVE_TYPES
-    },
-  })
-
-  const applyMutation = useMutation({
-    mutationFn: leaveApi.apply,
-    onSuccess: () => {
-      toast.success('Leave request submitted')
-      qc.invalidateQueries({ queryKey: ['leave-requests', user?.employeeId] })
-      setDialogOpen(false)
-      setForm(EMPTY_FORM)
-    },
-    onError: (err) => {
-      // The server's own sentence (a 400 request_window_closed, a duplicate...) belongs in the dialog too, not only a toast.
-      const message = err instanceof ApiError ? err.message : 'Could not submit leave request'
-      setFormError(message)
-      toast.error(message)
-      refreshIfWorkflowOff(qc, err)
-    },
-  })
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setFormError(null)
-    if (!form.type) return setFormError('Leave type is required.')
-    // 'Now' is read here, when the form is submitted, never cached: the dialog can sit open across midnight.
-    if (form.isHalfDay) {
-      if (!form.startDate) return setFormError('Date is required.')
-      const outside = checkRequestDate(form.startDate, new Date())
-      if (outside) return setFormError(outside)
-    } else {
-      if (!form.startDate || !form.endDate) return setFormError('Start and end date are required.')
-      // Both ends must be inside the window; also says 'End date must be on or after start date.'
-      const outside = checkRequestRange(form.startDate, form.endDate, new Date())
-      if (outside) return setFormError(outside)
-    }
-    if (form.reason.trim().length < 5) return setFormError('Reason must be at least 5 characters.')
-    if (form.reason.length > 300) return setFormError('Reason is too long (max 300 characters).')
-    // The backend rejects a half-day spanning more than one day, so send
-    // the single date as both ends.
-    applyMutation.mutate({
-      employeeId: user!.employeeId,
-      type: form.type,
-      reason: form.reason,
-      startDate: form.startDate,
-      endDate: form.isHalfDay ? form.startDate : form.endDate,
-      ...(form.isHalfDay ? { isHalfDay: true, halfDaySlot: form.halfDaySlot } : {}),
-    })
+  // "This month" without the switcher = approved leave on a day of this month (a 30 Sep - 2 Oct leave counts in October too).
+  const today = new Date()
+  const baseOptions: ViewOptions<LeaveRow> = {
+    statusOf: (r) => r.status,
+    month: { dateOf: (r) => leaveDayForMonth(r.startDate, r.endDate, today), kind: 'taken' },
   }
+  // The month switcher (owner 2026-11-02): the four views hold only the leave whose dates touch the chosen month (a
+  // 30 Sep - 2 Oct leave is in both months).
+  const [month, setMonth] = useSelectedMonth()
+  const viewOptions: ViewOptions<LeaveRow> = { ...baseOptions, scope: { ...month, daysOf: (r) => [r.startDate, r.endDate] } }
+  const views = useRequestViews(rows, viewOptions)
+  // The KPI tiles follow the month on screen too (owner 2026-11-02): the four views' counts ("Taken" = that month's
+  // approved leave); a tile opens its view in that month. Only "Days off" is yearly (the year of that month).
+  const inMonth = inMonthText(month, today)
+  // The › arrow passes the current month only when a leave lies in a later month (as in the mobile app).
+  const lastMonth = laterMonth(currentMonth(), latestMonthOf(rows ?? [], (r) => [r.startDate, r.endDate]) ?? currentMonth())
+  // A notification's View button opens ?focus=<leave id>: its month, the view holding it, scrolled to and ringed.
+  const focus = useFocusItem({ scope: 'leave', rows, idOf: (r) => r.id, views, viewOptions, setMonth })
 
-  const all = listQuery.data ?? []
-  const live = all.filter((r) => r.status === 'pending')
-  const confirmed = all.filter((r) => r.status !== 'pending')
+  // Casual Leave lives on its own page; the card here shows this month and the year at a glance.
+  const thisYear = today.getFullYear()
+  const clElig = useCasualLeaveEligibility()
+  const clList = useCasualLeaveRequests()
+  // 2026-11-02: the yearly balance - the year's dials from the server's monthsUsage (incl. Casual Leave HR proposed on an
+  // attendance edit), the card's words from the balance; an older server keeps this month's answer.
+  const clRows = React.useMemo(
+    () =>
+      mergeUsageRows(
+        (clList.data ?? []).map((r) => ({ id: r.id, date: r.date, portion: asPortion(r.portion), status: asStatus(r.status), source: r.source })),
+        clElig.data?.monthsUsage,
+      ),
+    [clList.data, clElig.data?.monthsUsage],
+  )
+  const clMonths = React.useMemo(() => yearMonths(clRows, thisYear), [clRows, thisYear])
+  const clTotals = React.useMemo(() => yearTotals(clRows, thisYear), [clRows, thisYear])
+  const clState = clElig.data ? clCardState(clElig.data, today) : null
+  const clBalance = isYearlyBalance(clElig.data) ? clElig.data!.balance : null
+  const clFailed = (clElig.isError && !clElig.data) || (clList.isError && !clList.data)
 
-  const totalDaysTaken = all.filter((r) => r.status === 'approved').reduce((sum, r) => sum + r.totalDays, 0)
-  // A persistent problem in the dialog beats a toast that fades: a validation error, else "switched off".
-  const dialogError = formError ?? offNote
-  // The dates an employee may request, from the clock as of this render (the server enforces the same window).
-  const requestWindow = getRequestWindow(new Date())
-  const endMin = form.startDate > requestWindow.min ? form.startDate : requestWindow.min
+  const all = rows ?? []
+  // Approved leave days of the switcher's year (by the day a leave starts).
+  const daysInYear = all
+    .filter((r) => statusGroup(r.status) === 'approved' && r.startDate.startsWith(`${month.year}-`))
+    .reduce((n, r) => n + (r.isHalfDay ? 0.5 : Number(r.totalDays) || 0), 0)
 
-  function renderItem(item: LeaveRequest) {
-    return (
-      <Card key={item.id}>
-        <CardContent className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{item.type}</span>
-              <StatusBadge status={item.status} approval={item.approval} />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {formatDateRange(item.startDate, item.endDate)} ·{' '}
-              {item.isHalfDay
-                ? `Half day${item.halfDaySlot ? `, ${HALF_DAY_LABEL[item.halfDaySlot].toLowerCase()}` : ''}`
-                : `${item.totalDays} day(s)`}
-            </p>
-            <p className="text-sm mt-1">{item.reason}</p>
-            <ApprovalTrail approval={item.approval} className="mt-2" />
-            {/* The comment belongs to whoever decided: the trail shows it on that step. */}
-            {item.hrComment && !hasTrail(item.approval) && (
-              <p className="text-xs text-muted-foreground mt-1">HR: {item.hrComment}</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+  // Phones only: the mobile app's "Upcoming Holiday" card under the list. Fetched only on a phone (the desktop page has no
+  // such card), with the Holidays page's own query key, so it shares that cache.
+  const isPhone = useIsPhone()
+  const holidays = useQuery({
+    queryKey: ['holidays', thisYear],
+    queryFn: () => holidayApi.list(thisYear),
+    staleTime: 30 * 60_000,
+    enabled: isPhone,
+  })
+  const todayIso = format(today, 'yyyy-MM-dd')
+  const nextHoliday = (holidays.data ?? [])
+    .filter((h) => /^\d{4}-\d{2}-\d{2}/.test(h.date) && h.date.slice(0, 10) >= todayIso)
+    .sort((a, b) => a.date.localeCompare(b.date))[0]
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Leave"
-        subtitle="Apply, track, and review your leave requests"
-        icon={<Send />}
-        actions={
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              setDialogOpen(open)
-              if (open) setFormError(null)
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button disabled={!!offNote}>
-                <Plus /> Apply Leave
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Apply for Leave</DialogTitle>
-              {pipeline && <DialogDescription>{pipeline}</DialogDescription>}
-            </DialogHeader>
-            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>Leave Type</Label>
-                <Select value={form.type} onValueChange={(v) => setForm((f) => ({ ...f, type: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(typesQuery.data ?? []).map((t) => (
-                      <SelectItem key={t.id} value={t.name}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Duration</Label>
-                <div role="radiogroup" aria-label="Duration" className="grid grid-cols-2 gap-2">
-                  {[
-                    { half: false, label: 'Full day(s)' },
-                    { half: true, label: 'Half day' },
-                  ].map((o) => (
-                    <button
-                      key={o.label}
-                      type="button"
-                      role="radio"
-                      aria-checked={form.isHalfDay === o.half}
-                      onClick={() => setForm((f) => ({ ...f, isHalfDay: o.half }))}
-                      className={cn(
-                        'font-label h-10 rounded-md border text-[13.5px] font-semibold transition-colors',
-                        form.isHalfDay === o.half
-                          ? 'border-primary bg-primary/15 text-foreground'
-                          : 'border-input text-muted-foreground hover:border-foreground/25 hover:text-foreground',
-                      )}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {form.isHalfDay ? (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="startDate">Date</Label>
-                    <Input
-                      id="startDate"
-                      type="date"
-                      min={requestWindow.min}
-                      max={requestWindow.max}
-                      aria-describedby="startDate-hint"
-                      value={form.startDate}
-                      onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                    />
-                    <p id="startDate-hint" className="text-xs text-muted-foreground">{windowHint(requestWindow)}</p>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label>Which half?</Label>
-                    <div role="radiogroup" aria-label="Which half" className="grid grid-cols-2 gap-2">
-                      {(['morning', 'afternoon'] as const).map((slot) => {
-                        const Icon = slot === 'morning' ? Sun : Sunset
-                        const selected = form.halfDaySlot === slot
-                        return (
-                          <button
-                            key={slot}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            onClick={() => setForm((f) => ({ ...f, halfDaySlot: slot }))}
-                            className={cn(
-                              'flex items-center gap-2.5 rounded-md border px-3 py-2.5 text-left transition-colors',
-                              selected ? 'border-primary bg-primary/15' : 'border-input hover:border-foreground/25',
-                            )}
-                          >
-                            <Icon className={cn('size-4 shrink-0', selected ? 'text-brand-gold' : 'text-muted-foreground')} />
-                            <span className="text-[13px] leading-tight font-medium">{HALF_DAY_LABEL[slot]}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Input
-                      id="startDate"
-                      type="date"
-                      min={requestWindow.min}
-                      max={requestWindow.max}
-                      aria-describedby="range-hint"
-                      value={form.startDate}
-                      onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="endDate">End Date</Label>
-                    <Input
-                      id="endDate"
-                      type="date"
-                      min={endMin}
-                      max={requestWindow.max}
-                      aria-describedby="range-hint"
-                      value={form.endDate}
-                      onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                    />
-                  </div>
-                  {/* Both ends share one window, so one line under the pair. */}
-                  <p id="range-hint" className="col-span-2 text-xs text-muted-foreground">{windowHint(requestWindow)}</p>
-                </div>
-              )}
-              <TextareaField
-                id="reason"
-                label="Reason"
-                rows={3}
-                minLength={5}
-                maxLength={300}
-                value={form.reason}
-                onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-              />
-              {dialogError && <p className="text-sm text-destructive">{dialogError}</p>}
-              <DialogFooter>
-                <Button type="submit" variant="gradient" disabled={applyMutation.isPending || !!offNote}>
-                  {applyMutation.isPending ? 'Submitting…' : 'Submit'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-          </Dialog>
-        }
-      />
+    <>
+      <PageShell>
+        <PageHero
+          icon={<Send />}
+          className={HERO_NO_KPIS_ON_PHONE}
+          title={
+            <>
+              <span className="max-md:hidden">Leave</span>
+              <span className="hidden max-md:inline">Leave Portal</span>
+            </>
+          }
+          subtitle={
+            <>
+              <span className="max-md:hidden">Ask for leave and see who decided it. Casual Leave has its own page.</span>
+              <span className="hidden max-md:inline">Your leave and Casual Leave</span>
+            </>
+          }
+          actions={
+            <Button size="lg" onClick={() => setApplyOpen(true)} disabled={!!offNote} className="max-md:h-11 max-md:px-5 max-md:text-[13.5px] max-md:font-semibold">
+              <Plus aria-hidden="true" /> <span className="max-md:hidden">Apply for leave</span>
+              <span className="hidden max-md:inline">Apply Leave</span>
+            </Button>
+          }
+          kpis={
+            <>
+              <KpiTile label="Waiting" value={list.data ? views.counts.waiting : null} icon={Clock} tone="amber" hint={`for a decision · ${inMonth}`} onClick={() => showView(views, 'waiting', 'leave')} />
+              <KpiTile label={monthTileLabel('Taken', month, today)} value={list.data ? views.counts.approved : null} icon={CalendarDays} tone="sapphire" hint="approved requests" onClick={() => showView(views, 'approved', 'leave')} />
+              <KpiTile label={`Days off in ${month.year}`} value={list.data ? daysInYear : null} format={(n) => (Number.isInteger(n) ? String(n) : n.toFixed(1))} unit="days" icon={CalendarCheck} tone="emerald" hint="approved leave · the whole year" />
+              <KpiTile label="Rejected" value={list.data ? views.counts.rejected : null} icon={XCircle} tone="rose" hint={inMonth} onClick={() => showView(views, 'rejected', 'leave')} />
+            </>
+          }
+        >
+          {offNote && <OffNotice text={offNote} />}
+        </PageHero>
 
-      {offNote && <WorkflowOffNotice text={offNote} />}
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card>
-          <CardContent className="py-1">
-            <p className="text-muted-foreground text-xs">Total Taken</p>
-            <p className="mt-1 text-xl font-bold">{totalDaysTaken}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-1">
-            <p className="text-muted-foreground text-xs">Submitted</p>
-            <p className="mt-1 text-xl font-bold">{all.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-1">
-            <p className="text-muted-foreground text-xs">Approved</p>
-            <p className="mt-1 text-xl font-bold text-success">{all.filter((r) => r.status === 'approved').length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-1">
-            <p className="text-muted-foreground text-xs">Rejected</p>
-            <p className="mt-1 text-xl font-bold text-destructive">{all.filter((r) => r.status === 'rejected').length}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {listQuery.isLoading ? (
-        <Skeleton className="h-64 w-full" />
-      ) : (
-        <RequestTabs
-          liveItems={live}
-          confirmedItems={confirmed}
-          renderItem={renderItem}
-          emptyLive={<EmptyState icon={Send} title="No pending leave requests" description="Requests you submit will show up here while awaiting a decision." />}
-          emptyConfirmed={<EmptyState icon={Send} title="No confirmed leave requests yet" />}
+        <ClEntryCard
+          state={clState}
+          months={clList.data ? clMonths : null}
+          year={thisYear}
+          takenDays={clTotals.takenDays}
+          waitingDays={clTotals.waitingDays}
+          balance={clBalance}
+          loading={clElig.isPending}
+          failed={clFailed}
+          error={clElig.error ?? clList.error}
+          onRetry={() => {
+            void clElig.refetch()
+            void clList.refetch()
+          }}
+          retrying={clElig.isFetching || clList.isFetching}
         />
-      )}
-    </div>
+        {clOffNote && <OffNotice text={clOffNote} />}
+
+        <RequestList<LeaveRow>
+          id="leave"
+          title="Your leave requests"
+          description="Newest first. Open the steps on a card to see who has looked at it."
+          icon={Umbrella}
+          noun="leave requests"
+          monthKind="taken"
+          labels={{ month: 'Taken this month' }}
+          views={views}
+          monthSwitch={{ onChange: setMonth, max: lastMonth }}
+          query={list}
+          keyOf={(r) => r.id}
+          dateOf={(r) => r.startDate}
+          notice={focus.missing ? <FocusMissNote onDismiss={focus.dismiss} /> : undefined}
+          emptyIcon={Umbrella}
+          emptyAction={
+            <Button variant="outline" onClick={() => setApplyOpen(true)} disabled={!!offNote}>
+              <Plus aria-hidden="true" /> Apply for leave
+            </Button>
+          }
+          renderItem={(r) => {
+            const cat = (r.reasonCategory ?? '') as ReasonCategory
+            const half = r.isHalfDay ? `Half day${r.halfDaySlot ? `, ${HALF_WORDS[r.halfDaySlot] ?? r.halfDaySlot}` : ''}` : leaveDaysText(r.totalDays)
+            return (
+              <RequestCard
+                icon={CATEGORY_ICON[cat] ?? Umbrella}
+                tone={r.isHalfDay ? 'violet' : 'sapphire'}
+                title={leaveTitle(r)}
+                when={
+                  <>
+                    {dayRangeText(r.startDate, r.endDate)}
+                    {half && <span className="text-foreground/75"> · {half}</span>}
+                  </>
+                }
+                pill={statusGroup(r.status) === 'rejected' ? <StatusPill tone="rejected" size="sm">Rejected</StatusPill> : statusGroup(r.status) === 'approved' ? <StatusPill tone="approved" size="sm">Approved</StatusPill> : undefined}
+                reason={r.reason}
+                status={r.status}
+                approval={r.approval}
+                sentAt={r.createdAt}
+                comment={r.hrComment}
+              />
+            )
+          }}
+        />
+
+        {/* Phones: the mobile app's Upcoming Holiday card (nothing at all on the desktop page). */}
+        {isPhone && nextHoliday && (
+          <Link
+            href="/employee/holidays"
+            className="focus-ring hidden max-md:flex max-md:items-center max-md:gap-3 max-md:rounded-xl max-md:border max-md:border-border max-md:bg-card max-md:p-3 max-md:shadow-[var(--m-shadow-low)] max-md:active:opacity-85"
+          >
+            <span className="max-md:grid max-md:size-[38px] max-md:shrink-0 max-md:place-items-center max-md:rounded-lg max-md:bg-waiting-bg max-md:text-waiting" aria-hidden="true">
+              <PartyPopper className="max-md:size-[18px]" />
+            </span>
+            <span className="max-md:min-w-0 max-md:flex-1">
+              <span className="max-md:block max-md:text-[13.5px] max-md:font-semibold max-md:text-foreground">Upcoming Holiday</span>
+              <span className="max-md:mt-0.5 max-md:block max-md:truncate max-md:text-[11.5px] max-md:text-muted-foreground">
+                {nextHoliday.name} · {format(new Date(`${nextHoliday.date.slice(0, 10)}T00:00:00`), 'd MMM yyyy')}
+              </span>
+            </span>
+            <ChevronRight className="max-md:size-[18px] max-md:shrink-0 max-md:text-muted-foreground" aria-hidden="true" />
+          </Link>
+        )}
+      </PageShell>
+      <LeaveApplyDialog
+        open={applyOpen}
+        onOpenChange={setApplyOpen}
+        pipeline={pipeline}
+        offNote={offNote}
+        // The new request: its month, in Waiting.
+        onSent={(day) => {
+          setMonth(monthOf(day) ?? currentMonth())
+          views.setView('waiting')
+        }}
+      />
+    </>
   )
 }

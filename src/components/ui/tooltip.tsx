@@ -18,9 +18,10 @@ function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimiti
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
+// Inverted (foreground on background) for the strongest contrast in both themes, popping in via .ui-pop.
 function TooltipContent({
   className,
-  sideOffset = 4,
+  sideOffset = 6,
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
@@ -30,12 +31,13 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          'bg-foreground text-background z-50 w-fit rounded-md px-3 py-1.5 text-xs animate-in fade-in-0 zoom-in-95',
+          'ui-pop font-label bg-foreground text-background z-50 w-fit max-w-xs rounded-md px-2.5 py-1.5 text-[12px] font-semibold shadow-clay',
           className,
         )}
         {...props}
       >
         {children}
+        <TooltipPrimitive.Arrow className="fill-foreground" width={10} height={5} />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   )

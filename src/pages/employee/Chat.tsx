@@ -1,206 +1,114 @@
 import * as React from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import { Send, Smile, Reply, X, MessageCircle } from 'lucide-react'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Skeleton } from '@/components/ui/skeleton'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/employee/EmptyState'
-import { chatApi } from '@/api/resources'
+import { useQuery } from '@tanstack/react-query'
+import { Building2, MessageCircle, Users } from 'lucide-react'
+import { EmptyState, ErrorState, PageHero, PageShell, SegmentedControl, SkeletonBlock } from '@/components/kit'
+import { ChannelThread } from '@/components/chat/ChannelThread'
+import { MainScrollContext } from '@/components/layout/EmployeeLayout'
+import { chatThreadApi } from '@/api/home-chat'
 import { useAuth } from '@/context/AuthContext'
-import { ApiError } from '@/api/client'
 import { cn } from '@/lib/utils'
-import type { ChatMessage } from '@/types'
-import { format, parseISO } from 'date-fns'
 
-const QUICK_EMOJI = ['👍', '❤️', '😂', '🎉', '👏', '🙏']
+type Which = 'company' | 'department'
 
-function MessageBubble({ msg, onReply, onReact, isMine }: { msg: ChatMessage; onReply: () => void; onReact: (emoji: string) => void; isMine: boolean }) {
-  return (
-    <div className={cn('group flex min-w-0 flex-col gap-1', isMine && 'items-end')}>
-      <span className="text-xs text-muted-foreground px-1">{msg.senderName}</span>
-      <div className="relative flex min-w-0 max-w-[75%] items-start gap-1">
-        <div
-          className={cn(
-            'min-w-0 rounded-2xl px-3.5 py-2.5 text-sm shadow-clay-sm',
-            isMine ? 'bg-brand-gradient text-white' : 'bg-brand-blue-tint text-foreground',
-          )}
-        >
-          {msg.replyTo && (
-            <div
-              className={cn(
-                'mb-1.5 rounded-lg border-l-2 px-2 py-1 text-xs',
-                isMine ? 'border-white/60 dark:border-white/10 bg-white/15 dark:bg-white/5' : 'border-brand-blue bg-white/70 dark:bg-white/5',
-              )}
-            >
-              <p className="font-semibold">{msg.replyTo.senderName}</p>
-              <p className="line-clamp-1 opacity-80">{msg.replyTo.text}</p>
-            </div>
-          )}
-          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.text}</p>
-        </div>
-        <div className="mt-1 hidden shrink-0 gap-1 group-hover:flex">
-          <Button variant="secondary" size="icon" className="size-7 rounded-full" onClick={onReply}>
-            <Reply className="size-3.5" />
-          </Button>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="secondary" size="icon" className="size-7 rounded-full">
-                <Smile className="size-3.5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-2">
-              <div className="flex gap-1">
-                {QUICK_EMOJI.map((e) => (
-                  <button key={e} className="text-lg hover:scale-125 transition-transform" onClick={() => onReact(e)}>
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-      {msg.reactions.length > 0 && (
-        <div className="flex flex-wrap gap-1 px-1">
-          {msg.reactions.map((r) => (
-            <button
-              key={r.emoji}
-              onClick={() => onReact(r.emoji)}
-              className={cn(
-                'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs',
-                r.reactedByMe ? 'border-brand-blue bg-brand-blue-tint' : 'border-border bg-background',
-              )}
-            >
-              {r.emoji} {r.count}
-            </button>
-          ))}
-        </div>
-      )}
-      <span className="text-[10px] text-muted-foreground px-1">{format(parseISO(msg.createdAt), 'HH:mm')}</span>
-    </div>
-  )
+// Phones (< 768px), kit/MOBILE.md: the conversation fills the scroll area (<main>) between the top bar and the tab bar.
+// The page is a flex column exactly as tall as <main> really is - measured, so a banner the shell shows above <main> (the
+// permission strip) is allowed for - minus the shell's 8px top padding (its 24px bottom padding is taken back with
+// -mb-6). Its last block, the thread, takes whatever the title leaves, so the composer always sits right above the tab bar.
+// Until the first measurement the viewport sum stands in.
+const PHONE_FULL_HEIGHT =
+  'max-md:-mb-6 max-md:h-[calc(var(--m-main-h,calc(100dvh-var(--m-topbar-h)-var(--m-tabbar-h)))-8px)] max-md:gap-3 max-md:[&>div:last-child]:flex max-md:[&>div:last-child]:min-h-0 max-md:[&>div:last-child]:flex-1 max-md:[&>div:last-child]:flex-col'
+
+/**
+ * Publishes <main>'s real height as --m-main-h (on <main>, so the page inside inherits it) and keeps it current while the
+ * chat is open: the permission strip coming or going, the phone turning, the browser bar resizing. Removed on leaving.
+ * Only the phone class above reads it, so wider screens are unaffected.
+ */
+function useMainHeightVar() {
+  const mainRef = React.useContext(MainScrollContext)
+  React.useLayoutEffect(() => {
+    const main = mainRef.current
+    if (!main) return
+    const update = () => main.style.setProperty('--m-main-h', `${main.clientHeight}px`)
+    update()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    observer?.observe(main)
+    window.addEventListener('resize', update)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', update)
+      main.style.removeProperty('--m-main-h')
+    }
+  }, [mainRef])
 }
+// The app's ChannelSwitcher: a soft full-width track, the chosen channel a filled pill, both halves equal.
+const PHONE_SWITCH =
+  'max-md:w-full max-md:rounded-full max-md:bg-muted! max-md:[&>button]:min-h-10 max-md:[&>button]:flex-1 max-md:[&>button]:rounded-full max-md:[&>button]:text-[13px] max-md:[&_.bg-brand-gradient]:rounded-full'
 
-function ChannelView({ channelId }: { channelId: string }) {
-  const { user } = useAuth()
-  const qc = useQueryClient()
-  const [text, setText] = React.useState('')
-  const [replyTo, setReplyTo] = React.useState<ChatMessage | null>(null)
-  const bottomRef = React.useRef<HTMLDivElement>(null)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['chat-messages', channelId],
-    queryFn: () => chatApi.messages(channelId, { limit: 50 }),
-    refetchInterval: 4000,
-    refetchIntervalInBackground: false,
-  })
-
-  const messages = React.useMemo(() => data ?? [], [data])
-
-  // Always land on the latest message — both on first load and as new
-  // messages arrive, matching every real chat app's default behavior.
-  React.useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages.length, channelId])
-
-  const sendMutation = useMutation({
-    mutationFn: () => chatApi.send(channelId, text, replyTo?.id),
-    onSuccess: () => {
-      setText('')
-      setReplyTo(null)
-      qc.invalidateQueries({ queryKey: ['chat-messages', channelId] })
-    },
-    onError: (err) => toast.error(err instanceof ApiError ? err.message : 'Could not send message'),
-  })
-
-  const reactMutation = useMutation({
-    mutationFn: ({ id, emoji, active }: { id: string; emoji: string; active: boolean }) =>
-      active ? chatApi.unreact(id, emoji) : chatApi.react(id, emoji),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['chat-messages', channelId] }),
-  })
-
-  function handleSend(e: React.FormEvent) {
-    e.preventDefault()
-    if (!text.trim()) return
-    sendMutation.mutate()
-  }
-
-  return (
-    <div className="flex h-[70vh] min-h-0 flex-col overflow-hidden rounded-2xl border shadow-clay">
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4">
-        <div className="flex min-h-full min-w-0 flex-col justify-end gap-4">
-          {isLoading && <Skeleton className="h-full w-full" />}
-          {!isLoading && messages.length === 0 && <EmptyState icon={MessageCircle} title="No messages yet" description="Start the conversation." />}
-          {messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              msg={m}
-              isMine={m.senderId === user?.employeeId}
-              onReply={() => setReplyTo(m)}
-              onReact={(emoji) => {
-                const existing = m.reactions.find((r) => r.emoji === emoji)
-                reactMutation.mutate({ id: m.id, emoji, active: !!existing?.reactedByMe })
-              }}
-            />
-          ))}
-          <div ref={bottomRef} />
-        </div>
-      </div>
-      {replyTo && (
-        <div className="flex items-center justify-between border-t bg-brand-blue-tint px-3 py-1.5 text-xs">
-          <span className="min-w-0 truncate">
-            Replying to <strong>{replyTo.senderName}</strong>: {replyTo.text.slice(0, 60)}
-          </span>
-          <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => setReplyTo(null)}>
-            <X className="size-3.5" />
-          </Button>
-        </div>
-      )}
-      <form onSubmit={handleSend} className="flex items-center gap-2 border-t bg-background p-3">
-        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" />
-        <Button type="submit" variant="gradient" size="icon" disabled={sendMutation.isPending || !text.trim()}>
-          <Send className="size-4" />
-        </Button>
-      </form>
-    </div>
-  )
-}
-
+/** Company-wide and department conversations. Only the open channel is polled. */
 export default function Chat() {
-  const { data: channels, isLoading } = useQuery({ queryKey: ['chat-channels'], queryFn: chatApi.channels })
-
-  if (isLoading) return <Skeleton className="h-96 w-full" />
-
-  const company = channels?.find((c) => c.type === 'company')
-  const department = channels?.find((c) => c.type === 'department')
-
-  if (!company && !department) {
-    return <EmptyState icon={MessageCircle} title="No chat channels available" />
-  }
+  const { user } = useAuth()
+  useMainHeightVar()
+  const channels = useQuery({ queryKey: ['chat-channels'], queryFn: chatThreadApi.channels, staleTime: 10 * 60_000 })
+  const company = channels.data?.find((c) => c.type === 'company')
+  const department = channels.data?.find((c) => c.type === 'department')
+  const [which, setWhich] = React.useState<Which | null>(null)
+  const active: Which | null = which ?? (company ? 'company' : department ? 'department' : null)
+  const channel = active === 'company' ? company : active === 'department' ? department : undefined
+  const channelName = active === 'company' ? 'Everyone at UK Textiles' : (department?.departmentName ?? 'Your department')
+  // Phones: the app's status line under the title (a live dot while the channel is open).
+  const liveStatus = channels.isPending ? 'Connecting…' : channels.isError ? 'Can’t reach chat right now' : !channel ? 'Not available' : 'Live · new messages appear automatically'
+  const live = !channels.isPending && !channels.isError && !!channel
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader title="Chat" subtitle="Company-wide and department conversations" icon={<MessageCircle />} />
-      <Tabs defaultValue={company ? 'company' : 'department'}>
-        <TabsList>
-          {company && <TabsTrigger value="company">Company</TabsTrigger>}
-          {department && <TabsTrigger value="department">{department.departmentName ?? 'Department'}</TabsTrigger>}
-        </TabsList>
-        {company && (
-          <TabsContent value="company" className="mt-4">
-            <ChannelView channelId={company.id} />
-          </TabsContent>
-        )}
-        {department && (
-          <TabsContent value="department" className="mt-4">
-            <ChannelView channelId={department.id} />
-          </TabsContent>
-        )}
-      </Tabs>
-    </div>
+    <PageShell className={PHONE_FULL_HEIGHT}>
+      <PageHero
+        icon={<MessageCircle />}
+        title="Team Chat"
+        subtitle={
+          <>
+            <span className="max-md:hidden">Talk with the whole company or your department. HR messages are marked HR.</span>
+            <span className="hidden max-md:flex max-md:items-center max-md:gap-1.5">
+              <span
+                aria-hidden="true"
+                className={cn('max-md:size-[7px] max-md:shrink-0 max-md:rounded-full', live ? 'max-md:bg-success max-md:motion-safe:animate-pulse' : 'max-md:bg-warning')}
+              />
+              <span className="max-md:truncate">{liveStatus}</span>
+            </span>
+          </>
+        }
+        actions={
+          company && department ? (
+            <SegmentedControl<Which>
+              ariaLabel="Conversation"
+              value={active ?? 'company'}
+              onChange={setWhich}
+              className={PHONE_SWITCH}
+              options={[
+                { value: 'company', label: 'Company', icon: Building2 },
+                { value: 'department', label: department.departmentName ?? 'Department', icon: Users },
+              ]}
+            />
+          ) : undefined
+        }
+      />
+
+      {channels.isPending ? (
+        <div
+          className="glass-raised flex h-[min(72dvh,760px)] min-h-[440px] flex-col gap-3 rounded-2xl p-4 max-md:h-auto max-md:min-h-0 max-md:flex-1 max-md:justify-end max-md:border-0! max-md:bg-none! max-md:bg-transparent! max-md:p-0 max-md:shadow-none!"
+          role="status"
+          aria-label="Loading the chat"
+        >
+          <SkeletonBlock className="h-12 w-2/3 rounded-2xl" />
+          <SkeletonBlock className="h-12 w-1/2 self-end rounded-2xl" />
+          <SkeletonBlock className="h-12 w-3/5 rounded-2xl" />
+        </div>
+      ) : channels.isError ? (
+        <ErrorState error={channels.error} what="your chat channels" onRetry={() => channels.refetch()} retrying={channels.isFetching} />
+      ) : !channel ? (
+        <EmptyState icon={MessageCircle} title="No chat yet" description="HR has not opened a chat channel for you. Ask HR if you expected one." />
+      ) : (
+        <ChannelThread key={channel.id} channelId={channel.id} channelName={channelName} myId={user?.employeeId ?? null} />
+      )}
+    </PageShell>
   )
 }

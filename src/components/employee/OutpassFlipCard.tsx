@@ -28,6 +28,10 @@ import type { Employee, OutpassRequest } from '@/types'
  * two. A fixed height fights variable content (a two-line reason, an
  * optional QR block, an optional gate-exit line) -measuring once removes
  * that whole class of clipping/overflow bug.
+ *
+ * Phones (< 768px): the mobile app's card - a 1.5px border in the status colour on the status tint, a "SECURITY
+ * CLEARANCE TOKEN · #OUT-id" line on top, the exit QR's "Validity Window" as a thin bar, 10px uppercase field labels
+ * over 13px values, a 92px QR, "Tap to flip".
  */
 
 const APPROVER_LABEL: Record<string, string> = { hr: 'HR', dept_head: 'HOD', system: 'On-Duty approval' }
@@ -56,12 +60,12 @@ function formatRemaining(ms: number): string {
 
 function toneFor(status: string) {
   if (status === 'approved') {
-    return { border: 'border-success/50', bg: 'bg-success/5', text: 'text-success', chipBg: 'bg-success/10' }
+    return { border: 'border-success/50', bg: 'bg-success/5', text: 'text-success', chipBg: 'bg-success/10', phone: 'max-md:border-success max-md:bg-approved-bg' }
   }
   if (status === 'rejected') {
-    return { border: 'border-destructive/50', bg: 'bg-destructive/5', text: 'text-destructive', chipBg: 'bg-destructive/10' }
+    return { border: 'border-destructive/50', bg: 'bg-destructive/5', text: 'text-destructive', chipBg: 'bg-destructive/10', phone: 'max-md:border-destructive max-md:bg-rejected-bg' }
   }
-  return { border: 'border-muted-foreground/30', bg: 'bg-muted/30', text: 'text-muted-foreground', chipBg: 'bg-muted' }
+  return { border: 'border-muted-foreground/30', bg: 'bg-muted/30', text: 'text-muted-foreground', chipBg: 'bg-muted', phone: 'max-md:border-muted-foreground max-md:bg-secondary' }
 }
 
 export function OutpassFlipCard({
@@ -110,13 +114,14 @@ export function OutpassFlipCard({
     setCardHeight(Math.max(frontH, backH, MIN_CARD_HEIGHT))
   }, [request, employee])
 
+  // The card itself flips on a click/tap; the real button under it does the same for keyboards and screen readers (a
+  // role="button" wrapper would hide the QR and the "Generate Return QR" button inside it from assistive tech).
   return (
+    <div className="flex flex-col gap-2">
     <div
       className="relative w-full cursor-pointer select-none"
       style={{ perspective: 1400, height: cardHeight }}
       onClick={() => setFlipped((f) => !f)}
-      role="button"
-      aria-label="Outpass card, click to flip"
     >
       <motion.div
         className="relative h-full w-full"
@@ -127,17 +132,22 @@ export function OutpassFlipCard({
         {/* ── Front ── */}
         <div
           ref={frontRef}
-          className={`absolute inset-x-0 top-0 flex flex-col gap-4 rounded-2xl border-2 p-4 ${tone.border} ${tone.bg}`}
+          className={`absolute inset-x-0 top-0 flex flex-col gap-4 rounded-2xl border-2 p-4 max-md:border-[1.5px] ${tone.border} ${tone.bg} ${tone.phone}`}
           style={{ backfaceVisibility: 'hidden' }}
         >
+          {/* Phones: the app's eyebrow line. */}
+          <div className="hidden max-md:-mb-2 max-md:flex max-md:items-center max-md:justify-between max-md:gap-2">
+            <span className={`max-md:shrink-0 max-md:text-[9.5px] max-md:font-[800] max-md:tracking-[0.08em] ${tone.text}`}>SECURITY CLEARANCE TOKEN</span>
+            <span className="max-md:min-w-0 max-md:truncate max-md:text-[9.5px] max-md:font-bold max-md:text-muted-foreground">#OUT-{request.id}</span>
+          </div>
           <div className="flex items-center justify-between gap-2">
-            <div className={`flex min-w-0 items-center gap-1.5 text-sm font-bold ${tone.text}`}>
+            <div className={`flex min-w-0 items-center gap-1.5 text-sm font-bold max-md:text-[12px] max-md:font-[800] ${tone.text}`}>
               <StatusIcon className="size-4 shrink-0" />
               <span className="truncate">{statusLabel}</span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {request.status === 'approved' && (
-                <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums ${tone.chipBg} ${tone.text}`}>
+                <span className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums max-md:hidden ${tone.chipBg} ${tone.text}`}>
                   <Clock className="size-3" /> {expired || remainingMs == null ? 'Expired' : formatRemaining(remainingMs)}
                 </span>
               )}
@@ -145,8 +155,24 @@ export function OutpassFlipCard({
             </div>
           </div>
 
+          {/* Phones: the app's Validity Window bar while the exit QR is still good. */}
+          {request.status === 'approved' && !expired && remainingMs != null && (
+            <div className="hidden max-md:-mt-1 max-md:flex max-md:flex-col max-md:gap-[5px]">
+              <div className="max-md:flex max-md:items-baseline max-md:justify-between">
+                <span className="max-md:text-[10px] max-md:font-bold max-md:text-muted-foreground">Validity Window</span>
+                <span className={`max-md:text-[14px] max-md:font-black max-md:tabular-nums ${tone.text}`}>{formatRemaining(remainingMs)}</span>
+              </div>
+              <div className="max-md:h-1 max-md:overflow-hidden max-md:rounded-full max-md:bg-card">
+                <div
+                  className="max-md:h-full max-md:rounded-full max-md:bg-success"
+                  style={{ width: `${Math.max(4, Math.min(100, (remainingMs / (60 * 60 * 1000)) * 100))}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
-            <Avatar className="size-14 shrink-0 border-2 border-white shadow-clay dark:border-white/10">
+            <Avatar className="size-14 shrink-0 border-2 border-white shadow-clay max-md:size-[52px] dark:border-white/10">
               <AvatarImage src={employee?.photoUrl} alt={employee?.firstName} />
               <AvatarFallback>
                 {employee?.firstName?.[0]}
@@ -154,34 +180,34 @@ export function OutpassFlipCard({
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="truncate font-bold">{employee ? `${employee.firstName} ${employee.lastName}` : '—'}</p>
+              <p className="truncate font-bold max-md:text-[16px] max-md:font-[800]">{employee ? `${employee.firstName} ${employee.lastName}` : '—'}</p>
               <p className="text-xs text-muted-foreground">{employee?.employeeCode}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-2 gap-3 text-sm max-md:text-[13px]">
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Going to</p>
-              <p className="truncate font-medium">{request.destination}</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Going to</p>
+              <p className="truncate font-medium max-md:font-semibold">{request.destination}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Date</p>
-              <p className="font-medium">{format(parseISO(request.createdAt), 'MMM d, yyyy')}</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Date</p>
+              <p className="font-medium max-md:font-semibold">{format(parseISO(request.createdAt), 'MMM d, yyyy')}</p>
             </div>
             <div className="col-span-2 min-w-0">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Reason</p>
-              <p className="line-clamp-2 font-medium">{request.reason}</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Reason</p>
+              <p className="line-clamp-2 font-medium max-md:font-semibold">{request.reason}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Time</p>
-              <p className="font-medium">{format(parseISO(request.createdAt), 'h:mm a')}</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Time</p>
+              <p className="font-medium max-md:font-semibold">{format(parseISO(request.createdAt), 'h:mm a')}</p>
             </div>
           </div>
 
           {showQr && (
             <div className="flex flex-col items-center gap-2">
               <div className={`rounded-lg border bg-white p-2.5 ${tone.border}`}>
-                <QRCodeSVG value={request.qrToken!} size={110} fgColor="#0f172a" bgColor="#ffffff" />
+                <QRCodeSVG value={request.qrToken!} size={110} fgColor="#0f172a" bgColor="#ffffff" className="max-md:size-[92px]" />
               </div>
               <p className={`text-[10px] font-bold tracking-wider ${tone.text}`}>SHOW THIS QR AT THE GATE</p>
             </div>
@@ -190,7 +216,7 @@ export function OutpassFlipCard({
           {showReturnQr && (
             <div className="flex flex-col items-center gap-2">
               <div className="rounded-lg border border-sky-300 bg-white p-2.5">
-                <QRCodeSVG value={request.returnQrToken!} size={110} fgColor="#0f172a" bgColor="#ffffff" />
+                <QRCodeSVG value={request.returnQrToken!} size={110} fgColor="#0f172a" bgColor="#ffffff" className="max-md:size-[92px]" />
               </div>
               <p className="text-[10px] font-bold tracking-wider text-sky-600">SHOW THIS QR TO RETURN</p>
               {!returnExpired && returnRemainingMs != null && (
@@ -217,13 +243,16 @@ export function OutpassFlipCard({
             </div>
           )}
 
-          <p className="self-end text-[11px] italic text-muted-foreground">Click to flip</p>
+          <p className="self-end text-[11px] italic text-muted-foreground max-md:text-[10px]">
+            <span className="max-md:hidden">Click to flip</span>
+            <span className="hidden max-md:inline">Tap to flip</span>
+          </p>
         </div>
 
         {/* ── Back ── */}
         <div
           ref={backRef}
-          className={`absolute inset-x-0 top-0 flex flex-col gap-4 rounded-2xl border-2 p-4 ${tone.border} ${tone.bg}`}
+          className={`absolute inset-x-0 top-0 flex flex-col gap-4 rounded-2xl border-2 p-4 max-md:border-[1.5px] ${tone.border} ${tone.bg} ${tone.phone}`}
           style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
         >
           <div className="flex flex-col items-center gap-1.5 pt-1">
@@ -231,10 +260,10 @@ export function OutpassFlipCard({
             <p className={`text-lg font-black ${tone.text}`}>{statusLabel}</p>
           </div>
 
-          <div className="flex flex-col gap-3 text-sm">
+          <div className="flex flex-col gap-3 text-sm max-md:text-[13px]">
             {request.approvedBy && (
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">
                   {request.status === 'rejected' ? 'Rejected by' : 'Approved by'}
                 </p>
                 <p className="font-semibold">
@@ -245,19 +274,19 @@ export function OutpassFlipCard({
             )}
             {request.reviewComment && (
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Comment</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Comment</p>
                 <p className="font-semibold">{request.reviewComment}</p>
               </div>
             )}
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Source</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Source</p>
               <p className="flex items-center gap-1 font-semibold">
                 <MapPin className="size-3.5" /> {SOURCE_LABEL[request.source] ?? request.source}
               </p>
             </div>
             {request.exitedAt && (
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Gate Exit</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Gate Exit</p>
                 <p className="font-semibold">
                   {request.exitGateName ? `Via ${request.exitGateName}, ` : ''}
                   {format(parseISO(request.exitedAt), 'd MMM, h:mm a')}
@@ -266,7 +295,7 @@ export function OutpassFlipCard({
             )}
             {request.enteredAt && (
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Gate Return</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Gate Return</p>
                 <p className="font-semibold">
                   {request.entryGateName ? `Via ${request.entryGateName}, ` : ''}
                   {format(parseISO(request.enteredAt), 'd MMM, h:mm a')}
@@ -275,7 +304,7 @@ export function OutpassFlipCard({
             )}
             {hasTrail(request.approval) && request.approval.steps.length > 1 && (
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Approval steps</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground max-md:text-[10px] max-md:font-bold">Approval steps</p>
                 <ApprovalTrail approval={request.approval} className="mt-1" />
               </div>
             )}
@@ -287,9 +316,22 @@ export function OutpassFlipCard({
             )}
           </div>
 
-          <p className="self-end text-[11px] italic text-muted-foreground">Click to flip back</p>
+          <p className="self-end text-[11px] italic text-muted-foreground max-md:text-[10px]">
+            <span className="max-md:hidden">Click to flip back</span>
+            <span className="hidden max-md:inline">Tap to flip back</span>
+          </p>
         </div>
       </motion.div>
+    </div>
+    <button
+      type="button"
+      onClick={() => setFlipped((f) => !f)}
+      aria-pressed={flipped}
+      className="focus-ring inline-flex min-h-11 items-center gap-1.5 self-center rounded-md px-2 text-[12.5px] font-semibold text-brand-blue sm:min-h-8"
+    >
+      <RotateCw className="size-3.5" aria-hidden="true" />
+      {flipped ? 'Show the front of the pass' : 'Flip to see who approved it'}
+    </button>
     </div>
   )
 }

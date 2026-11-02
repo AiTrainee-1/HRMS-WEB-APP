@@ -1,17 +1,19 @@
 import * as React from 'react'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { PHONE_FIELD_LABEL } from '@/components/requests/phone'
 import { cn } from '@/lib/utils'
 
 interface TextareaFieldProps extends Omit<React.ComponentProps<'textarea'>, 'id'> {
   id: string
-  label?: string
+  label?: React.ReactNode
   minLength?: number
   maxLength?: number
 }
 
 /** A reason/comment textarea with a label, live character counter, and a
- * minimum-length hint — matches the mobile app's TextArea component. */
+ * minimum-length hint — matches the mobile app's TextArea component.
+ * Phones: the app's field label (13px semibold) and its 11.5px counter line. */
 export function TextareaField({ id, label, minLength, maxLength, className, value, ...props }: TextareaFieldProps) {
   const length = typeof value === 'string' ? value.length : 0
   const belowMin = !!minLength && length > 0 && length < minLength
@@ -20,10 +22,10 @@ export function TextareaField({ id, label, minLength, maxLength, className, valu
 
   return (
     <div className="flex flex-col gap-1.5">
-      {label && <Label htmlFor={id}>{label}</Label>}
+      {label && <Label htmlFor={id} className={PHONE_FIELD_LABEL}>{label}</Label>}
       <Textarea id={id} value={value} maxLength={maxLength} className={cn(className)} {...props} />
       {(minLength || maxLength) && (
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center justify-between text-xs max-md:text-[11.5px]">
           <span className={cn('text-muted-foreground', belowMin && 'text-warning')}>
             {minLength
               ? length === 0

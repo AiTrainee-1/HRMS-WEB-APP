@@ -6,7 +6,9 @@ import { describe, test } from 'node:test'
 import {
   EXPIRED_NOTICE,
   OTP_LENGTH_BY_CHANNEL,
+  activateFootnote,
   activateIntro,
+  activateStepTitle,
   cleanSeconds,
   codeLabel,
   describeOtpFailure,
@@ -44,6 +46,8 @@ function allWords(channel: OtpChannel | null): string[] {
     resetIntro(channel),
     resetUnavailable(channel),
     activateIntro(channel),
+    activateStepTitle(channel),
+    activateFootnote(channel),
   ]
 }
 
@@ -110,9 +114,18 @@ describe('the words follow the channel', () => {
 
   test('every channel has every sentence, non-empty, and the three forms differ', () => {
     for (const channel of CHANNELS) for (const text of allWords(channel)) assert.ok(text.trim().length > 0)
-    for (const fn of [sendButtonLabel, sendHint, loginIntro, switchToCodeLabel, resetBadge, resetIntro, resetUnavailable, activateIntro]) {
+    for (const fn of [sendButtonLabel, sendHint, loginIntro, switchToCodeLabel, resetBadge, resetIntro, resetUnavailable, activateIntro, activateFootnote]) {
       assert.equal(new Set(CHANNELS.map((c) => fn(c))).size, 3, fn.name)
     }
+  })
+
+  test('the activation step banner and footnote use the mobile app\'s words', () => {
+    assert.equal(activateStepTitle('sms'), 'Verify your mobile number')
+    assert.equal(activateStepTitle('whatsapp'), 'Verify your WhatsApp number')
+    assert.equal(activateStepTitle(null), 'Verify your mobile number')
+    assert.equal(activateFootnote('sms'), 'The code is sent by SMS to the mobile number HR has registered for you.')
+    assert.equal(activateFootnote('whatsapp'), 'The code goes to the WhatsApp number HR has registered for you.')
+    assert.equal(activateFootnote(null), 'The code goes to the mobile number HR has registered for you.')
   })
 
   test('the hint names the digits of the channel: 4 by SMS, 6 on WhatsApp and when not known', () => {

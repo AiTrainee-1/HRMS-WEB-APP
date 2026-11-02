@@ -24,6 +24,9 @@ export type CompensationKind =
   | 'window_late_in'
   | 'window_early_out'
   | 'birthday'
+  | 'compensation_day'
+  | 'balance_credit'
+  | 'alternative_day'
 
 export interface CompensationItem {
   /** Unique within the list (made unique here if the server ever repeats one). */
@@ -261,6 +264,10 @@ const KIND_INFO: Record<CompensationKind, KindInfo> = {
   window_late_in: { label: 'Company late-in time', symbol: 'sunrise', chip: 'chip-sky' },
   window_early_out: { label: 'Company early-out time', symbol: 'sunset', chip: 'chip-indigo' },
   birthday: { label: 'Birthday leave', symbol: 'cake', chip: 'chip-pink' },
+  // Only the year timeline (GET /my/compensation-history) sends these three.
+  compensation_day: { label: 'Compensation day', symbol: 'party', chip: 'chip-teal' },
+  balance_credit: { label: 'Added to balance', symbol: 'handCoins', chip: 'chip-indigo' },
+  alternative_day: { label: 'Alternative day off', symbol: 'bed', chip: 'chip-muted' },
 }
 
 /** A table entry by an outside string, ignoring what every object inherits ('constructor', 'toString'...). */

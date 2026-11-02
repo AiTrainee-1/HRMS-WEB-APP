@@ -20,6 +20,20 @@ declare module 'axios' {
 
 export const apiClient = axios.create({ baseURL })
 
+/**
+ * Ends the signed-in session in the app's memory when the server rejects it (401): AuthProvider registers its sign-out
+ * here, so stored user, query cache and per-user blobs go with the token. The interceptor still does the redirect.
+ */
+let unauthorizedHandler: (() => void) | null = null
+
+/** Registers (or, with null, removes) what runs on a 401 from a non-public request. Returns an unregister function. */
+export function setUnauthorizedHandler(fn: (() => void) | null): () => void {
+  unauthorizedHandler = fn
+  return () => {
+    if (unauthorizedHandler === fn) unauthorizedHandler = null
+  }
+}
+
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY)
   if (token && !config.isPublic) {
@@ -50,6 +64,11 @@ apiClient.interceptors.response.use(
     const status: number | undefined = error?.response?.status
     const skipOffline = error?.config?.skipOfflineDetection === true
     if (status === 401 && !error?.config?.isPublic) {
+      try {
+        unauthorizedHandler?.()
+      } catch {
+        // Signing out must never stop the redirect below.
+      }
       localStorage.removeItem(TOKEN_STORAGE_KEY)
       if (!window.location.pathname.startsWith('/employee-login')) {
         window.location.href = '/employee-login'

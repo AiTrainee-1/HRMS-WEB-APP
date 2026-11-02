@@ -1,7 +1,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Separator } from '@/components/ui/separator'
+import { LogIn, LogOut } from 'lucide-react'
+import { Timeline } from '@/components/kit'
+import { punchStory, to12h } from '@/lib/home-punches'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
+import { HrEditDetails } from '@/components/employee/HrEditDetails'
 import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
+import { hrEditOf } from '@/lib/hr-edit'
 import {
   dayHeadline, earlyOutShown, getCompensationMarker, getDayFlags, getDayMarkers, halfDayRule, isPunchlessRelaxation,
   lateInShown,
@@ -58,6 +62,11 @@ function dayNotes(day: AttendanceDay, policy?: ShiftPolicy | null): string[] {
   return notes
 }
 
+function todayKey(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function DayDetailPanel({
   day, onClose, policy,
 }: {
@@ -69,9 +78,13 @@ export function DayDetailPanel({
   const notes = day ? dayNotes(day, policy) : []
   // What compensation did to this day: its colour + symbol + the server's sentence (or a fixed one for the kind).
   const compensation = day ? getCompensationMarker(day) : null
+  // The day's punches labelled by what they are (Arrived, Stepped out, ...); a past day is over, so its last OUT is "left".
+  const steps = day?.punches?.length ? punchStory(day.punches, { dayIsOver: day.date < todayKey() }) : []
+  // What HR changed on this day and where its approval stands (owner 2026-11-02): first, it explains the day's colour.
+  const hrEdit = hrEditOf(day)
   return (
     <Dialog open={!!day} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         {day && (
           <>
             <DialogHeader>
@@ -80,35 +93,50 @@ export function DayDetailPanel({
                 <span>{dayHeadline(day)}</span>
                 <DayMarkerChips markers={getDayMarkers(day, policy)} />
                 {day.isCompensationDay && (
-                  <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-600">
+                  <span className="rounded-full border border-violet-border bg-violet-bg px-2 py-0.5 text-xs font-semibold text-violet">
                     Compensation Day
                   </span>
                 )}
               </DialogDescription>
             </DialogHeader>
+            {hrEdit && <HrEditDetails edit={hrEdit} headingId={`day-hr-edit-${day.date}`} />}
             {day.status === 'no_record' || day.status === 'future' || !day.firstPunch ? (
-              // A compensation day (birthday leave, a relaxation day) is a real, paid record without any punch.
+              // A real record without any punch: a compensation day (birthday leave, a relaxation day), or a day HR set
+              // through an attendance edit (Casual Leave, On-Duty, a status change).
               <p className="text-sm text-muted-foreground">
-                {compensation && day.status !== 'no_record' && day.status !== 'future'
+                {day.status !== 'no_record' && day.status !== 'future'
                   ? 'No punches on this day.'
                   : 'No attendance record for this day.'}
               </p>
             ) : (
-              <div className="flex flex-col gap-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">First Punch In</span>
-                  <span className="font-medium">{day.firstPunch}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last Punch Out</span>
-                  <span className="font-medium">{day.lastPunch ?? '—'}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Punches</span>
-                  <span className="font-medium">{day.totalPunches ?? 0}</span>
-                </div>
+              <div className="flex flex-col gap-4 text-sm">
+                <dl className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border hairline bg-foreground/[0.03] p-2.5 max-md:border-0 max-md:bg-muted">
+                    <dt className="label-caps text-muted-foreground">First in</dt>
+                    <dd className="mt-0.5 font-semibold tabular-nums">{to12h(day.firstPunch)}</dd>
+                  </div>
+                  <div className="rounded-lg border hairline bg-foreground/[0.03] p-2.5 max-md:border-0 max-md:bg-muted">
+                    <dt className="label-caps text-muted-foreground">Last out</dt>
+                    <dd className="mt-0.5 font-semibold tabular-nums">{day.lastPunch ? to12h(day.lastPunch) : '—'}</dd>
+                  </div>
+                  <div className="rounded-lg border hairline bg-foreground/[0.03] p-2.5 max-md:border-0 max-md:bg-muted">
+                    <dt className="label-caps text-muted-foreground">Punches</dt>
+                    <dd className="mt-0.5 font-semibold tabular-nums">{day.totalPunches ?? 0}</dd>
+                  </div>
+                </dl>
+                {steps.length > 0 && (
+                  <Timeline
+                    ariaLabel="Punches on this day"
+                    items={steps.map((st) => ({
+                      key: st.key,
+                      title: st.label,
+                      time: st.time,
+                      description: st.source || undefined,
+                      icon: st.isIn ? LogIn : LogOut,
+                      tone: st.isIn ? 'emerald' : 'amber',
+                    }))}
+                  />
+                )}
               </div>
             )}
             {compensation && (
@@ -124,7 +152,7 @@ export function DayDetailPanel({
               </div>
             )}
             {notes.length > 0 && (
-              <div className="flex flex-col gap-1.5 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+              <div className="flex flex-col gap-1.5 rounded-lg border hairline bg-foreground/[0.03] p-3 text-[12.5px] text-muted-foreground max-md:border-0 max-md:bg-muted max-md:text-[12px] max-md:leading-[17px]">
                 {notes.map((n) => (
                   <p key={n}>{n}</p>
                 ))}

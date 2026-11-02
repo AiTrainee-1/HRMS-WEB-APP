@@ -124,3 +124,18 @@ export function contactMethods(block: SupportContactBlock): ContactMethod[] {
   }
   return methods
 }
+
+/** The one way to show when a screen has room for a single line ("Need help? Call HR 0421 430 0800"): the first that
+ *  can be linked, else the first that is set (shown as plain text), else null. */
+export function primaryContactMethod(block: SupportContactBlock | null | undefined): ContactMethod | null {
+  if (!block) return null
+  const methods = contactMethods(block)
+  return methods.find((m) => m.href !== '') ?? methods[0] ?? null
+}
+
+/** What a screen reader says for a contact link, e.g. "Call HR Department on 0421 430 0800". */
+export function contactMethodLabel(method: Pick<ContactMethod, 'key' | 'value'>, label: string): string {
+  if (method.key === 'call') return `Call ${label} on ${method.value}`
+  if (method.key === 'whatsapp') return `Message ${label} on WhatsApp at ${method.value}`
+  return `Email ${label} at ${method.value}`
+}

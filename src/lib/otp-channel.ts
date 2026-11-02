@@ -169,6 +169,21 @@ export function activateIntro(channel: OtpChannel | null): string {
   }[form(channel)]
 }
 
+/** First-time access: the title of the step banner while the employee code is asked for (the mobile app's words; an
+ *  SMS code and a code by an unnamed channel both go to the mobile number, so those two read the same). */
+export function activateStepTitle(channel: OtpChannel | null): string {
+  return channel === 'whatsapp' ? 'Verify your WhatsApp number' : 'Verify your mobile number'
+}
+
+/** First-time access: the small line under the code form saying where the code goes (the mobile app's words). */
+export function activateFootnote(channel: OtpChannel | null): string {
+  return {
+    sms: 'The code is sent by SMS to the mobile number HR has registered for you.',
+    whatsapp: 'The code goes to the WhatsApp number HR has registered for you.',
+    neutral: 'The code goes to the mobile number HR has registered for you.',
+  }[form(channel)]
+}
+
 // ---- Failures -------------------------------------------------------------------------------------------
 
 export interface OtpFailure {

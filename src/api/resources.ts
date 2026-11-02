@@ -240,13 +240,17 @@ export const outpassApi = {
 // Both self-scope to the logged-in employee token server-side, same as Outpass above.
 export const teaBreakApi = {
   qrToken: () => apiRequest<{ qrToken: string }>({ method: 'GET', url: '/tea-break/qr-token' }),
-  myStatus: () => apiRequest<TeaBreakStatus>({ method: 'GET', url: '/tea-break/my-status' }),
+  // `month` ("YYYY-MM", the month switcher, 2026-11-02): `recent` is then every break of that month and the reply echoes
+  // `month`; an older server ignores it and sends the latest 10 (backend/api/tea_break_views.py::tea_break_my_status).
+  myStatus: (month?: string) =>
+    apiRequest<TeaBreakStatus>({ method: 'GET', url: '/tea-break/my-status', params: month ? { month } : undefined }),
 }
 
 // ---- Notifications ----
 export const notificationApi = {
   list: () => apiRequest<Notification[]>({ method: 'GET', url: '/notifications' }),
-  markRead: (id: string) => apiRequest<{ success: boolean }>({ method: 'PATCH', url: `/notifications/${id}/read` }),
+  // Answers with the updated row (with its `target` since 2026-11-02); typed loosely, an older server's reply may differ.
+  markRead: (id: string) => apiRequest<Partial<Notification> | null>({ method: 'PATCH', url: `/notifications/${id}/read` }),
   markAllRead: () => apiRequest<{ updated: number }>({ method: 'PATCH', url: '/notifications/mark-all-read' }),
 }
 

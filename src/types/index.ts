@@ -236,6 +236,8 @@ export interface TeaBreakStatus {
   outAt: string | null
   allowedMinutes: number
   recent: TeaBreakLogItem[]
+  /** "YYYY-MM" when the server applied `?month=` (then `recent` is that whole month); absent from an older server. */
+  month?: string | null
 }
 
 export type MissingPunchStatus = 'pending_hod' | 'pending_hr' | 'approved' | 'rejected'
@@ -271,6 +273,39 @@ export interface CasualLeaveMonthEligibility {
   label: string
   eligible: boolean
   reason: string | null
+  /** 2026-11-02: what of the yearly balance is left ("full" = a whole day or more). Absent on an older server. */
+  left?: 'full' | 'one_half' | 'nothing' | string | null
+  /** 2026-11-02: "yearly_balance" (any Casual Leave while the year's balance lasts) or "one_per_month" (the old rule). */
+  rule?: 'yearly_balance' | 'one_per_month' | string | null
+  /** 2026-11-02: the yearly days still free (null under the old rule). */
+  remaining?: number | null
+}
+
+/**
+ * The Casual Leave yearly balance (owner 2026-11-02): 12 days a calendar year, a half day counts 0.5, used any time while
+ * the balance lasts; waiting requests hold their days, a rejected one gives them back; unused days lapse on 31 December
+ * and a fresh 12 start on 1 January. Everyone started fresh at 12 on the cut-over day (2026-11-02): Casual Leave dated
+ * before it is never counted. Sent by GET /casual-leaves/my-eligibility (`balance`) and GET /casual-leaves/history.
+ */
+export interface CasualLeaveBalance {
+  /** The yearly entitlement (12). */
+  total: number
+  /** Approved days that count. */
+  used: number
+  /** Days held by requests still waiting (also a Casual Leave HR proposed on an attendance edit). */
+  pending: number
+  /** total - used - pending (never below 0): what can still be asked for. */
+  remaining: number
+  year: number
+  /** 'YYYY-MM-DD': the first day of the year that counts (the cut-over in its own year, else 1 January); null = no
+   * balance is kept for this year (it is wholly before the cut-over). */
+  since: string | null
+  /** 'YYYY-12-31' */
+  endsOn: string
+  /** 'YYYY-MM-DD': the day the yearly balance started for everyone. */
+  cutOver: string
+  /** False for a year wholly before the cut-over. */
+  tracked: boolean
 }
 
 export interface CasualLeaveEligibility {
@@ -285,15 +320,66 @@ export interface CasualLeaveEligibility {
    * older backend: then `eligible` decides on its own.
    */
   months?: CasualLeaveMonthEligibility[]
+  /** 2026-11-02: the yearly balance. Absent on an older server. */
+  balance?: CasualLeaveBalance | null
+  /** 2026-11-02: which rule today's requests follow. */
+  rule?: 'yearly_balance' | 'one_per_month' | string | null
 }
 
 export interface Notification {
   id: string
   employeeId: string
   type: string
+  /** The headline of a notification made from a WhatsApp message ("Request Approved"); empty on the older one-liners. */
+  title?: string
   message: string
   isRead: boolean
   createdAt: string
+  /**
+   * What the notification is about, for its View button (GET /notifications, 2026-11-02). Absent on an older server
+   * (the page falls back to the type-based link in lib/notifications.ts); null when there is nothing to open. Read it
+   * through lib/notification-target.ts (`normalizeTarget`), never directly: the server's fields are not trusted as-is.
+   */
+  target?: NotificationTargetPayload | null
+}
+
+/** The kinds of page a notification can open (the server's `target.kind`). */
+export type NotificationTargetKind =
+  | 'leave'
+  | 'casual_leave'
+  | 'permission'
+  | 'missing_punch'
+  | 'outpass'
+  | 'on_duty'
+  | 'geo_punch'
+  | 'attendance'
+  | 'salary_slip'
+  | 'documents'
+  | 'id_card'
+  | 'compensation'
+  | 'advance'
+  | 'resignation'
+  | 'chat'
+  | 'approvals'
+  | 'my_requests'
+  | 'request'
+  | 'shift'
+  | 'holidays'
+  | 'profile'
+
+/** A notification's `target` as the server sends it. */
+export interface NotificationTargetPayload {
+  kind: NotificationTargetKind | string
+  /** The row it is about (leave request id, outpass id, On-Duty session id, salary slip id, advance id ...) when known. */
+  id?: number | string | null
+  /** "YYYY-MM-DD" for day events (late / absent / missing punch alerts, attendance edits). */
+  date?: string | null
+  /** approver = the reader must act on it (a Department Head) -> Approvals. */
+  role?: 'self' | 'approver' | string | null
+  /** For role "approver": the Approvals category (leave, permission, casual_leave, attendance, missing_punch ...). */
+  category?: string | null
+  /** The button's words: "View leave request", "Open approvals". */
+  label?: string | null
 }
 
 export interface SalarySlip {
@@ -386,8 +472,38 @@ export interface DayLateFlags {
   compensationNote?: string | null
 }
 
+// ── HR attendance edits (owner 2026-11-02) ──
+// Every change HR proposes on the Attendance Edit page goes to the Department Head and then HR; the day's LATEST edit
+// (waiting or decided) rides on the employee's attendance month as `records[].hrEdit` (null when HR never edited the
+// day; absent on an older server). A "Revert to automatic" makes it disappear. Read it through lib/hr-edit.ts
+// (`hrEditOf`), which checks the shape. Same names as the HR portal's payroll-insights.ts.
+export type HrEditStatus = 'waiting_hod' | 'waiting_hr' | 'applied' | 'rejected'
+export type HrEditOption = 'worked' | 'compensation' | 'not_worked' | 'permission' | 'late' | 'casual_leave' | 'on_duty'
+export type HrEditSide = { label: string; shifts: number | null }
+export type HrEdit = {
+  requestId: number
+  /** One of HrEditStatus today; a status added later stays a plain string (shown with the server's stageLabel). */
+  status: HrEditStatus | (string & {})
+  /** The server's sentence: "Waiting for HR (Department Head Suresh Raj approved on 02 Nov 2026)". */
+  stageLabel: string
+  from: HrEditSide
+  to: HrEditSide
+  option: HrEditOption | (string & {})
+  type: string
+  /** "Permission · Morning Late-In", "Mark as Late", "Casual Leave · First half", "On-Duty", "Present". */
+  typeLabel: string
+  reason: string | null
+  comment: string | null
+  raisedBy: string | null
+  raisedAt: string | null
+  decidedBy: string | null
+  decidedAt: string | null
+}
+
 export interface AttendanceDay extends DayLateFlags {
   date: string
+  /** The day's latest HR attendance edit (2026-11-02); null = none; absent on an older server. */
+  hrEdit?: HrEdit | null
   // 'no_record' is a frontend-only sentinel for calendar cells with no API
   // entry at all (shouldn't normally happen — the backend returns one row
   // per calendar day, including 'future' for days after today).

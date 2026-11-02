@@ -1,14 +1,24 @@
 @import "tailwindcss";
+/* The phone-view contract quotes example classes (md:hidden, rounded-3xl ...); it must not feed the build. */
+@source not "./components/kit/MOBILE.md";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ──────────────────────────────────────────────────────────────────────────
    "Sovereign Loom" — the design system from Stitch project
-   12074820713440557288. Dark is the product's primary look: a midnight-navy
-   canvas, glass work surfaces with hairline borders, sapphire for actions,
-   amber for pending items and alerts, emerald for confirmed and live states.
-   :root is a light "ivory" companion for the theme switch, built from the
-   same hues.
+   12074820713440557288, extended 2026-10-31 with the LOOM signature.
+
+   Dark is the product's primary look: a midnight-navy canvas, glass work
+   surfaces with hairline borders, sapphire for actions, amber for waiting
+   items and alerts, emerald for confirmed and live states, rose for
+   rejected. :root is the light "ivory" companion, built from the same hues.
+
+   The signature: UKTextiles makes yarn, fabric and garments, so the one
+   memorable idea is WOVEN THREAD — a quiet warp-and-weft field behind the
+   page top (components/kit/WeaveBackground), "stitched" seams on highlighted
+   cards (.stitched), a thread-line progress bar (.thread-progress), and a
+   sapphire → violet → amber SILK gradient used sparingly (hero underline,
+   primary button sheen, active nav thread). See components/kit/KIT.md.
    ────────────────────────────────────────────────────────────────────────── */
 :root {
   --background: #f4f6fb;
@@ -22,19 +32,19 @@
   --secondary: #e9eef8;
   --secondary-foreground: #1e293b;
   --muted: #eef2f9;
-  --muted-foreground: #5b6477;
+  --muted-foreground: #556072;
   --accent: #e6ecfb;
   --accent-foreground: #1e3a8a;
   --destructive: #dc2626;
   --destructive-foreground: #fef2f2;
   --border: #dde3ee;
-  --input: #d3dae8;
+  --input: #cfd7e6;
   --ring: #2563eb;
   --radius: 0.5rem;
 
-  --success: #059669;
+  --success: #047857;
   --success-foreground: #ecfdf5;
-  --warning: #d97706;
+  --warning: #b45309;
   --warning-foreground: #fffbeb;
 
   /* brand-* is what pages use for accent text/icons and tinted grounds */
@@ -44,10 +54,66 @@
   --brand-gold: #b45309;
   --brand-gold-deep: #92400e;
   --brand-emerald: #047857;
+  --brand-violet: #6d28d9;
 
   /* filled sapphire surfaces (buttons, active nav) — same in both themes */
   --grad-from: #2563eb;
   --grad-to: #1d4ed8;
+
+  /* ── Silk: sapphire → violet → amber. Sparingly: hero underline, primary
+     button sheen, active nav thread, stitched highlight. Never behind text. */
+  --silk-1: #2563eb;
+  --silk-2: #7c3aed;
+  --silk-3: #d97706;
+  --silk: linear-gradient(90deg, var(--silk-1) 0%, var(--silk-2) 55%, var(--silk-3) 100%);
+  --silk-soft: linear-gradient(90deg, rgb(37 99 235 / 0.12), rgb(124 58 237 / 0.1) 55%, rgb(217 119 6 / 0.1));
+
+  /* ── Status pairs (pill / band backgrounds + text + border). Every fg/bg
+     pair is ≥ 4.5:1 (WCAG AA) in this theme. */
+  --status-waiting-bg: #fef3c7;
+  --status-waiting-fg: #92400e;
+  --status-waiting-border: #f6c453;
+  --status-approved-bg: #d1fae5;
+  --status-approved-fg: #065f46;
+  --status-approved-border: #6ee7b7;
+  --status-rejected-bg: #ffe4e6;
+  --status-rejected-fg: #9f1239;
+  --status-rejected-border: #fda4af;
+  --status-info-bg: #dbeafe;
+  --status-info-fg: #1e40af;
+  --status-info-border: #93c5fd;
+  --status-neutral-bg: #e9edf4;
+  --status-neutral-fg: #334155;
+  --status-neutral-border: #cbd5e1;
+  --status-violet-bg: #ede9fe;
+  --status-violet-fg: #5b21b6;
+  --status-violet-border: #c4b5fd;
+
+  /* ── Glows (hover / focus auras) */
+  --glow-primary: 0 0 0 1px rgb(37 99 235 / 0.28), 0 14px 32px -12px rgb(37 99 235 / 0.4);
+  --glow-success: 0 0 0 1px rgb(5 150 105 / 0.28), 0 14px 32px -12px rgb(5 150 105 / 0.35);
+  --glow-warning: 0 0 0 1px rgb(217 119 6 / 0.3), 0 14px 32px -12px rgb(217 119 6 / 0.35);
+  --glow-danger: 0 0 0 1px rgb(225 29 72 / 0.28), 0 14px 32px -12px rgb(225 29 72 / 0.35);
+  --glow-follow: rgb(37 99 235 / 0.08);
+  --shadow-lift: 0 18px 40px -14px rgb(30 41 59 / 0.28), 0 0 0 1px rgb(37 99 235 / 0.22);
+
+  /* ── Weave (read by WeaveBackground's canvas; comma rgba on purpose) */
+  --weave-warp: rgba(30, 58, 138, 0.075);
+  --weave-weft: rgba(30, 58, 138, 0.06);
+  --weave-accent: 0.5;
+  --weave-glow: rgba(37, 99, 235, 0.42);
+  --weave-shuttle: rgba(124, 58, 237, 0.55);
+
+  /* ── Skeleton shimmer */
+  --skeleton-base: rgb(15 23 42 / 0.06);
+  --skeleton-shine: rgb(15 23 42 / 0.11);
+
+  /* ── Motion */
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --glass-bg: rgb(255 255 255 / 0.8);
   --glass-bg-raised: rgb(255 255 255 / 0.94);
@@ -63,21 +129,21 @@
   --foreground: #dae2fd;
   --card: #131b2e;
   --card-foreground: #dae2fd;
-  --popover: #1e293b;
+  --popover: #1a2338;
   --popover-foreground: #e2e8f0;
   --primary: #3b6ef5;
   --primary-foreground: #f8fafc;
   --secondary: #171f33;
   --secondary-foreground: #dae2fd;
   --muted: #131b2e;
-  --muted-foreground: #94a3b8;
+  --muted-foreground: #9aa8bf;
   --accent: #222a3d;
   --accent-foreground: #dae2fd;
   --destructive: #f87171;
   --destructive-foreground: #1f0a0a;
   --border: #243049;
-  --input: #2d3852;
-  --ring: #3b6ef5;
+  --input: #33405c;
+  --ring: #5b8bff;
 
   --success: #34d399;
   --success-foreground: #022c1e;
@@ -90,6 +156,47 @@
   --brand-gold: #fbbf24;
   --brand-gold-deep: #ffb95f;
   --brand-emerald: #4edea3;
+  --brand-violet: #c4b5fd;
+
+  --silk-1: #5b8bff;
+  --silk-2: #a78bfa;
+  --silk-3: #fbbf24;
+  --silk-soft: linear-gradient(90deg, rgb(91 139 255 / 0.16), rgb(167 139 250 / 0.13) 55%, rgb(251 191 36 / 0.1));
+
+  --status-waiting-bg: rgb(245 158 11 / 0.15);
+  --status-waiting-fg: #fcd34d;
+  --status-waiting-border: rgb(245 158 11 / 0.38);
+  --status-approved-bg: rgb(16 185 129 / 0.15);
+  --status-approved-fg: #6ee7b7;
+  --status-approved-border: rgb(16 185 129 / 0.38);
+  --status-rejected-bg: rgb(244 63 94 / 0.15);
+  --status-rejected-fg: #fda4af;
+  --status-rejected-border: rgb(244 63 94 / 0.4);
+  --status-info-bg: rgb(59 130 246 / 0.17);
+  --status-info-fg: #a5c4ff;
+  --status-info-border: rgb(96 140 255 / 0.4);
+  --status-neutral-bg: rgb(148 163 184 / 0.14);
+  --status-neutral-fg: #cbd5e1;
+  --status-neutral-border: rgb(148 163 184 / 0.3);
+  --status-violet-bg: rgb(139 92 246 / 0.17);
+  --status-violet-fg: #c4b5fd;
+  --status-violet-border: rgb(139 92 246 / 0.4);
+
+  --glow-primary: 0 0 0 1px rgb(91 139 255 / 0.4), 0 16px 40px -12px rgb(59 110 245 / 0.55);
+  --glow-success: 0 0 0 1px rgb(52 211 153 / 0.35), 0 16px 40px -12px rgb(16 185 129 / 0.45);
+  --glow-warning: 0 0 0 1px rgb(251 191 36 / 0.35), 0 16px 40px -12px rgb(245 158 11 / 0.45);
+  --glow-danger: 0 0 0 1px rgb(251 113 133 / 0.38), 0 16px 40px -12px rgb(244 63 94 / 0.45);
+  --glow-follow: rgb(120 160 255 / 0.11);
+  --shadow-lift: 0 22px 48px -14px rgb(2 6 23 / 0.7), 0 0 0 1px rgb(91 139 255 / 0.35);
+
+  --weave-warp: rgba(148, 170, 214, 0.075);
+  --weave-weft: rgba(148, 170, 214, 0.06);
+  --weave-accent: 0.6;
+  --weave-glow: rgba(147, 180, 255, 0.5);
+  --weave-shuttle: rgba(196, 181, 253, 0.6);
+
+  --skeleton-base: rgb(255 255 255 / 0.05);
+  --skeleton-shine: rgb(255 255 255 / 0.1);
 
   --glass-bg: rgb(30 41 59 / 0.7);
   --glass-bg-raised: rgb(30 41 59 / 0.85);
@@ -130,6 +237,31 @@
   --color-brand-gold: var(--brand-gold);
   --color-brand-gold-deep: var(--brand-gold-deep);
   --color-brand-emerald: var(--brand-emerald);
+  --color-brand-violet: var(--brand-violet);
+
+  /* Status colours as utilities: text-waiting, bg-waiting-bg, border-waiting-border, ... */
+  --color-waiting: var(--status-waiting-fg);
+  --color-waiting-bg: var(--status-waiting-bg);
+  --color-waiting-border: var(--status-waiting-border);
+  --color-approved: var(--status-approved-fg);
+  --color-approved-bg: var(--status-approved-bg);
+  --color-approved-border: var(--status-approved-border);
+  --color-rejected: var(--status-rejected-fg);
+  --color-rejected-bg: var(--status-rejected-bg);
+  --color-rejected-border: var(--status-rejected-border);
+  --color-info: var(--status-info-fg);
+  --color-info-bg: var(--status-info-bg);
+  --color-info-border: var(--status-info-border);
+  --color-neutral: var(--status-neutral-fg);
+  --color-neutral-bg: var(--status-neutral-bg);
+  --color-neutral-border: var(--status-neutral-border);
+  --color-violet: var(--status-violet-fg);
+  --color-violet-bg: var(--status-violet-bg);
+  --color-violet-border: var(--status-violet-border);
+  --color-silk-1: var(--silk-1);
+  --color-silk-2: var(--silk-2);
+  --color-silk-3: var(--silk-3);
+
   --font-sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
   --font-label: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
@@ -193,6 +325,34 @@
   background-image: linear-gradient(135deg, var(--grad-from) 0%, var(--grad-to) 100%);
 }
 
+/* The silk gradient as a fill (thin lines, dots, rings — never behind text). */
+@utility bg-silk {
+  background-image: var(--silk);
+}
+/* Silk as text: only for display-size words (≥ 24px), where every hue in it
+   still passes AA against the canvas. */
+@utility text-silk {
+  background-image: var(--silk);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+/* The keyboard focus ring every kit control uses: a 2px gap in the page
+   colour, then a 2px sapphire ring. Visible in both themes. */
+@utility focus-ring {
+  outline: none;
+  &:focus-visible {
+    box-shadow:
+      0 0 0 2px var(--background),
+      0 0 0 4px var(--ring);
+  }
+}
+/* 44px minimum touch target (WCAG 2.5.5) without changing the visual size. */
+@utility tap-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -213,6 +373,9 @@
   h3 {
     text-wrap: balance;
   }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 30%, transparent);
+  }
 }
 
 @layer utilities {
@@ -223,6 +386,12 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: var(--border);
     border-radius: 999px;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   /* Elevation. Kept under the old "clay" names so every page that already
@@ -246,11 +415,13 @@
       transform 0.25s ease,
       border-color 0.25s ease;
   }
-  .shadow-clay-hover:hover {
-    box-shadow:
-      0 16px 36px -8px rgb(var(--clay-shadow-color) / 0.45),
-      0 0 0 1px rgb(37 99 235 / 0.35);
-    transform: translateY(-2px);
+  @media (hover: hover) {
+    .shadow-clay-hover:hover {
+      box-shadow:
+        0 16px 36px -8px rgb(var(--clay-shadow-color) / 0.45),
+        0 0 0 1px rgb(37 99 235 / 0.35);
+      transform: translateY(-2px);
+    }
   }
 
   .bg-brand-gradient-radial {
@@ -298,6 +469,183 @@
     border-color: var(--glass-border);
   }
 
+  /* ── LOOM signature ─────────────────────────────────────────────────── */
+
+  /* A sewn seam: a dashed line 5px inside the card's edge. Highlights ONE
+     card per view (the next step, the current payslip, a pinned notice).
+     Colour via --stitch (defaults to sapphire); see GlassCard tone. */
+  :where(.stitched) {
+    position: relative;
+    isolation: isolate;
+    --stitch: color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+  .stitched::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    z-index: -1;
+    border: 1.5px dashed var(--stitch);
+    border-radius: calc(var(--radius) + 2px);
+    pointer-events: none;
+  }
+
+  /* A static woven texture (pure CSS, zero cost) for small surfaces:
+     empty-state halos, the auth panel, print. The animated field is the
+     WeaveBackground canvas. */
+  .weave-static {
+    background-image:
+      repeating-linear-gradient(0deg, var(--weave-weft) 0 1px, transparent 1px 18px),
+      repeating-linear-gradient(90deg, var(--weave-warp) 0 1px, transparent 1px 18px);
+  }
+
+  /* The silk underline under a hero heading: drawn in by PageHero, then the
+     colours flow slowly along it. */
+  .silk-line {
+    height: 3px;
+    border-radius: 999px;
+    background-image: linear-gradient(90deg, var(--silk-1), var(--silk-2), var(--silk-3), var(--silk-2), var(--silk-1));
+    background-size: 300% 100%;
+    animation: silk-flow 9s linear infinite;
+  }
+  @keyframes silk-flow {
+    from {
+      background-position: 0% 0;
+    }
+    to {
+      background-position: 300% 0;
+    }
+  }
+
+  /* Primary-button sheen: a soft light sweep across on hover (pointer
+     devices only). An overlay, so a page's own bg-* class still shows. */
+  /* :where() keeps these at zero specificity, so a page's own `absolute` /
+     `overflow-visible` class always wins. */
+  :where(.btn-sheen) {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .btn-sheen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(
+      110deg,
+      transparent 25%,
+      rgb(255 255 255 / 0.28) 42%,
+      rgb(196 181 253 / 0.3) 50%,
+      rgb(253 230 138 / 0.18) 56%,
+      transparent 70%
+    );
+    transform: translateX(-120%);
+    transition: transform 0s;
+  }
+  @media (hover: hover) {
+    .btn-sheen:hover::after {
+      transform: translateX(120%);
+      transition: transform 0.75s var(--ease-out);
+    }
+  }
+
+  /* Spring hover lift for interactive cards (pointer devices only). */
+  .lift {
+    transition:
+      transform var(--dur-base) var(--ease-spring),
+      box-shadow var(--dur-base) var(--ease-out),
+      border-color var(--dur-base) var(--ease-out);
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-lift);
+      border-color: color-mix(in srgb, var(--primary) 40%, var(--glass-border));
+    }
+  }
+  .lift:active {
+    transform: translateY(-1px) scale(0.995);
+  }
+
+  /* A soft light that follows the pointer inside an interactive card. The
+     card sets --mx / --my (GlassCard does it); under the content (z -1). */
+  :where(.glow-follow) {
+    position: relative;
+    isolation: isolate;
+  }
+  .glow-follow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), var(--glow-follow), transparent 65%);
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  @media (hover: hover) {
+    .glow-follow:hover::before {
+      opacity: 1;
+    }
+  }
+
+  /* Thread-line progress: a hairline track with a silk thread running along
+     it. Indeterminate by default; [data-value] sets a determinate width via
+     --progress (0-100). */
+  .thread-progress {
+    position: relative;
+    height: 2px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+  }
+  .thread-progress::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 38%;
+    border-radius: 999px;
+    background-image: var(--silk);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--silk-2) 60%, transparent);
+    animation: thread-run 1.4s var(--ease-out) infinite;
+  }
+  .thread-progress[data-value]::after {
+    width: calc(var(--progress, 0) * 1%);
+    animation: none;
+    transition: width var(--dur-slow) var(--ease-out);
+  }
+  @keyframes thread-run {
+    from {
+      transform: translateX(-110%);
+    }
+    to {
+      transform: translateX(280%);
+    }
+  }
+
+  /* Skeleton shimmer in the theme's own colours. */
+  .skeleton-shimmer {
+    background-color: var(--skeleton-base);
+    background-image: linear-gradient(90deg, transparent 0%, var(--skeleton-shine) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  /* The current step of a stepper / a live dot: a ring that breathes out. */
+  .pulse-ring {
+    animation: pulse-ring 2s var(--ease-out) infinite;
+  }
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 9px color-mix(in srgb, currentColor 0%, transparent);
+    }
+  }
+
   /* Typography roles */
   .font-display {
     font-family: var(--font-display);
@@ -322,7 +670,7 @@
     font-variant-numeric: lining-nums tabular-nums;
   }
 
-  /* Status chips: emerald / amber / red / sapphire / slate glass tints */
+  /* Status chips: AA-contrast status pairs (see --status-* tokens). */
   .chip {
     display: inline-flex;
     align-items: center;
@@ -338,50 +686,63 @@
     white-space: nowrap;
   }
   .chip-success {
-    background: rgb(16 185 129 / 0.12);
-    border-color: rgb(16 185 129 / 0.3);
-    color: var(--success);
+    background: var(--status-approved-bg);
+    border-color: var(--status-approved-border);
+    color: var(--status-approved-fg);
   }
   .chip-warning {
-    background: rgb(245 158 11 / 0.12);
-    border-color: rgb(245 158 11 / 0.3);
-    color: var(--warning);
+    background: var(--status-waiting-bg);
+    border-color: var(--status-waiting-border);
+    color: var(--status-waiting-fg);
   }
   .chip-danger {
-    background: rgb(239 68 68 / 0.12);
-    border-color: rgb(239 68 68 / 0.3);
-    color: var(--destructive);
+    background: var(--status-rejected-bg);
+    border-color: var(--status-rejected-border);
+    color: var(--status-rejected-fg);
   }
   .chip-info {
-    background: rgb(37 99 235 / 0.12);
-    border-color: rgb(37 99 235 / 0.32);
-    color: var(--brand-blue);
+    background: var(--status-info-bg);
+    border-color: var(--status-info-border);
+    color: var(--status-info-fg);
   }
   .chip-muted {
-    background: rgb(100 116 139 / 0.15);
-    border-color: rgb(148 163 184 / 0.2);
-    color: var(--muted-foreground);
+    background: var(--status-neutral-bg);
+    border-color: var(--status-neutral-border);
+    color: var(--status-neutral-fg);
   }
   /* Overdue / Excess permission: orange, so it reads apart from amber (pending) and red (not allowed) */
   .chip-excess {
     background: rgb(234 88 12 / 0.13);
     border-color: rgb(234 88 12 / 0.35);
-    color: #c2410c;
+    color: #9a3412;
   }
   .dark .chip-excess {
-    color: #fb923c;
+    color: #fdba74;
+  }
+  /* Safety net for solid status fills. The dark theme's emerald/rose/amber fills are bright (#34d399, #f87171,
+     #fbbf24), so white text or glyphs on them fall to 1.6-2.8:1. Kit code uses the matching `text-*-foreground`
+     token; this catches a page that still pairs a solid fill with `text-white` and gives it the near-black
+     foreground instead. Light mode is untouched (white on its 700-level fills passes). */
+  .dark .bg-success.text-white {
+    color: var(--success-foreground);
+  }
+  .dark .bg-destructive.text-white {
+    color: var(--destructive-foreground);
+  }
+  .dark .bg-warning.text-white {
+    color: var(--warning-foreground);
   }
   /* Compensation kinds (attendance calendar markers and the Compensation page): each has its own hue, apart from the
-     status tones above. Light mode uses the 700 shade for contrast, dark mode the 300 shade. */
+     status tones above. Light mode uses the 700-800 shade for contrast, dark mode the 300 shade. */
   .chip-teal {
     background: rgb(20 184 166 / 0.12);
     border-color: rgb(20 184 166 / 0.32);
-    color: #0f766e;
+    color: #115e59;
   }
   .chip-sky {
     background: rgb(14 165 233 / 0.12);
     border-color: rgb(14 165 233 / 0.32);
-    color: #0369a1;
+    color: #075985;
   }
   .chip-indigo {
     background: rgb(99 102 241 / 0.12);
@@ -391,17 +752,17 @@
   .chip-pink {
     background: rgb(236 72 153 / 0.12);
     border-color: rgb(236 72 153 / 0.32);
-    color: #be185d;
+    color: #9d174d;
   }
   .chip-fuchsia {
     background: rgb(217 70 239 / 0.12);
     border-color: rgb(217 70 239 / 0.32);
-    color: #a21caf;
+    color: #86198f;
   }
   .chip-violet {
     background: rgb(139 92 246 / 0.12);
     border-color: rgb(139 92 246 / 0.32);
-    color: #6d28d9;
+    color: #5b21b6;
   }
   .dark .chip-teal {
     color: #5eead4;
@@ -444,10 +805,12 @@
   }
 
   /* Soft sapphire aura on primary actions */
-  .glow-primary:hover {
-    box-shadow:
-      0 0 16px rgb(37 99 235 / 0.4),
-      inset 0 1px 0 rgb(255 255 255 / 0.2);
+  @media (hover: hover) {
+    .glow-primary:hover {
+      box-shadow:
+        var(--glow-primary),
+        inset 0 1px 0 rgb(255 255 255 / 0.2);
+    }
   }
 
   /* Horizontal ticker for the live floor feed */
@@ -463,6 +826,110 @@
     }
     to {
       transform: translateX(-50%);
+    }
+  }
+
+  /* ── Radix enter / exit (dialogs, sheets, popovers, menus, tooltips) ──────
+     Keyed on data-state, so Radix waits for the exit animation before it
+     unmounts. Transforms here compose with Tailwind's `translate` property. */
+  .ui-fade[data-state='open'] {
+    animation: ui-fade-in var(--dur-base) var(--ease-out);
+  }
+  .ui-fade[data-state='closed'] {
+    animation: ui-fade-out var(--dur-fast) ease-in forwards;
+  }
+  .ui-pop[data-state='open'],
+  .ui-pop[data-state='delayed-open'],
+  .ui-pop[data-state='instant-open'] {
+    animation: ui-pop-in var(--dur-base) var(--ease-out);
+  }
+  .ui-pop[data-state='closed'] {
+    animation: ui-pop-out var(--dur-fast) ease-in forwards;
+  }
+  .ui-slide-left[data-state='open'] {
+    animation: ui-slide-in-left 320ms var(--ease-out);
+  }
+  .ui-slide-left[data-state='closed'] {
+    animation: ui-slide-out-left 200ms ease-in forwards;
+  }
+  .ui-slide-right[data-state='open'] {
+    animation: ui-slide-in-right 320ms var(--ease-out);
+  }
+  .ui-slide-right[data-state='closed'] {
+    animation: ui-slide-out-right 200ms ease-in forwards;
+  }
+  .ui-slide-bottom[data-state='open'] {
+    animation: ui-slide-in-bottom 320ms var(--ease-out);
+  }
+  .ui-slide-bottom[data-state='closed'] {
+    animation: ui-slide-out-bottom 200ms ease-in forwards;
+  }
+  .ui-slide-top[data-state='open'] {
+    animation: ui-slide-in-top 320ms var(--ease-out);
+  }
+  .ui-slide-top[data-state='closed'] {
+    animation: ui-slide-out-top 200ms ease-in forwards;
+  }
+  @keyframes ui-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes ui-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes ui-pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.97);
+    }
+  }
+  @keyframes ui-pop-out {
+    to {
+      opacity: 0;
+      transform: translateY(4px) scale(0.98);
+    }
+  }
+  @keyframes ui-slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes ui-slide-out-left {
+    to {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes ui-slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes ui-slide-out-right {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes ui-slide-in-bottom {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes ui-slide-out-bottom {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes ui-slide-in-top {
+    from {
+      transform: translateY(-100%);
+    }
+  }
+  @keyframes ui-slide-out-top {
+    to {
+      transform: translateY(-100%);
     }
   }
 
@@ -587,11 +1054,272 @@
     animation: var(--animate-blob);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .marquee,
-    .pip-live,
-    .animate-blob {
-      animation: none;
+  /* ── PHONE VIEW (< 768px): the mobile app's flat surfaces ──────────────────
+     Only inside the signed-in shell (data-shell="employee" on EmployeeLayout;
+     portals included, the sign-in pages excluded). :where() keeps each rule at
+     the plain class's own specificity, so it replaces only what that class sets.
+     Placed after the classes it overrides (same layer, later wins). Desktop is
+     untouched: everything here is inside the phone media query. kit/MOBILE.md. */
+  @media (width < 48rem) {
+    /* The app's body size (bodyMd 14px) for text that sets none; no grey tap flash - controls show their own press state. */
+    :where(:root:has([data-shell='employee'])) body {
+      font-size: 14px;
+      -webkit-tap-highlight-color: transparent;
     }
+    /* Glass -> the app's flat card: solid bgCard (tokens below), hairline border, no frosting. */
+    :where(:root:has([data-shell='employee'])) .glass,
+    :where(:root:has([data-shell='employee'])) .glass-raised {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    /* The app's three elevations (ClayElevation low / mid / high). */
+    :where(:root:has([data-shell='employee'])) .shadow-clay-sm {
+      box-shadow: var(--m-shadow-low);
+    }
+    :where(:root:has([data-shell='employee'])) .glass-raised,
+    :where(:root:has([data-shell='employee'])) .shadow-clay {
+      box-shadow: var(--m-shadow-mid);
+    }
+    :where(:root:has([data-shell='employee'])) .shadow-clay-lg {
+      box-shadow: var(--m-shadow-high);
+    }
+    /* The highlighted card: the app marks it with a coloured LEFT accent border, not a sewn seam. */
+    :where(:root:has([data-shell='employee'])) .stitched {
+      border-left: 4px solid var(--stitch);
+    }
+    :where(:root:has([data-shell='employee'])) .stitched::after {
+      content: none;
+    }
+    /* No woven texture, no silk underline, borderless status chips - none of them exist in the app. */
+    :where(:root:has([data-shell='employee'])) .weave-static {
+      background-image: none;
+    }
+    :where(:root:has([data-shell='employee'])) .silk-line {
+      display: none;
+    }
+    :where(:root:has([data-shell='employee'])) .chip {
+      border-color: transparent;
+    }
+    /* Dialogs are bottom sheets on phones (geometry in ui/dialog.tsx): they slide up instead of popping in. */
+    :where(:root:has([data-shell='employee'])) [data-slot='dialog-content'].ui-pop[data-state='open'] {
+      animation: ui-slide-in-bottom 320ms var(--ease-out);
+    }
+    :where(:root:has([data-shell='employee'])) [data-slot='dialog-content'].ui-pop[data-state='closed'] {
+      animation: ui-slide-out-bottom 200ms ease-in forwards;
+    }
+  }
+}
+
+/* ══ PHONE VIEW (< 768px) — the Employee MOBILE APP's palette ════════════════
+   uktextiles-employee-app: src/constants/colors.ts (light, its default) and
+   src/theme/palettes.ts (dark), BorderRadius / ClayElevation in
+   src/constants/theme.ts, Plus Jakarta Sans headings + Inter body from
+   src/constants/typography.ts. Same token NAMES as the desktop theme, so every
+   bg-card / text-muted-foreground / bg-waiting-bg ... on every page follows.
+   Scoped to the signed-in shell: data-shell="employee" sits on EmployeeLayout's
+   root, so the sign-in pages (their own violet look) are untouched. Colour
+   pairs that carry text stay WCAG AA (the app's vivid fills are swapped for the
+   700-level / dark-text pairs where white text would fail).
+   Desktop (>= 768px) never sees any of this. See src/components/kit/MOBILE.md. */
+@media (width < 48rem) {
+  :root:has([data-shell='employee']) {
+    --background: #f8fafc; /* bgLight */
+    --foreground: #0f172a; /* textPrimary */
+    --card: #ffffff; /* bgCard */
+    --card-foreground: #0f172a;
+    --popover: #ffffff;
+    --popover-foreground: #0f172a;
+    --primary: #1e3a8a; /* Deep Sapphire */
+    --primary-foreground: #ffffff;
+    --secondary: #f1f5f9; /* bgSurfaceLow */
+    --secondary-foreground: #334155; /* textSecondary */
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b; /* textMuted */
+    --accent: #dbeafe; /* primaryFixed */
+    --accent-foreground: #1e3a8a;
+    --destructive: #e11d48; /* statusRed */
+    --destructive-foreground: #ffffff;
+    --border: #e2e8f0; /* border */
+    --input: #cbd5e1; /* outlineVariant */
+    --ring: #2563eb; /* primaryLight */
+    --radius: 0.75rem; /* rounded-lg 12 (BorderRadius.md), rounded-xl 16 (lg/xl - cards), rounded-3xl 24 (xxl - sheets) */
+
+    --success: #047857;
+    --success-foreground: #ffffff;
+    --warning: #b45309;
+    --warning-foreground: #ffffff;
+
+    --brand-blue: #1e3a8a;
+    --brand-blue-light: #2563eb;
+    --brand-blue-tint: #eff6ff;
+    --brand-gold: #b45309;
+    --brand-gold-deep: #92400e;
+    --brand-emerald: #047857;
+    --brand-violet: #7e22ce;
+
+    /* gradientPrimary - the app's header / hero gradient; white text passes on both stops */
+    --grad-from: #1e3a8a;
+    --grad-to: #2563eb;
+    /* No silk in the app: the few silk accents left become a calm sapphire line. */
+    --silk-1: #1e3a8a;
+    --silk-2: #2563eb;
+    --silk-3: #3b82f6;
+    --silk-soft: linear-gradient(90deg, rgb(30 58 138 / 0.1), rgb(37 99 235 / 0.08));
+
+    /* Badge pairs (badgeYellow / badgeGreen / badgeRed / badgeBlue / badgePending / badgeLeave) */
+    --status-waiting-bg: #fffbeb;
+    --status-waiting-fg: #b45309;
+    --status-waiting-border: #fde68a;
+    --status-approved-bg: #ecfdf5;
+    --status-approved-fg: #047857;
+    --status-approved-border: #a7f3d0;
+    --status-rejected-bg: #fff1f2;
+    --status-rejected-fg: #be123c;
+    --status-rejected-border: #fecdd3;
+    --status-info-bg: #dbeafe;
+    --status-info-fg: #1e3a8a;
+    --status-info-border: #bfdbfe;
+    --status-neutral-bg: #f1f5f9;
+    --status-neutral-fg: #475569;
+    --status-neutral-border: #e2e8f0;
+    --status-violet-bg: #faf5ff;
+    --status-violet-fg: #7e22ce;
+    --status-violet-border: #e9d5ff;
+
+    --glow-primary: 0 0 0 1px rgb(30 58 138 / 0.2), 0 6px 16px -8px rgb(30 58 138 / 0.35);
+    --glow-success: 0 0 0 1px rgb(4 120 87 / 0.2), 0 6px 16px -8px rgb(4 120 87 / 0.3);
+    --glow-warning: 0 0 0 1px rgb(180 83 9 / 0.2), 0 6px 16px -8px rgb(180 83 9 / 0.3);
+    --glow-danger: 0 0 0 1px rgb(225 29 72 / 0.2), 0 6px 16px -8px rgb(225 29 72 / 0.3);
+    --glow-follow: transparent;
+    --shadow-lift: 0 4px 10px -2px rgb(15 23 42 / 0.08), 0 0 0 1px #cbd5e1;
+
+    --glass-bg: #ffffff;
+    --glass-bg-raised: #ffffff;
+    --glass-border: #e2e8f0;
+    --glass-highlight: linear-gradient(transparent, transparent);
+    --clay-shadow-color: 15 23 42;
+    --canvas-glow: none;
+
+    /* ClayElevation: low = cards, mid = floating, high = sheets / dialogs */
+    --m-shadow-low: 0 1px 3px rgb(15 23 42 / 0.06);
+    --m-shadow-mid: 0 4px 10px -2px rgb(15 23 42 / 0.08);
+    --m-shadow-high: 0 10px 24px -6px rgb(15 23 42 / 0.12), 0 -2px 12px rgb(15 23 42 / 0.05);
+
+    /* Type: Plus Jakarta Sans for titles and figures (font-display / metric), Inter for labels and body */
+    --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    --font-label: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+    /* Phone layout numbers for pages (MOBILE.md) */
+    --m-gutter: 16px;
+    --m-topbar-h: 52px;
+    --m-tabbar-h: calc(56px + max(env(safe-area-inset-bottom), 8px));
+  }
+
+  :root.dark:has([data-shell='employee']) {
+    --background: #0b1220; /* bgLight (dark) */
+    --foreground: #f1f5f9;
+    --card: #111827; /* bgCard */
+    --card-foreground: #f1f5f9;
+    --popover: #111827;
+    --popover-foreground: #f1f5f9;
+    --primary: #60a5fa;
+    --primary-foreground: #0b1220; /* onPrimary */
+    --secondary: #152238; /* bgSurfaceMid */
+    --secondary-foreground: #cbd5e1;
+    --muted: #0f172a; /* bgSurfaceLow */
+    --muted-foreground: #94a3b8;
+    --accent: #1e3a5f; /* primaryFixed */
+    --accent-foreground: #93c5fd;
+    --destructive: #fb7185;
+    --destructive-foreground: #1f0a0a;
+    --border: #1e293b;
+    --input: #334155; /* outlineVariant */
+    --ring: #60a5fa;
+    --radius: 0.75rem;
+
+    --success: #34d399;
+    --success-foreground: #022c1e;
+    --warning: #fbbf24;
+    --warning-foreground: #2a1700;
+
+    --brand-blue: #60a5fa;
+    --brand-blue-light: #93c5fd;
+    --brand-blue-tint: #0b1220;
+    --brand-gold: #fbbf24;
+    --brand-gold-deep: #fcd34d;
+    --brand-emerald: #34d399;
+    --brand-violet: #c084fc;
+
+    /* Filled buttons keep white text: a sapphire that passes AA with it */
+    --grad-from: #2563eb;
+    --grad-to: #1d4ed8;
+    --silk-1: #3b82f6;
+    --silk-2: #60a5fa;
+    --silk-3: #93c5fd;
+    --silk-soft: linear-gradient(90deg, rgb(96 165 250 / 0.14), rgb(147 197 253 / 0.1));
+
+    --status-waiting-bg: #3d2e0a;
+    --status-waiting-fg: #fcd34d;
+    --status-waiting-border: rgb(251 191 36 / 0.3);
+    --status-approved-bg: #0f2e22;
+    --status-approved-fg: #6ee7b7;
+    --status-approved-border: rgb(52 211 153 / 0.3);
+    --status-rejected-bg: #3f1720;
+    --status-rejected-fg: #fca5a5;
+    --status-rejected-border: rgb(251 113 133 / 0.32);
+    --status-info-bg: #0f2a4a;
+    --status-info-fg: #93c5fd;
+    --status-info-border: rgb(96 165 250 / 0.32);
+    --status-neutral-bg: #1e293b;
+    --status-neutral-fg: #94a3b8;
+    --status-neutral-border: #334155;
+    --status-violet-bg: #2e1065;
+    --status-violet-fg: #d8b4fe;
+    --status-violet-border: rgb(192 132 252 / 0.32);
+
+    --glow-primary: 0 0 0 1px rgb(96 165 250 / 0.35), 0 8px 20px -10px rgb(37 99 235 / 0.5);
+    --glow-success: 0 0 0 1px rgb(52 211 153 / 0.3), 0 8px 20px -10px rgb(16 185 129 / 0.4);
+    --glow-warning: 0 0 0 1px rgb(251 191 36 / 0.3), 0 8px 20px -10px rgb(245 158 11 / 0.4);
+    --glow-danger: 0 0 0 1px rgb(251 113 133 / 0.32), 0 8px 20px -10px rgb(244 63 94 / 0.4);
+    --glow-follow: transparent;
+    --shadow-lift: 0 0 0 1px #334155;
+
+    --glass-bg: #111827;
+    --glass-bg-raised: #152238;
+    --glass-border: #1e293b;
+    --glass-highlight: linear-gradient(transparent, transparent);
+    --clay-shadow-color: 0 0 0;
+    --canvas-glow: none;
+
+    /* On a dark ground shadows barely read; the hairline border carries depth (the app's DarkElevationBorderColor). */
+    --m-shadow-low: none;
+    --m-shadow-mid: 0 6px 16px -4px rgb(0 0 0 / 0.45);
+    --m-shadow-high: 0 12px 32px -6px rgb(0 0 0 / 0.6);
+
+    --skeleton-base: rgb(255 255 255 / 0.05);
+    --skeleton-shine: rgb(255 255 255 / 0.1);
+  }
+}
+
+/* ── Reduced motion: no movement anywhere, states change instantly. Framer
+   Motion is gated separately (MotionConfig reducedMotion="user" in App.tsx,
+   kit/useReducedMotion for canvas and counters). The loader keeps its tile
+   but stops tumbling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .lift:hover,
+  .lift:active,
+  .shadow-clay-hover:hover {
+    transform: none !important;
+  }
+  .btn-sheen::after {
+    display: none;
   }
 }
