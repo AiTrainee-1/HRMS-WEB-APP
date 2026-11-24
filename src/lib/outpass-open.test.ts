@@ -13,6 +13,7 @@ import {
   outpassRowLabel,
   passTypeLabel,
   pickOpenPass,
+  pickPendingPass,
 } from './outpass-open.ts'
 
 const NOW = Date.parse('2026-10-31T06:00:00Z')
@@ -50,7 +51,7 @@ test('clocks: out with and without a return time, late, ready', () => {
 })
 
 test('row pills', () => {
-  assert.deepEqual(outpassRowLabel({ status: 'pending' }), { label: 'Waiting', tone: 'waiting' })
+  assert.deepEqual(outpassRowLabel({ status: 'pending' }), { label: 'Pending approval', tone: 'waiting' })
   assert.deepEqual(outpassRowLabel({ status: 'rejected' }), { label: 'Not approved', tone: 'rejected' })
   assert.equal(outpassRowLabel({ status: 'approved', scanStatus: 'pending_exit' }).label, 'Ready to use')
   assert.equal(outpassRowLabel({ status: 'approved', scanStatus: 'return_expired' }).label, 'Out now')
@@ -97,4 +98,18 @@ test('"back by" is today, or tomorrow once that time has passed', () => {
   assert.equal(expectedReturnIso('25:00', sent), null)
   assert.equal(passTypeLabel('official'), 'Official / Mill Duty')
   assert.equal(passTypeLabel('x'), null)
+})
+
+test('a pending pass is never open; the newest pending one of today is the one to pin under "waiting"', () => {
+  const today = (h: number) => new Date(new Date(NOW).setHours(h, 0, 0, 0)).toISOString()
+  const pending = [
+    { id: 1, status: 'pending', createdAt: today(1), source: 'on_duty' },
+    { id: 2, status: 'pending', createdAt: today(2) },
+    { id: 3, status: 'pending', createdAt: new Date(NOW - 3 * 86_400_000).toISOString() },
+    { id: 4, status: 'approved', createdAt: today(3), expiresAt: iso(30) },
+  ]
+  assert.equal(pickOpenPass(pending.slice(0, 3), NOW), null)
+  assert.equal(pickPendingPass(pending, NOW)?.id, 2)
+  assert.equal(pickPendingPass([pending[2]], NOW), null)
+  assert.equal(pickPendingPass([], NOW), null)
 })

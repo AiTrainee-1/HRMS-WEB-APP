@@ -1,11 +1,19 @@
 // The words and small rules of the one-time-code (OTP) screens: sign in with a code, reset a forgotten password,
-// first-time password. The server sends the code by SMS or by WhatsApp (HR chooses) and tells us which one:
-//   GET  /auth/login-options   -> { ..., otpChannel: 'sms' | 'whatsapp', codeLength: 4 | 6 }
-//   POST /auth/otp/request     -> { message, maskedPhone, expiresInSeconds, resendAfterSeconds, channel, codeLength }
-// The code's length follows the channel: 4 digits by SMS (the approved template says XXXX), 6 on WhatsApp. The server
-// says which in `codeLength`; without it the channel decides (sms 4, whatsapp 6, unknown 6): see otpLength.
-// An older server sends none of these keys (it only ever had WhatsApp, 6 digits). Whatever the answer, a screen must still make
-// sense, so every sentence here has three forms: SMS, WhatsApp, and a neutral one ("a code") for "not known".
+// first-time password. The server sends the code by WhatsApp or by SMS. HR switches the two on SEPARATELY (WhatsApp
+// Control -> OTP, SMS Control -> OTP Switches), per purpose: either one alone is enough, and with both on the employee
+// picks. The server says which:
+//   GET  /auth/login-options   -> { ..., otpChannels: { login: ['whatsapp', 'sms'], reset: [...], activate: [...] },
+//                                  channels: { whatsapp: { name, codeLength: 6 }, sms: { name, codeLength: 4 } },
+//                                  otpChannel, codeLength }   (the last two: the first channel, for older apps)
+//   POST /auth/otp/request     { employeeCode, purpose, channel? }
+//                              -> { message, maskedPhone, expiresInSeconds, resendAfterSeconds, channel, codeLength,
+//                                   otherChannels }
+// (see "Which ways a code can be sent" below). The code's length follows the channel: 4 digits by SMS (the approved
+// template says XXXX), 6 on WhatsApp. The server says which in `codeLength`; without it the channel decides (sms 4,
+// whatsapp 6, unknown 6): see otpLength.
+// A server from before independent channels sends only one `otpChannel`; one from before the SMS channel sends none of
+// these keys (it only ever had WhatsApp, 6 digits). Whatever the answer, a screen must still make sense, so every
+// sentence here has three forms: SMS, WhatsApp, and a neutral one ("a code") for "not known" or "two to pick from".
 //
 // Pure on purpose (no React, no imports): Node's test runner loads it directly, see otp-channel.test.ts.
 
@@ -26,6 +34,194 @@ export function resolveChannel(...candidates: unknown[]): OtpChannel | null {
     if (channel) return channel
   }
   return null
+}
+
+// ---- Which ways a code can be sent -------------------------------------------------------------------------
+//
+// A server with independent channels lists, per purpose, the ways that work NOW (`otpChannels`, WhatsApp first) and
+// each one's code length (`channels`), and takes an optional `channel` on POST /auth/otp/request; a channel switched
+// off meanwhile is refused with 400 { code: 'channel_unavailable', availableChannels, message }.
+// An older server sends neither key: only `otpLogin` / `otpReset` / `otpActivate` and ONE `otpChannel` + `codeLength`
+// for everything. It would ignore a `channel` in the request, so the app never sends it one.
+
+/** Every channel, in the order the server lists them. */
+export const OTP_CHANNELS: readonly OtpChannel[] = ['whatsapp', 'sms']
+
+/** 'WhatsApp' / 'SMS'. */
+export function channelName(channel: OtpChannel): string {
+  return channel === 'sms' ? 'SMS' : 'WhatsApp'
+}
+
+/** The known channels of a list from the server, in its order, each once; [] for anything that is not a list. */
+export function normalizeChannelList(value: unknown): OtpChannel[] {
+  if (!Array.isArray(value)) return []
+  const out: OtpChannel[] = []
+  for (const item of value) {
+    const channel = normalizeChannel(item)
+    if (channel && !out.includes(channel)) out.push(channel)
+  }
+  return out
+}
+
+/** The keys of GET /auth/login-options the code screens read. All optional: an older server sends fewer. */
+export interface CodeOptionsSource {
+  otpLogin?: unknown
+  otpReset?: unknown
+  otpActivate?: unknown
+  passwordLogin?: unknown
+  otpChannel?: unknown
+  codeLength?: unknown
+  otpChannels?: unknown
+  channels?: unknown
+}
+
+/** What one page (sign-in, forgot password, first-time access) can offer. */
+export interface PurposeCodes {
+  /** A code can be asked for at all. False = no code option (sign-in by password, HR resets, plain activation). */
+  available: boolean
+  /**
+   * The channels the employee can get it by, WhatsApp first. Two = the employee picks. Empty while `available` = the
+   * server did not name one (an older server, or it could not be asked): neutral words, no `channel` sent.
+   */
+  channels: OtpChannel[]
+  /** The server takes a `channel` on POST /auth/otp/request (it sent `otpChannels`). */
+  choosable: boolean
+  /** Digits of a code by each channel. */
+  lengths: Record<OtpChannel, number>
+  /** Digits when the channel is not known. */
+  neutralLength: number
+}
+
+const PURPOSE_FLAG: Record<OtpPurpose, 'otpLogin' | 'otpReset' | 'otpActivate'> = {
+  login: 'otpLogin',
+  reset: 'otpReset',
+  activate: 'otpActivate',
+}
+
+/** Each channel's code length: its own `channels[ch].codeLength`, else an older server's `codeLength` for its one channel, else the channel's. */
+function channelLengths(options: CodeOptionsSource | null | undefined): Record<OtpChannel, number> {
+  const info = record(options?.channels)
+  const legacy = normalizeChannel(options?.otpChannel)
+  const lengths = { ...OTP_LENGTH_BY_CHANNEL }
+  for (const channel of OTP_CHANNELS) {
+    const own = record(info?.[channel])?.codeLength
+    lengths[channel] = otpLength(own !== undefined ? own : legacy === channel ? options?.codeLength : undefined, channel)
+  }
+  return lengths
+}
+
+/**
+ * What GET /auth/login-options offers for one purpose. A new server: the purpose's list in `otpChannels` (empty = no
+ * code). An older one: its `otpLogin` / `otpReset` / `otpActivate` switch, with its one `otpChannel` (or none named).
+ */
+export function purposeCodes(options: CodeOptionsSource | null | undefined, purpose: OtpPurpose): PurposeCodes {
+  const lengths = channelLengths(options)
+  const neutralLength = otpLength(options?.codeLength, options?.otpChannel)
+  const lists = record(options?.otpChannels)
+  if (lists && Array.isArray(lists[purpose])) {
+    const channels = normalizeChannelList(lists[purpose])
+    return { available: channels.length > 0, channels, choosable: true, lengths, neutralLength }
+  }
+  const available = options?.[PURPOSE_FLAG[purpose]] === true
+  const legacy = normalizeChannel(options?.otpChannel)
+  return { available, channels: available && legacy ? [legacy] : [], choosable: false, lengths, neutralLength }
+}
+
+/** The server could not be asked (offline, an error): offer a code anyway with neutral words; the request will say what is wrong. */
+export function unknownCodes(): PurposeCodes {
+  return { available: true, channels: [], choosable: false, lengths: { ...OTP_LENGTH_BY_CHANNEL }, neutralLength: DEFAULT_OTP_LENGTH }
+}
+
+/** The channel a page's words can name: the only one on offer; null with two (the employee picks) or none known. */
+export function singleChannel(codes: PurposeCodes): OtpChannel | null {
+  return codes.channels.length === 1 ? codes.channels[0] : null
+}
+
+/** Digits of a code sent by `channel` (null = not known). */
+export function codeLengthFor(codes: PurposeCodes, channel: OtpChannel | null): number {
+  return channel ? codes.lengths[channel] : codes.neutralLength
+}
+
+/** The channel the main button sends by: the one remembered from last time when it is still on offer, else the server's first. */
+export function preferredChannel(channels: readonly OtpChannel[], remembered: unknown): OtpChannel | null {
+  const mine = normalizeChannel(remembered)
+  if (mine && channels.includes(mine)) return mine
+  return channels[0] ?? null
+}
+
+/** The send buttons in order: the preferred channel first (the main button), then the rest in the server's order. */
+export function channelChoices(channels: readonly OtpChannel[], remembered: unknown): OtpChannel[] {
+  const first = preferredChannel(channels, remembered)
+  return first ? [first, ...channels.filter((c) => c !== first)] : []
+}
+
+/** A send button while the employee picks: "Send code by WhatsApp" / "Send code by SMS". */
+export function chooseButtonLabel(channel: OtpChannel): string {
+  return `Send code by ${channelName(channel)}`
+}
+
+/** The line under the employee-code field while the employee picks: each way with its digits. */
+export function chooseHint(codes: PurposeCodes): string {
+  const ways = codes.channels.map((c) => `${channelName(c)} (${codes.lengths[c]} digits)`).join(' or ')
+  return `Choose how to get your code: ${ways}. It goes to the mobile number registered with HR.`
+}
+
+/** The `channel` to put in POST /auth/otp/request: only to a server that takes one, and only a known channel. */
+export function requestChannel(codes: PurposeCodes, channel: OtpChannel | null): OtpChannel | undefined {
+  return codes.choosable && channel ? channel : undefined
+}
+
+/**
+ * The ways to offer after a code went out ("Didn't get it? Send by SMS instead"): the answer's `otherChannels` without
+ * the one just used, and - when the sign-in options are known (`onOffer`) - only those still on offer.
+ */
+export function fallbackChannels(otherChannels: unknown, used: unknown, onOffer?: readonly OtpChannel[]): OtpChannel[] {
+  const usedChannel = normalizeChannel(used)
+  return normalizeChannelList(otherChannels).filter((c) => c !== usedChannel && (!onOffer || onOffer.includes(c)))
+}
+
+/** "Didn't get it? " + "Send by SMS instead" (the second part is the button). */
+export function fallbackOffer(channel: OtpChannel): { prefix: string; action: string } {
+  return { prefix: "Didn't get it? ", action: `Send by ${channelName(channel)} instead` }
+}
+
+export interface ChannelUnavailable {
+  /** The channels the server still offers for this purpose (may be empty). */
+  available: OtpChannel[]
+  /** What the employee reads. */
+  message: string
+}
+
+/**
+ * POST /auth/otp/request refused the channel asked for because HR switched it off meanwhile (400 with
+ * `code: 'channel_unavailable'`). The page then reloads the sign-in options. null for any other failure. Reads the
+ * app's ApiError (`status` / `data`) or an axios-style `response`.
+ */
+export function channelUnavailable(err: unknown): ChannelUnavailable | null {
+  const e = (err ?? {}) as { status?: unknown; data?: unknown; response?: { status?: unknown; data?: unknown } }
+  const status = e.response ? e.response.status : e.status
+  const body = record(e.response ? e.response.data : e.data)
+  if (status !== 400 || !body || body.code !== 'channel_unavailable') return null
+  const available = normalizeChannelList(body.availableChannels ?? body.available_channels)
+  const fallback = available.length
+    ? `That way of sending codes is not available right now. Use ${available.map(channelName).join(' or ')} instead.`
+    : 'Codes cannot be sent right now.'
+  return { available, message: serverSentence(body) || fallback }
+}
+
+export type LoginMode = 'otp' | 'password'
+
+/**
+ * Which form the sign-in page shows once the sign-in options (re)load. `before` = whether codes worked on the last
+ * load (null on the first), `now` = whether they work now. The first load opens the code form when codes work; a reload
+ * (the tab came back into view) keeps what the employee chose, except: no code -> the password form; codes just came on
+ * -> the code form; password sign-in off -> the code form (there is no other way in).
+ */
+export function nextLoginMode(mode: LoginMode, before: boolean | null, now: boolean, passwordLogin: unknown): LoginMode {
+  if (!now) return 'password'
+  if (before !== true) return 'otp'
+  if (passwordLogin === false) return 'otp'
+  return mode
 }
 
 /** Digits of a code by channel: SMS 4, WhatsApp 6. */

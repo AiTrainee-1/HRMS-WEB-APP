@@ -1,5 +1,6 @@
 import { apiRequest, ApiError } from './client'
 import { buildPunchForm, type PunchBody } from '@/lib/onduty-photos'
+import type { ClaimBody } from '@/lib/compensation-claims'
 import type {
   Advance,
   AttendanceMonthResponse,
@@ -41,18 +42,25 @@ import type {
 } from '@/types'
 
 // ---- Auth ----
+// Which sign-in methods HR has switched on (WhatsApp Control -> OTP, SMS Control -> OTP Switches). WhatsApp codes and
+// SMS codes are switched on separately: read them with purposeCodes() (lib/otp-channel.ts), never the keys directly.
 export interface LoginOptions {
   otpLogin: boolean
   otpReset: boolean
   // A new employee must confirm a one-time code (SMS or WhatsApp) before choosing a first password.
   otpActivate: boolean
   passwordLogin: boolean
-  // How the server delivers codes: 'sms' | 'whatsapp'. Absent on an older server, so read it with
+  // The ways a code can be sent right now, per purpose, WhatsApp first: e.g. { login: ['whatsapp', 'sms'],
+  // reset: ['sms'], activate: [] }. Absent on a server from before WhatsApp and SMS codes were independent.
+  otpChannels?: Partial<Record<'login' | 'reset' | 'activate', string[]>>
+  // Each available channel's name and code length: { whatsapp: { name: 'WhatsApp', codeLength: 6 }, ... }.
+  channels?: Partial<Record<string, { name?: string; codeLength?: number }>>
+  // For older apps: the first available channel, 'sms' | 'whatsapp'. Absent on an older server, so read it with
   // normalizeChannel() (lib/otp-channel.ts): unknown means "a code", never a guess.
-  otpChannel?: string
-  // How many digits the code has: 4 when the channel is 'sms', 6 for 'whatsapp'. Absent on an older server: read it
+  otpChannel?: string | null
+  // How many digits `otpChannel`'s code has: 4 for 'sms', 6 for 'whatsapp'. Absent on an older server: read it
   // with otpLength() (lib/otp-channel.ts), which falls back on the channel.
-  codeLength?: number
+  codeLength?: number | null
 }
 
 export interface OtpRequestResult {
@@ -64,20 +72,24 @@ export interface OtpRequestResult {
   channel?: string
   // Digits in the code that went out (4 by SMS, 6 on WhatsApp). Absent on an older server.
   codeLength?: number
+  // The other channels that could send a code for this purpose right now ("Send by SMS instead"). Absent on an older server.
+  otherChannels?: string[]
 }
 
 export const authApi = {
   // Which sign-in methods the server has switched on (code by SMS or WhatsApp, password).
   loginOptions: () => apiRequest<LoginOptions>({ method: 'GET', url: '/auth/login-options' }),
-  // Sends a code (4 digits by SMS, 6 on WhatsApp, as the server is set up) to the mobile number registered for this
-  // employee code. skipOfflineDetection: a 502 ("couldn't send") or 503 ("SMS temporarily unavailable") from this
-  // call is the message carrier having a problem, not the server being down, so it must not raise the app-wide
-  // "server unavailable" banner; the form shows the server's own sentence instead.
-  requestOtp: (employeeCode: string, purpose: 'login' | 'reset' | 'activate') =>
+  // Sends a code (6 digits on WhatsApp, 4 by SMS) to the mobile number registered for this employee code: by
+  // `channel` when given, else by the first way HR has switched on for this purpose. Only pass a channel to a server
+  // that listed `otpChannels` (requestChannel() in lib/otp-channel.ts); one switched off meanwhile is refused with
+  // 400 channel_unavailable (channelUnavailable()). skipOfflineDetection: a 502 ("couldn't send") or 503 ("SMS
+  // temporarily unavailable") from this call is the message carrier having a problem, not the server being down, so it
+  // must not raise the app-wide "server unavailable" banner; the form shows the server's own sentence instead.
+  requestOtp: (employeeCode: string, purpose: 'login' | 'reset' | 'activate', channel?: 'whatsapp' | 'sms') =>
     apiRequest<OtpRequestResult>({
       method: 'POST',
       url: '/auth/otp/request',
-      data: { employeeCode, purpose },
+      data: channel ? { employeeCode, purpose, channel } : { employeeCode, purpose },
       skipOfflineDetection: true,
     }),
   loginWithOtp: (employeeCode: string, otp: string) =>
@@ -351,10 +363,12 @@ export const managerApi = {
     apiRequest({ method: 'PATCH', url: `/manager/missing-punch-requests/${id}/status`, data: { status, comment } }),
   updateOutpassStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/outpass-requests/${id}/status`, data: { status, comment } }),
-  // The Department Head's decision on a Holiday / Sunday work compensation claim HR raised (see holiday_work_views.py):
-  // approving adds the claimed shifts to the employee's compensation balance, once; rejecting changes nothing else and
-  // is final. A refusal (403 APPROVE_COMPENSATION_DISABLED, 403 not in your approval scope, 400 already decided) comes
-  // back with a user-ready `error`, which apiRequest surfaces as ApiError.message.
+  // The Department Head's decision on a compensation claim of any kind (Sunday / holiday work, late-in allowance, extra
+  // hours, birthday credit, a day off from the balance), raised by HR or by the employee (holiday_work_views.py +
+  // compensation_claims.py): approving credits the balance once / applies the allowance / takes the day off from the
+  // balance; rejecting changes nothing else and is final. The reply says `credited` and (newer backend) an `effect`
+  // sentence. A refusal (403 APPROVE_COMPENSATION_DISABLED, 403 not in your approval scope, 400 already decided, 409 the
+  // day cannot take it any more, e.g. payroll locked) comes back with a user-ready `error`, surfaced as ApiError.message.
   updateHolidayWorkStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/holiday-work/${id}/status`, data: { status, comment } }),
 }
@@ -362,8 +376,22 @@ export const managerApi = {
 // ---- Compensation (staff only) ----
 // Returned unvalidated: hooks/useCompensation.ts parses it with lib/compensation.ts (an older backend has no such route,
 // and a proxy can answer with an HTML page).
+// Self-claims (2026-11-19, lib/compensation-claims.ts): only offered when GET /employee/compensation says `canClaim`
+// (an older backend has none of the four routes below). Every one goes to the employee's Department Head. A refusal
+// comes back 400/403/409 {error, code} (not_eligible, too_old, not_staff, already_claimed, switched_off, no_hod) with a
+// sentence for people, surfaced as ApiError.message.
 export const compensationApi = {
   mine: () => apiRequest<unknown>({ method: 'GET', url: '/employee/compensation' }),
+  /** The employee's own claims, newest first. */
+  claims: (params?: { status?: string; kind?: string }) =>
+    apiRequest<unknown>({ method: 'GET', url: '/employee/compensation/claims', params }),
+  /** Claim a Sunday / holiday worked, a late-in allowance, extra hours or a worked birthday. 201 = the new claim. */
+  claim: (body: ClaimBody) => apiRequest<unknown>({ method: 'POST', url: '/employee/compensation/claims', data: body }),
+  /** Withdraw a claim that is still waiting. */
+  withdrawClaim: (id: number | string) => apiRequest<unknown>({ method: 'DELETE', url: `/employee/compensation/claims/${id}` }),
+  /** Ask to use the balance as a day off: {date, shifts (0.25 .. 1.00), reason}. 201 = the new claim (kind use_balance). */
+  useBalance: (body: { date: string; shifts: number; reason: string }) =>
+    apiRequest<unknown>({ method: 'POST', url: '/employee/compensation/use', data: body }),
 }
 
 // ---- Department Head assignment (every employee) ----

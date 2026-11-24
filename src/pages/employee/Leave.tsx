@@ -11,11 +11,13 @@ import { OffNotice } from '@/components/requests/FormBits'
 import { LeaveApplyDialog } from '@/components/requests/LeaveApplyDialog'
 import { RequestCard } from '@/components/requests/RequestCard'
 import { RequestList } from '@/components/requests/RequestList'
+import { WithdrawButton } from '@/components/requests/WithdrawButton'
 import { HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
 import { showView } from '@/components/requests/show-view'
 import { leaveRequestsApi, type LeaveRow } from '@/api/requests-api'
 import { holidayApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
+import { useApplyPrefill } from '@/hooks/useApplyPrefill'
 import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { useCasualLeaveEligibility, useCasualLeaveRequests } from '@/hooks/useCasualLeave'
 import { useFocusItem } from '@/hooks/useFocusItem'
@@ -34,6 +36,15 @@ const HALF_WORDS: Record<string, string> = { morning: 'morning', afternoon: 'aft
 export default function Leave() {
   const { user } = useAuth()
   const [applyOpen, setApplyOpen] = React.useState(false)
+  // The attendance day panel's "Apply Leave" (?apply=YYYY-MM-DD): the form opens on that day (leave may be ahead).
+  const [applyDate, setApplyDate] = React.useState<string | null>(null)
+  useApplyPrefill(
+    (p) => {
+      setApplyDate(p.date)
+      setApplyOpen(true)
+    },
+    { allowFuture: true },
+  )
   // The pipeline HR configured for leave, and the note when HR has switched leave requests off.
   const { workflow, offNote } = useApprovalWorkflow('leave')
   const { offNote: clOffNote } = useApprovalWorkflow('casual_leave')
@@ -199,6 +210,8 @@ export default function Leave() {
                 approval={r.approval}
                 sentAt={r.createdAt}
                 comment={r.hrComment}
+                // Owner 2026-11-24: a leave still waiting for an answer can be taken back.
+                footer={<WithdrawButton module="leave" id={r.id} status={r.status} label={`leave request for ${dayRangeText(r.startDate, r.endDate)}`} />}
               />
             )
           }}
@@ -225,7 +238,11 @@ export default function Leave() {
       </PageShell>
       <LeaveApplyDialog
         open={applyOpen}
-        onOpenChange={setApplyOpen}
+        onOpenChange={(o) => {
+          setApplyOpen(o)
+          if (!o) setApplyDate(null)
+        }}
+        initialDate={applyDate}
         pipeline={pipeline}
         offNote={offNote}
         // The new request: its month, in Waiting.

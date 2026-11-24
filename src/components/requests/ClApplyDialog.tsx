@@ -31,6 +31,8 @@ import { checkRequestDate, getRequestWindow, windowHint } from '@/lib/request-wi
 import { ChoiceTiles, FormError, OffNotice, SentState, StepLabel } from './FormBits'
 import { PHONE_BUTTON_ROW, PHONE_NO_CANCEL, PHONE_SUBMIT } from './phone'
 import { cn } from '@/lib/utils'
+import { isQueued } from '@/offline/submit'
+import { QUEUED_MESSAGE } from '@/lib/offline-ops'
 
 const PORTION_ICON: Record<CLPortion, LucideIcon> = { full: Sun, first_half: Sunrise, second_half: Sunset }
 
@@ -50,9 +52,12 @@ export function ClApplyDialog({
   pipeline,
   offNote,
   onSent,
+  initialDate,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Open on this day (YYYY-MM-DD) instead of today: the attendance day panel's chips (owner 2026-11-24). Checked by the page. */
+  initialDate?: string | null
   /** After a successful send, with the day it is for (YYYY-MM-DD): the page opens its month. */
   onSent?: (day: string) => void
   months: CLMonth[] | undefined
@@ -74,7 +79,7 @@ export function ClApplyDialog({
   // `months` is read at opening on purpose: a refetch while the dialog is open must not wipe what was typed.
   React.useEffect(() => {
     if (!open) return
-    const start = defaultApplyDate(new Date(), months)
+    const start = initialDate || defaultApplyDate(new Date(), months)
     setDate(start)
     setPortion(firstAllowed(portionChoices(monthOfDate(months, start), start)))
     setReason('')
@@ -105,7 +110,12 @@ export function ClApplyDialog({
     apply.mutate(
       { date, reason: reason.trim(), portion: portion! },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
+          if (isQueued(result)) {
+            setSent(QUEUED_MESSAGE)
+            toast.info('Saved on this device', { description: 'It will be sent automatically when you are back online.' })
+            return
+          }
           setSent(
             portion === 'full'
               ? (pipeline ?? 'Your Casual Leave request has gone for approval.')

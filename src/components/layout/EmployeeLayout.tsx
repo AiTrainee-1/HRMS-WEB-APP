@@ -8,6 +8,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { SidebarNav } from './SidebarNav'
 import { NotificationBell } from './NotificationBell'
 import { PermissionNudgeBanner } from './PermissionNudgeBanner'
+import { OfflineSyncBar } from '@/components/offline/OfflineSyncBar'
 import { ThemeToggle } from './ThemeToggle'
 import { UserMenu } from './UserMenu'
 import { findNav } from './nav-config'
@@ -218,6 +219,8 @@ export function EmployeeLayout({ children }: { children: React.ReactNode }) {
             <LoadingThread />
           </header>
           <PermissionNudgeBanner />
+          {/* Offline / Syncing / Pending (owner 2026-11-24): only while there is something to say. */}
+          <OfflineSyncBar />
           <MainScrollContext.Provider value={mainRef}>
             <main id="main-content" ref={mainRef} tabIndex={-1} className="scrollbar-thin relative flex-1 overflow-x-hidden overflow-y-auto outline-none">
               <div className="relative min-h-full">

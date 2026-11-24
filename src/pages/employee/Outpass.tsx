@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { CalendarDays, CheckCircle2, Clock, Coffee, DoorOpen, IdCard, LogIn, LogOut, Pin, Plus, XCircle } from 'lucide-react'
+import { BellRing, CalendarDays, CheckCircle2, Clock, Coffee, DoorOpen, IdCard, LogIn, LogOut, Pin, Plus, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -17,7 +17,7 @@ import {
   viewCounts,
   type ViewOptions,
 } from '@/components/kit'
-import { OutpassFlipCard } from '@/components/employee/OutpassFlipCard'
+import { GatePassCard } from '@/components/employee/GatePassCard'
 import { TeaBreakPanel } from '@/components/employee/TeaBreakPanel'
 import { FocusMissNote } from '@/components/requests/FocusMissNote'
 import { OffNotice } from '@/components/requests/FormBits'
@@ -29,6 +29,7 @@ import { HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
 import { showView } from '@/components/requests/show-view'
 import { employeeApi } from '@/api/resources'
 import type { OutpassRow } from '@/api/requests-api'
+import type { GatePass } from '@/api/onduty-actions'
 import { useAuth } from '@/context/AuthContext'
 import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { useFocusItem } from '@/hooks/useFocusItem'
@@ -37,7 +38,8 @@ import { useSelectedMonth } from '@/hooks/useSelectedMonth'
 import { pipelineSentence } from '@/lib/approval'
 import { currentMonth, inMonthText, monthOf, monthViewLabel } from '@/lib/month-switch'
 import { istDateOf, outpassDay, outpassPassDay, outpassViewOptions } from '@/lib/my-requests'
-import { outpassRowLabel, passTypeLabel, pickOpenPass } from '@/lib/outpass-open'
+import { personFromEmployee } from '@/lib/gate-pass'
+import { outpassRowLabel, passTypeLabel, pickOpenPass, pickPendingPass } from '@/lib/outpass-open'
 
 type Section = 'outpass' | 'teaBreak'
 
@@ -77,7 +79,11 @@ export default function Outpass() {
   const focus = useFocusItem({ scope: 'outpass', rows: list.data, idOf: (r) => r.id, views, viewOptions, setMonth, reveal: () => setSection('outpass') })
   // The gate pass open right now - out and not back yet, or approved with its exit QR still valid (a manual request or
   // one an On-Duty approval raised). Pinned at the top (owner 2026-10-31).
+  // Only an APPROVED pass is open (owner 2026-11-24: no QR before approval). With none open, today's newest pass still
+  // waiting for approval is pinned instead (an On-Duty's pass appears the moment the On-Duty is submitted).
   const openPass = pickOpenPass(items, now)
+  const pendingPass = openPass ? null : pickPendingPass(items, now)
+  const person = personFromEmployee(employee.data)
   // Looked up by id, so the card follows a refresh (a return QR just made, a gate scan).
   const preview = previewId ? (items.find((i) => i.id === previewId) ?? null) : null
 
@@ -184,9 +190,56 @@ export default function Outpass() {
                     </div>
                   )}
                 </dl>
-                <p className="text-xs text-muted-foreground">Tap the card to flip it and see who approved it.</p>
               </div>
-              <OutpassFlipCard request={openPass} employee={employee.data} />
+              <GatePassCard pass={openPass as GatePass} person={person} />
+            </GlassCard>
+          </section>
+        )}
+
+        {section === 'outpass' && pendingPass && (
+          <section aria-labelledby="pending-pass-title" className="flex flex-col gap-4 max-md:gap-2">
+            <SectionHeader
+              id="pending-pass-title"
+              icon={BellRing}
+              tone="amber"
+              title={
+                <>
+                  <span className="max-md:hidden">Waiting for approval</span>
+                  <span className="hidden max-md:inline max-md:font-[family-name:var(--font-label)] max-md:text-[10.5px] max-md:font-black max-md:tracking-[0.08em] max-md:text-waiting">
+                    WAITING FOR APPROVAL
+                  </span>
+                </>
+              }
+              description="Your newest pass of today. Its QR appears on the card as soon as it is approved."
+              className="max-md:[&_p]:hidden max-md:[&_svg]:size-3.5 max-md:[&_svg]:text-waiting"
+            />
+            <GlassCard
+              variant="stitched"
+              tone="amber"
+              className="grid gap-5 max-md:gap-2.5 max-md:border-0! max-md:bg-transparent! max-md:p-0! max-md:shadow-none! lg:grid-cols-[1fr_minmax(0,420px)] lg:items-start"
+            >
+              <div className="flex flex-col gap-3">
+                <dl className="grid grid-cols-2 gap-3 text-[13px]">
+                  <div className="min-w-0">
+                    <dt className="label-caps text-muted-foreground">Going to</dt>
+                    <dd className="truncate font-semibold">{pendingPass.destination}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="label-caps text-muted-foreground">Pass</dt>
+                    <dd className="truncate font-semibold">{pendingPass.source === 'on_duty' ? 'On-Duty' : (passTypeLabel(pendingPass.passType) ?? 'Gate pass')}</dd>
+                  </div>
+                  <div>
+                    <dt className="label-caps text-muted-foreground">Asked</dt>
+                    <dd className="font-semibold">{time(pendingPass.createdAt)}</dd>
+                  </div>
+                </dl>
+                <p className="text-[13px] text-muted-foreground">
+                  {pendingPass.source === 'on_duty'
+                    ? 'This pass came with your On-Duty request. It is approved (or not) together with the On-Duty; until then it is not valid at the gate.'
+                    : 'Not valid at the gate yet. You will see the QR here once HR / your Department Head approves it.'}
+                </p>
+              </div>
+              <GatePassCard pass={pendingPass as GatePass} person={person} onRefresh={() => list.refetch()} refreshing={list.isRefetching} />
             </GlassCard>
           </section>
         )}
@@ -226,9 +279,10 @@ export default function Outpass() {
                     <>
                       {format(new Date(r.createdAt), 'EEE, d MMM yyyy · h:mm a')}
                       {(kind || r.source === 'on_duty') && <span className="text-foreground/75"> · {r.source === 'on_duty' ? 'From On-Duty' : kind}</span>}
+                      {r.source === 'on_duty' && r.status === 'pending' && <span className="text-waiting"> · On-Duty, QR after approval</span>}
                     </>
                   }
-                  pill={r.status === 'pending' ? undefined : <StatusPill tone={badge.tone} size="sm">{badge.label}</StatusPill>}
+                  pill={<StatusPill tone={badge.tone} size="sm">{badge.label}</StatusPill>}
                   reason={r.reason}
                   status={r.status}
                   approval={r.approval}
@@ -282,10 +336,10 @@ export default function Outpass() {
       <Dialog open={!!preview} onOpenChange={(open) => !open && setPreviewId(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Outpass card</DialogTitle>
-            <DialogDescription>Tap the card to flip it.</DialogDescription>
+            <DialogTitle>Gate pass</DialogTitle>
+            <DialogDescription>The pass a guard checks at the gate. Download it as a picture if you need to.</DialogDescription>
           </DialogHeader>
-          {preview && <OutpassFlipCard request={preview} employee={employee.data} />}
+          {preview && <GatePassCard pass={preview as GatePass} person={person} onRefresh={() => list.refetch()} refreshing={list.isRefetching} />}
         </DialogContent>
       </Dialog>
     </>

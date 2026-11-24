@@ -191,6 +191,19 @@ describe('the multipart body of POST /on-duty-sessions/punch', () => {
     assert.equal(await photo.text(), 'first')
   })
 
+  test('capturedAt, sessionId and autoEnd go in only when given (2026-11-24)', () => {
+    const plain = buildPunchForm({ ...base, photo: jpeg('first') })
+    assert.equal(plain.has('capturedAt'), false)
+    assert.equal(plain.has('sessionId'), false)
+    assert.equal(plain.has('autoEnd'), false)
+    const full = buildPunchForm({ ...base, photo: jpeg('first'), capturedAt: '2026-11-24T09:00:00.000Z', sessionId: 42, autoEnd: false })
+    assert.equal(full.get('capturedAt'), '2026-11-24T09:00:00.000Z')
+    assert.equal(full.get('sessionId'), '42')
+    assert.equal(full.get('autoEnd'), 'false')
+    const ot = buildPunchForm({ latitude: 1, longitude: 2, photo: jpeg('ot') })
+    assert.equal(ot.has('punchNumber'), false)
+  })
+
   test('two photos: photo is the first, photo2 the second', async () => {
     const form = buildPunchForm({ ...base, photo: jpeg('first'), photo2: jpeg('second') })
     assert.equal(await (form.get('photo') as File).text(), 'first')
@@ -290,9 +303,11 @@ describe('the page, the dialog and the API call use all of it', () => {
     readFileSync(new URL(path, import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
-  const page = read('../pages/employee/AttendanceRequest.tsx')
+  // The On-Duty part of Geo Punch & On-Duty lives in its own component since the 2026-11-24 redesign.
+  const page = read('../components/onduty/OnDutyToday.tsx')
   const dialog = read('../components/employee/CameraCaptureDialog.tsx')
   const resources = read('../api/resources.ts')
+  const actions = read('../api/onduty-actions.ts')
 
   test('the page reads the policy from the status, shows the tracking line, and words PHOTO2_REQUIRED', () => {
     assert.match(page, /requiredPhotoCount\(data\)/)
@@ -316,6 +331,9 @@ describe('the page, the dialog and the API call use all of it', () => {
   test('the API call builds its body with buildPunchForm', () => {
     assert.match(resources, /data: buildPunchForm\(body\)/)
     assert.doesNotMatch(resources, /form\.append\('photo'/)
+    // The redesigned page's punch and OT punch (2026-11-24) build theirs the same way.
+    assert.match(actions, /buildPunchForm\(/)
+    assert.doesNotMatch(actions, /form\.append\('photo'/)
   })
 
   test('no background tracking on the web: nothing here watches the position or beacons it', () => {

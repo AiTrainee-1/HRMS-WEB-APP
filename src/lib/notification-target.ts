@@ -15,6 +15,10 @@ import { cleanDate } from './focus-item.ts'
 import { notificationTarget, type NotificationTarget, type NotificationViewer } from './notifications.ts'
 import type { NotificationTargetKind } from '../types/index.ts'
 
+/** Every kind this app opens: the shared contract's kinds plus `enquiry` (2026-11-24: HR updated one of my enquiries ->
+ *  /employee/enquiries?focus=<id>). */
+export type TargetKind = NotificationTargetKind | 'enquiry'
+
 export interface NotificationLinkViewer extends NotificationViewer {
   /** Staff (true), production (false), or not known yet (null / undefined). Compensation is for staff only. */
   isStaff?: boolean | null
@@ -22,7 +26,7 @@ export interface NotificationLinkViewer extends NotificationViewer {
 
 /** A `target` after checking every field. */
 export interface NormalizedTarget {
-  kind: NotificationTargetKind
+  kind: TargetKind
   /** The item's id when the server knows it (a positive whole number). */
   id: number | null
   /** "YYYY-MM-DD" for day events. */
@@ -35,7 +39,7 @@ export interface NormalizedTarget {
   label: string | null
 }
 
-export const TARGET_KINDS: readonly NotificationTargetKind[] = [
+export const TARGET_KINDS: readonly TargetKind[] = [
   'leave',
   'casual_leave',
   'permission',
@@ -57,10 +61,11 @@ export const TARGET_KINDS: readonly NotificationTargetKind[] = [
   'shift',
   'holidays',
   'profile',
+  'enquiry',
 ]
 
 /** The Approvals category a kind belongs to, when the server sends none. */
-const KIND_CATEGORY: Partial<Record<NotificationTargetKind, ApprovalCategory>> = {
+const KIND_CATEGORY: Partial<Record<TargetKind, ApprovalCategory>> = {
   leave: 'leave',
   casual_leave: 'casual_leave',
   permission: 'permission',
@@ -117,6 +122,8 @@ function defaultLabel(t: Pick<NormalizedTarget, 'kind' | 'id' | 'date' | 'role' 
       return 'View holidays'
     case 'profile':
       return 'View profile'
+    case 'enquiry':
+      return 'View enquiry'
   }
   return 'View'
 }
@@ -139,7 +146,7 @@ export function normalizeTarget(raw: unknown): NormalizedTarget | null {
   if (!isObject(raw)) return null
   const kind = typeof raw.kind === 'string' ? raw.kind.trim().toLowerCase().replace(/-/g, '_') : ''
   if (!(TARGET_KINDS as readonly string[]).includes(kind)) return null
-  const k = kind as NotificationTargetKind
+  const k = kind as TargetKind
   const role = typeof raw.role === 'string' && raw.role.trim().toLowerCase() === 'approver' ? 'approver' : 'self'
   return {
     kind: k,
@@ -163,7 +170,7 @@ export function withQuery(path: string, params: Record<string, string | number |
 }
 
 /** Kinds whose page lists the item by the id the server sends (so `focus=<id>` finds it). */
-const OWN_PAGE: Partial<Record<NotificationTargetKind, string>> = {
+const OWN_PAGE: Partial<Record<TargetKind, string>> = {
   leave: '/employee/leave',
   casual_leave: '/employee/casual-leave',
   permission: '/employee/permissions',
@@ -171,10 +178,11 @@ const OWN_PAGE: Partial<Record<NotificationTargetKind, string>> = {
   outpass: '/employee/outpass',
   on_duty: '/employee/attendance-request?mode=records',
   advance: '/employee/settlement',
+  enquiry: '/employee/enquiries',
 }
 
 /** Kinds with a page but no single item on it. */
-const PLAIN_PAGE: Partial<Record<NotificationTargetKind, string>> = {
+const PLAIN_PAGE: Partial<Record<TargetKind, string>> = {
   documents: '/employee/documents',
   id_card: '/employee/id-card',
   resignation: '/employee/resignation',
@@ -192,12 +200,13 @@ const MY_REQUESTS_MODULE: Partial<Record<ApprovalCategory, string>> = { attendan
  * The route of a checked target, or null when this reader has nothing to open:
  *   role approver (or kind approvals) -> /employee/approvals?category=<c>&focus=<id>   (heads only; neither when the
  *                                        server sends none: an advance / general request reminder just opens Approvals)
- *   leave / casual_leave / permission / missing_punch / outpass / advance -> its page ?focus=<id> (&date= for a day)
+ *   leave / casual_leave / permission / missing_punch / outpass / advance / enquiry -> its page ?focus=<id> (&date= for a day)
  *   on_duty  -> Geo Punch & On-Duty, View Records ?focus=<session id>
  *   geo_punch -> the same records, the record of that day (?date=; the id is a punch check, not a record)
  *   attendance -> the calendar, that day opened (?date=); late / absent / missing punch ALERTS come this way
  *   salary_slip -> /employee/salary/<id> (the list without an id)
- *   compensation -> staff only; ?focus=hw-<claim id> (the page keys a Sunday / holiday work claim "hw-<id>") &date=
+ *   compensation -> staff only; ?focus=hw-<claim id> (every compensation claim kind shares the Holiday-work table, so
+ *                   "hw-<id>": the page finds it in the year timeline, else under Claims -> My claims) &date=
  *   my_requests -> My Requests ?focus=<module>-<id> (category "attendance" -> "attendance_correction-<id>")
  *   request -> My Requests ?focus=request-<id>
  *   documents / id_card / resignation / chat / shift / holidays / profile -> the page

@@ -25,9 +25,11 @@ import { ClLegend, ClMonthCalendar, ClYearGrid } from '@/components/requests/ClY
 import { OffNotice } from '@/components/requests/FormBits'
 import { RequestCard } from '@/components/requests/RequestCard'
 import { RequestList } from '@/components/requests/RequestList'
+import { WithdrawButton } from '@/components/requests/WithdrawButton'
 import { HERO_NO_ACTIONS_ON_PHONE, HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
 import { showView } from '@/components/requests/show-view'
 import type { CasualLeaveRow } from '@/api/requests-api'
+import { useApplyPrefill } from '@/hooks/useApplyPrefill'
 import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { useCasualLeaveEligibility, useCasualLeaveRequests } from '@/hooks/useCasualLeave'
 import { useFocusItem } from '@/hooks/useFocusItem'
@@ -66,6 +68,15 @@ const PORTION_ICON: Record<CLPortion, LucideIcon> = { full: Sun, first_half: Sun
 export default function CasualLeave() {
   const thisYear = new Date().getFullYear()
   const [applyOpen, setApplyOpen] = React.useState(false)
+  // The attendance day panel's "Casual Leave" (?apply=YYYY-MM-DD): the form opens on that day (it may be ahead).
+  const [applyDate, setApplyDate] = React.useState<string | null>(null)
+  useApplyPrefill(
+    (p) => {
+      setApplyDate(p.date)
+      setApplyOpen(true)
+    },
+    { allowFuture: true },
+  )
   // The month switcher (owner 2026-11-02) drives the month calendar and the list; the year view follows its year. A tap
   // on a month tile, or the year arrows, move the same month.
   const [month, setMonth] = useSelectedMonth()
@@ -404,13 +415,19 @@ export default function CasualLeave() {
               sentAt={r.createdAt}
               comment={r.reviewComment}
               fallback={deciderFromFields({ status: r.status, name: r.reviewedBy, role: r.reviewerRole, at: r.reviewedAt })}
+              // Owner 2026-11-24: a Casual Leave still waiting can be taken back (not one HR wrote: source "hr_edit").
+              footer={<WithdrawButton module="casual_leave" id={r.id} status={r.status} source={r.source} label={`Casual Leave request for ${dayText(r.date)}`} />}
             />
           )}
         />
       </PageShell>
       <ClApplyDialog
         open={applyOpen}
-        onOpenChange={setApplyOpen}
+        onOpenChange={(o) => {
+          setApplyOpen(o)
+          if (!o) setApplyDate(null)
+        }}
+        initialDate={applyDate}
         months={elig.data?.months}
         balance={balance}
         shift={shift}

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { CalendarDays, Check, ChevronRight, Hourglass, MapPinned, ShieldAlert, X } from 'lucide-react'
+import { CalendarDays, Check, ChevronRight, Clock, Hourglass, MapPinned, ShieldAlert, UserCog, UserRound, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ApprovalState, DecisionBadge, GlassCard, StatusPill, Stepper, TONE_SOFT } from '@/components/kit'
 import { hodCanAct, hodCanReject } from '@/lib/approval'
@@ -13,6 +13,7 @@ import {
   type ApprovalStatus,
 } from '@/lib/approvals-history'
 import {
+  claimLine,
   empCode,
   empDepartment,
   empInitials,
@@ -24,7 +25,9 @@ import {
   itemReason,
   onDutyPunchLine,
 } from '@/lib/approvals-items'
+import { claimRaisedBy } from '@/lib/holiday-work'
 import { cn } from '@/lib/utils'
+import type { PendingHolidayWorkClaim } from '@/types'
 import { badgeFor, typeLabel } from './words'
 import { CATEGORY_META, TONE_STRIPE } from './categoryMeta'
 
@@ -73,6 +76,9 @@ export function ApprovalRequestCard({
   const mocked = category === 'on_duty' && hasMockedPunch(item)
   const reason = itemReason(category, item)
   const steps = headSteps(category, item)
+  // A compensation claim: the overtime it is about, and who raised it (the employee themselves, or HR on their behalf).
+  const overtimeLine = category === 'holiday_work' ? claimLine(item) : null
+  const raisedBy = category === 'holiday_work' ? claimRaisedBy(item as unknown as PendingHolidayWorkClaim) : null
 
   return (
     <GlassCard padding="none" className="relative flex h-full flex-col overflow-hidden" data-testid={`approval-card-${item.id}`}>
@@ -121,6 +127,17 @@ export function ApprovalRequestCard({
           {mocked && (
             <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-rejected">
               <ShieldAlert className="size-3.5 shrink-0" aria-hidden="true" /> A punch may have a faked location
+            </p>
+          )}
+          {overtimeLine && (
+            <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground tabular-nums">
+              <Clock className="size-3.5 shrink-0" aria-hidden="true" /> {overtimeLine}
+            </p>
+          )}
+          {raisedBy && (
+            <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground" data-testid="claim-raised-by">
+              {raisedBy === 'employee' ? <UserRound className="size-3.5 shrink-0" aria-hidden="true" /> : <UserCog className="size-3.5 shrink-0" aria-hidden="true" />}
+              {raisedBy === 'employee' ? 'Raised by the employee' : 'Raised by HR'}
             </p>
           )}
         </div>

@@ -10,37 +10,52 @@ import { AuthInput } from '@/components/auth/AuthInput'
 import { SupportInlineLink } from '@/components/support/SupportInlineLink'
 import {
   EXPIRED_NOTICE,
+  channelChoices,
+  channelUnavailable,
+  chooseButtonLabel,
+  chooseHint,
   cleanSeconds,
   codeLabel,
+  codeLengthFor,
   describeOtpFailure,
   digitsOnly,
   enterCodeMessage,
   expiryText,
+  fallbackChannels,
+  fallbackOffer,
+  normalizeChannel,
   otpLength,
+  requestChannel,
   resolveChannel,
   sendButtonLabel,
   sendHint,
   sentNoticeParts,
+  singleChannel,
   type OtpChannel,
+  type PurposeCodes,
 } from '@/lib/otp-channel'
+import { readRememberedChannel, rememberChannel } from '@/lib/otp-preference'
 
 /**
- * The two steps every one-time-code flow shares: ask for a code by Employee Code, then enter it. The server
- * delivers the code by SMS or by WhatsApp (HR chooses) and says which: the words follow that (lib/otp-channel.ts),
- * and read neutrally ("a code") when the server did not say, e.g. an older server.
+ * The two steps every one-time-code flow shares: ask for a code by Employee Code, then enter it. The server delivers
+ * the code by WhatsApp or by SMS - whichever HR has switched on (`codes`, from login-options via purposeCodes()). With
+ * both on, the employee picks ("Send code by WhatsApp" / "Send code by SMS", the last pick first) and, once a code went
+ * out, may ask for it the other way instead. The words follow the channel (lib/otp-channel.ts) and read neutrally
+ * ("a code") when the server did not say, e.g. an older server.
  * `extraFields` is whatever else the final step needs (nothing for sign-in, a new-password pair for a reset), and
  * `onSubmit` receives the code the employee typed. Drawn like the mobile app's OtpFlow (sign-in pages' AuthInput /
  * AuthButton / notes, and the HR line under step 2).
  *
  * The code is only ever held in this component's state until it is sent back to the server: it is never logged,
- * stored, or put in a URL. (A WebOTP auto-fill, navigator.credentials.get({ otp }), is deliberately not used: it
- * needs the SMS to end with "@host #code", which the registered SMS template does not have. The input still offers
- * the one-time-code hint, so iOS and Android keyboards suggest the code from the SMS.)
+ * stored, or put in a URL. (Only the channel picked is remembered, lib/otp-preference.ts. A WebOTP auto-fill,
+ * navigator.credentials.get({ otp }), is deliberately not used: it needs the SMS to end with "@host #code", which the
+ * registered SMS template does not have. The input still offers the one-time-code hint, so iOS and Android keyboards
+ * suggest the code from the SMS.)
  */
 export function OtpFlow({
   purpose,
-  channel: advertisedChannel = null,
-  codeLength: advertisedLength = null,
+  codes,
+  onChannelsChanged,
   submitLabel,
   submittingLabel,
   extraValid = true,
@@ -50,10 +65,11 @@ export function OtpFlow({
   onStepChange,
 }: {
   purpose: 'login' | 'reset' | 'activate'
-  /** The channel login-options named for this server (a request's own answer takes over once there is one). */
-  channel?: OtpChannel | null
-  /** How many digits the code has (login-options `codeLength`; 4 by SMS, 6 on WhatsApp). A request's own answer takes over. */
-  codeLength?: number | null
+  /** What the server offers for this purpose: the channels (WhatsApp and SMS are switched on separately), their code
+   *  lengths, and whether it takes a `channel` at all. purposeCodes() / unknownCodes() in lib/otp-channel.ts. */
+  codes: PurposeCodes
+  /** The server refused the channel asked for (HR switched it off meanwhile): reload the sign-in options. */
+  onChannelsChanged?: () => void
   submitLabel: string
   submittingLabel: string
   /** False while the extra fields (e.g. a new password) aren't valid yet. */
@@ -67,38 +83,71 @@ export function OtpFlow({
   const [employeeCode, setEmployeeCode] = React.useState('')
   const [otp, setOtp] = React.useState('')
   const [sent, setSent] = React.useState<OtpRequestResult | null>(null)
+  // The channel the code on screen was asked for (the answer's own `channel` wins when it names one).
+  const [sentVia, setSentVia] = React.useState<OtpChannel | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const [busy, setBusy] = React.useState(false)
+  const [busy, setBusy] = React.useState<false | 'ask' | 'submit'>(false)
+  // Which channel's request is running (its button shows the spinner).
+  const [askingVia, setAskingVia] = React.useState<OtpChannel | null>(null)
+  // The channel the resend wait belongs to (null = not known: it holds every button).
+  const [waitFor, setWaitFor] = React.useState<OtpChannel | null>(null)
+  const [remembered, setRemembered] = React.useState<OtpChannel | null>(() => readRememberedChannel())
   const resend = useCountdown()
   const expiry = useCountdown()
   const isPhone = useIsPhone()
 
-  // What the server's last answer said, else what login-options said, else "not known" (neutral words).
-  const channel = resolveChannel(sent?.channel, advertisedChannel)
+  // Step 1: the ways on offer, the remembered one first. One way: it is used as before; none named: "a code".
+  const choices = channelChoices(codes.channels, remembered)
+  const only = singleChannel(codes)
+  // Step 2: what the server's last answer said, else what was asked for / login-options said, else "not known".
+  const channel = resolveChannel(sent?.channel, sentVia ?? only)
   // The same for the code's length: the request's answer, else login-options, else what the channel implies.
-  const length = otpLength(sent?.codeLength ?? advertisedLength, channel)
+  const length = otpLength(sent?.codeLength ?? codeLengthFor(codes, channel), channel)
 
-  async function requestCode(e?: React.FormEvent) {
-    e?.preventDefault()
+  /** Whether the server's resend wait holds this channel's button. */
+  const waitingFor = (via: OtpChannel | null) => resend.seconds > 0 && (waitFor === null || via === null || waitFor === via)
+
+  /** Asks for a code by `via` (null = the server's choice). `switching` = step 2's "send it the other way instead". */
+  async function requestCode(via: OtpChannel | null, switching = false) {
     setError(null)
     if (!employeeCode.trim()) return setError('Enter your employee code.')
-    setBusy(true)
+    setBusy('ask')
+    setAskingVia(via)
     try {
-      const result = await authApi.requestOtp(employeeCode.trim(), purpose)
+      const result = await authApi.requestOtp(employeeCode.trim(), purpose, requestChannel(codes, via))
+      const used = normalizeChannel(result.channel) ?? via
       setSent(result)
+      setSentVia(used)
       setOtp('')
+      setWaitFor(used)
       resend.start(cleanSeconds(result.resendAfterSeconds))
       expiry.start(cleanSeconds(result.expiresInSeconds))
+      // Remembered only when the employee had a choice.
+      if (used && codes.choosable && (codes.channels.length > 1 || switching)) {
+        rememberChannel(used)
+        setRemembered(used)
+      }
       onCodeSent?.()
       onStepChange?.(2)
     } catch (err) {
+      const gone = channelUnavailable(err)
+      if (gone) {
+        // HR switched that way off meanwhile: say so, and let the page reload what is on offer now.
+        setError(gone.message)
+        onChannelsChanged?.()
+        return
+      }
       // The server's own sentence (cooldown, hourly limit, "couldn't send", "temporarily unavailable", turned
-      // off), and for a cooldown how long to wait.
+      // off), and for a cooldown how long to wait (for that channel: the other one has its own wait).
       const failure = describeOtpFailure(err, 'request')
-      if (failure.retryAfterSeconds > 0) resend.start(failure.retryAfterSeconds)
+      if (failure.retryAfterSeconds > 0 && !switching) {
+        setWaitFor(via)
+        resend.start(failure.retryAfterSeconds)
+      }
       setError(failure.message)
     } finally {
       setBusy(false)
+      setAskingVia(null)
     }
   }
 
@@ -106,7 +155,7 @@ export function OtpFlow({
     e.preventDefault()
     setError(null)
     if (otp.length !== length || !/^\d+$/.test(otp)) return setError(enterCodeMessage(length))
-    setBusy(true)
+    setBusy('submit')
     try {
       await onSubmit(employeeCode.trim(), otp)
     } catch (err) {
@@ -118,6 +167,7 @@ export function OtpFlow({
 
   function changeEmployee() {
     setSent(null)
+    setSentVia(null)
     setOtp('')
     setError(null)
     expiry.start(0)
@@ -125,9 +175,17 @@ export function OtpFlow({
   }
 
   if (!sent) {
-    const waiting = resend.seconds > 0
+    const picking = choices.length > 1
+    const main = choices[0] ?? null
+    const mainWaiting = waitingFor(main)
     return (
-      <form onSubmit={requestCode} noValidate>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!mainWaiting && busy === false) void requestCode(main)
+        }}
+        noValidate
+      >
         <AuthInput
           id="otp-employee-code"
           label="Employee Code"
@@ -147,17 +205,39 @@ export function OtpFlow({
           placeholder="e.g. UKT-10482"
         />
         <p id="otp-send-hint" className="auth-hint">
-          {sendHint(channel, length)}
+          {picking ? chooseHint(codes) : sendHint(only, codeLengthFor(codes, only))}
         </p>
         {error && <AuthAlert tone="error">{error}</AuthAlert>}
         <AuthButton
-          loading={busy}
+          loading={busy === 'ask' && askingVia === main}
           loadingLabel="Sending…"
-          disabled={waiting}
-          icon={<ChannelIcon channel={channel} className="auth-btn-channel" />}
+          disabled={mainWaiting || busy !== false}
+          icon={<ChannelIcon channel={main} className="auth-btn-channel" />}
         >
-          {waiting ? `Send code again in ${resend.seconds}s` : sendButtonLabel(channel)}
+          {mainWaiting
+            ? `Send code again in ${resend.seconds}s`
+            : picking && main
+              ? chooseButtonLabel(main)
+              : sendButtonLabel(only)}
         </AuthButton>
+        {picking &&
+          choices.slice(1).map((via) => {
+            const waiting = waitingFor(via)
+            const loading = busy === 'ask' && askingVia === via
+            return (
+              <button
+                key={via}
+                type="button"
+                className="auth-altbtn"
+                disabled={waiting || busy !== false}
+                aria-busy={loading || undefined}
+                onClick={() => void requestCode(via)}
+              >
+                {loading ? <span className="auth-spinner auth-spinner--accent" aria-hidden /> : <ChannelIcon channel={via} />}
+                <span>{loading ? 'Sending…' : waiting ? `Send code again in ${resend.seconds}s` : chooseButtonLabel(via)}</span>
+              </button>
+            )
+          })}
       </form>
     )
   }
@@ -167,6 +247,10 @@ export function OtpFlow({
   const expiresText = expiryText(sent.expiresInSeconds)
   // The window the server gave has passed. Only a hint: the server decides what is still valid.
   const expired = cleanSeconds(sent.expiresInSeconds) > 0 && expiry.seconds === 0
+  // "Didn't get it? Send by SMS instead": the other ways the answer offered that are still on offer.
+  const other = fallbackChannels(sent.otherChannels, channel, codes.choosable ? codes.channels : undefined)[0] ?? null
+  const offer = other ? fallbackOffer(other) : null
+  const switchingNow = busy === 'ask' && other !== null && askingVia === other
 
   return (
     <form onSubmit={submit} noValidate>
@@ -210,9 +294,9 @@ export function OtpFlow({
       {extraFields}
       {error && <AuthAlert tone="error">{error}</AuthAlert>}
       <AuthButton
-        loading={busy}
+        loading={busy === 'submit'}
         loadingLabel={submittingLabel}
-        disabled={!extraValid || otp.length !== length}
+        disabled={!extraValid || otp.length !== length || busy === 'ask'}
         icon={<ArrowRight className="auth-btn-icon" aria-hidden />}
       >
         {submitLabel}
@@ -223,13 +307,28 @@ export function OtpFlow({
         </button>
         <button
           type="button"
-          disabled={resend.seconds > 0 || busy}
-          onClick={() => requestCode()}
+          disabled={resend.seconds > 0 || busy !== false}
+          onClick={() => void requestCode(channel)}
           className="auth-textbtn auth-textbtn--accent"
         >
           {resend.seconds > 0 ? `Resend code in ${resend.seconds}s` : 'Resend code'}
         </button>
       </div>
+      {offer && other && (
+        <p className="auth-fallback">
+          <ChannelIcon channel={other} />
+          <span>{offer.prefix}</span>
+          <button
+            type="button"
+            className="auth-textbtn auth-textbtn--accent"
+            disabled={busy !== false}
+            aria-busy={switchingNow || undefined}
+            onClick={() => void requestCode(other, true)}
+          >
+            {switchingNow ? 'Sending…' : offer.action}
+          </button>
+        </p>
+      )}
       <SupportInlineLink
         situation="hr"
         prefix="Not getting the code? "

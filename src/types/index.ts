@@ -735,7 +735,7 @@ export interface ManagerFlags {
   canApproveResignations?: boolean
   canApproveOnDuty?: boolean
   canApproveMissingPunch?: boolean
-  /** Holiday / Sunday work compensation claims (HR raises them, the Department Head approves). Absent on an older backend. */
+  /** Compensation claims of every kind (raised by HR or by the employee; the Department Head approves). Absent on an older backend. */
   canApproveCompensation?: boolean
   /** Already inside pendingApprovalsCount. */
   pendingCompensationCount?: number
@@ -789,12 +789,25 @@ export interface PendingResignation {
 export type PendingOnDutySession = OnDutySession
 
 /**
- * A Holiday / Sunday work compensation claim waiting for the Department Head (backend holiday_work_views.py::claim_json,
- * workflow `holiday_work`). HR raises it, the head approves it, and the shifts then join the employee's compensation
- * balance. Fields are flat like the other HR-style categories; everything but `id` may be absent on a future backend,
- * so lib/holiday-work.ts reads them defensively.
+ * A compensation claim waiting for the Department Head (backend holiday_work_views.py::claim_json, workflow
+ * `holiday_work`). Since 2026-11-19 the one claim table holds every kind (`kind`: holiday_work | ot_allowance | ot_shift
+ * | birthday | use_balance) and the employee may raise their own (`raisedByRole` "employee"); before that HR raised every
+ * claim and every claim was Sunday / holiday work, which is what a missing `kind` / `raisedByRole` still means. Fields are
+ * flat like the other HR-style categories; everything but `id` may be absent, so lib/holiday-work.ts reads them defensively.
  */
 export interface PendingHolidayWorkClaim {
+  /** holiday_work | ot_allowance | ot_shift | birthday | use_balance; absent on an older backend (= holiday_work). */
+  kind?: string | null
+  /** The server's name for the kind ("Late-in allowance"). */
+  kindLabel?: string | null
+  /** employee | hr; absent on an older backend (= hr). */
+  raisedByRole?: string | null
+  /** ot_allowance: the allowance minutes. */
+  minutes?: number | string | null
+  /** ot_allowance / ot_shift: the overtime the claim is about. */
+  overtime?: { date?: string | null; shiftEnd?: string | null; lastPunch?: string | null; extraMinutes?: number | null } | null
+  /** use_balance: the day the employee takes off (YYYY-MM-DD). */
+  useDate?: string | null
   id: number | string
   employeeId?: number | string
   employeeCode?: string
@@ -802,7 +815,7 @@ export interface PendingHolidayWorkClaim {
   department?: string | null
   designation?: string | null
   branch?: string | null
-  /** YYYY-MM-DD, the Sunday or holiday that was worked. */
+  /** YYYY-MM-DD, the day the claim is about (the Sunday / holiday worked, the OT day, the birthday, the day off). */
   workDate: string
   dayKind?: 'sunday' | 'holiday' | string
   holidayName?: string | null
@@ -810,7 +823,7 @@ export interface PendingHolidayWorkClaim {
   shifts?: number | string
   reason?: string | null
   status?: RequestStatus
-  /** The HR user who raised it. */
+  /** Who raised it: the HR user, or (raisedByRole "employee") the employee. */
   requestedBy?: string | null
   createdAt?: string | null
   hodName?: string | null

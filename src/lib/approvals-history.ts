@@ -45,7 +45,8 @@ export const CATEGORY_ORDER: readonly ApprovalCategory[] = [
   'resignation',
 ]
 
-/** What a category is called on screen ("Compensation" = holiday / Sunday work claims HR raised). */
+/** What a category is called on screen ("Compensation" = every compensation claim: Sunday / holiday work, late-in
+ *  allowance, extra hours, birthday credit, a day off from the balance; raised by the employee or by HR). */
 export const CATEGORY_LABEL: Record<ApprovalCategory, string> = {
   leave: 'Leave',
   permission: 'Permission',

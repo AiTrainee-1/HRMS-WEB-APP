@@ -211,3 +211,16 @@ test('withQuery keeps an existing query and skips empty values', () => {
   assert.equal(withQuery('/a?mode=records', { focus: 4 }), '/a?mode=records&focus=4')
   assert.equal(withQuery('/a', { q: 'a b&c' }), '/a?q=a+b%26c')
 })
+
+describe('enquiry (2026-11-24)', () => {
+  test('HR updated one of my enquiries: View opens it on the Enquiries page', () => {
+    const n = { type: 'enquiry', message: 'HR replied to your enquiry.', target: { kind: 'enquiry', id: 12, label: 'View enquiry' } }
+    assert.deepEqual(notificationLink(n), { href: '/employee/enquiries?focus=12', label: 'View enquiry' })
+    assert.equal(normalizeTarget({ kind: 'enquiry', id: 12 })?.kind, 'enquiry')
+    assert.deepEqual(targetLink(t({ kind: 'enquiry', id: null })), { href: '/employee/enquiries', label: 'View enquiry' })
+  })
+
+  test('an older server without a target: the type still opens the page', () => {
+    assert.deepEqual(notificationLink({ type: 'enquiry', message: 'HR replied.' }), { href: '/employee/enquiries', label: 'View enquiry' })
+  })
+})

@@ -19,6 +19,7 @@ import {
   type ApprovalStatus,
 } from '@/lib/approvals-history'
 import {
+  claimFacts,
   empCode,
   empDepartment,
   empName,
@@ -30,8 +31,12 @@ import {
   onDutyJourneyId,
   onDutyPunches,
 } from '@/lib/approvals-items'
+import { describeClaim } from '@/lib/holiday-work'
+import { cleanRejectRemark, rejectRemarkProblem } from '@/lib/reject-remark'
 import { cn } from '@/lib/utils'
+import type { PendingHolidayWorkClaim } from '@/types'
 import { JourneyDialog } from '@/components/onduty/JourneyDialog'
+import { FormError } from '@/components/requests/FormBits'
 import { typeLabel } from './words'
 import { CATEGORY_META } from './categoryMeta'
 import { OnDutyPunchList } from './OnDutyPunchList'
@@ -47,11 +52,20 @@ export interface DialogTarget {
 type Phase = 'view' | 'confirm' | 'done'
 
 /**
+ * What the page says about a decision it sent: true = the server accepted it; false = it did not (the page has shown the
+ * server's words); a string = the server refused the rejection's reason (`remark_required`), shown under the reason box
+ * while the dialog stays open for a better one.
+ */
+export type DecideResult = boolean | string
+
+/**
  * A request in full, and the place every decision is made: the details, the On-Duty punches with selfies and map links,
- * the approval path, who decided it; on a Pending request Approve / Reject, each confirmed in a second step with an
- * optional comment (sent with the decision). `onDecide` resolves true when the server accepted it - the dialog then shows
- * a tick and closes - and false when it did not (the page shows the server's words; the dialog stays for another try
- * unless the page closes it because the request has moved on).
+ * the approval path, who decided it; on a Pending request Approve / Reject, each confirmed in a second step. Approving
+ * takes an optional comment; rejecting needs the reason (owner, 2026-11-21: at least 3 characters, lib/reject-remark.ts) -
+ * a short one shows the rule under the box and nothing is sent. Either is sent with the decision as its `comment`.
+ * `onDecide` resolves true when the server accepted it - the dialog then shows a tick and closes - and false when it did
+ * not (the page shows the server's words; the dialog stays for another try unless the page closes it because the request
+ * has moved on), or with the server's words about the reason (see DecideResult).
  */
 export function DecisionDialog({
   target,
@@ -61,12 +75,15 @@ export function DecisionDialog({
 }: {
   target: DialogTarget | null
   onClose: () => void
-  onDecide: (decision: 'approved' | 'rejected', comment: string) => Promise<boolean>
+  onDecide: (decision: 'approved' | 'rejected', comment: string) => Promise<DecideResult>
   busy: boolean
 }) {
   const [phase, setPhase] = React.useState<Phase>('view')
   const [decision, setDecision] = React.useState<'approved' | 'rejected'>('approved')
   const [comment, setComment] = React.useState('')
+  // "Write the reason for rejecting ..." under the box: from the check below, or the server's own words.
+  const [remarkError, setRemarkError] = React.useState<string | null>(null)
+  const commentRef = React.useRef<HTMLTextAreaElement>(null)
   const [now] = React.useState(() => new Date())
   // "View route" on an On-Duty request: the day's recorded journey, opened over this dialog (closing it comes back here).
   const [routeOpen, setRouteOpen] = React.useState(false)
@@ -79,6 +96,7 @@ export function DecisionDialog({
   if (key !== openedKey) {
     setOpenedKey(key)
     setComment('')
+    setRemarkError(null)
     setDecision(target?.decision ?? 'approved')
     setPhase(target?.decision ? 'confirm' : 'view')
     setRouteOpen(false)
@@ -103,7 +121,9 @@ export function DecisionDialog({
   const comments = item ? decisionComments(normalizeOutcome(item.outcome)) : []
   const name = item ? empName(item) : ''
   const first = name.split(/\s+/)[0]
-  const effect = approveEffect(approval, 'hod')
+  // A compensation claim says what approving does (adds to the balance / applies the allowance / takes the day off).
+  const claimView = item && category === 'holiday_work' ? describeClaim(item as unknown as PendingHolidayWorkClaim) : null
+  const effect = claimView?.approveText ?? approveEffect(approval, 'hod')
   const meta = CATEGORY_META[category]
   const Icon = meta.icon
   const journeyId = item && category === 'on_duty' ? onDutyJourneyId(item) : null
@@ -113,11 +133,35 @@ export function DecisionDialog({
         .join(' · ')
     : ''
 
+  const rejecting = decision === 'rejected'
+
+  // The view step's Approve / Reject start the confirm step clean: no leftover reason message.
+  const openConfirm = (d: 'approved' | 'rejected') => {
+    setDecision(d)
+    setRemarkError(null)
+    setPhase('confirm')
+  }
+
   const confirm = async () => {
+    // Rejecting needs the reason: a short one shows the rule under the box and nothing is sent.
+    const problem = rejecting ? rejectRemarkProblem(comment) : null
+    if (problem) {
+      setRemarkError(problem)
+      commentRef.current?.focus()
+      return
+    }
+    setRemarkError(null)
     const sentFor = key
-    const ok = await onDecide(decision, comment)
+    const result = await onDecide(decision, rejecting ? cleanRejectRemark(comment) : comment)
     // Closed (or moved to another request) while the decision was on its way: nothing left here to show.
-    if (!ok || keyRef.current !== sentFor) return
+    if (keyRef.current !== sentFor) return
+    if (typeof result === 'string') {
+      // The server refused the reason (remark_required): its words go under the box, the dialog stays.
+      setRemarkError(result)
+      commentRef.current?.focus()
+      return
+    }
+    if (!result) return
     setPhase('done')
     window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(onClose, 1100)
@@ -129,6 +173,8 @@ export function DecisionDialog({
         ['When', itemDateLabel(category, item)],
         ['Department', empDepartment(item)],
         ['Sent', item.createdAt ? `${fmtDay(item.createdAt)}${pending ? ` · ${waitingFor(item.createdAt, now)?.toLowerCase() ?? ''}` : ''}` : null],
+        // A compensation claim: who raised it (the employee or HR), the overtime times, the allowance, the shifts.
+        ...(category === 'holiday_work' ? claimFacts(item) : []),
       ]
     : []
 
@@ -167,17 +213,28 @@ export function DecisionDialog({
                       : 'Rejecting is final. The employee will be told.'}
                 </div>
                 <div className="flex flex-col gap-2">
+                  {/* Approving: an optional comment. Rejecting: the reason is required (lib/reject-remark.ts). */}
                   <Label htmlFor="decision-comment">
-                    Comment <span className="font-normal text-muted-foreground">(optional)</span>
+                    {rejecting ? 'Reason for rejecting' : 'Comment'}{' '}
+                    <span className="font-normal text-muted-foreground">{rejecting ? '(required)' : '(optional)'}</span>
                   </Label>
                   <Textarea
+                    ref={commentRef}
                     id="decision-comment"
                     value={comment}
-                    onChange={(e) => setComment(e.target.value)}
+                    onChange={(e) => {
+                      setComment(e.target.value)
+                      // The message goes once the reason is long enough (it never appears while typing).
+                      if (remarkError && !rejectRemarkProblem(e.target.value)) setRemarkError(null)
+                    }}
                     rows={3}
                     maxLength={500}
-                    placeholder={decision === 'rejected' ? 'Tell them why, so they know what to do next' : 'Anything they or HR should know'}
+                    required={rejecting}
+                    aria-invalid={rejecting && remarkError ? true : undefined}
+                    aria-describedby={rejecting && remarkError ? 'decision-comment-error' : undefined}
+                    placeholder={rejecting ? 'Tell them why, so they know what to do next' : 'Anything they or HR should know'}
                   />
+                  {rejecting && <FormError id="decision-comment-error">{remarkError}</FormError>}
                 </div>
                 <DialogFooter className="gap-2 sm:justify-between">
                   <Button variant="ghost" onClick={() => (target?.decision ? onClose() : setPhase('view'))} disabled={busy}>
@@ -276,10 +333,7 @@ export function DecisionDialog({
                     {canReject && (
                       <Button
                         variant="destructive"
-                        onClick={() => {
-                          setDecision('rejected')
-                          setPhase('confirm')
-                        }}
+                        onClick={() => openConfirm('rejected')}
                         className="min-h-11 max-md:h-12 max-md:flex-1 max-md:border-[1.5px] max-md:font-[800] sm:min-h-9"
                       >
                         <X aria-hidden="true" /> Reject
@@ -288,10 +342,7 @@ export function DecisionDialog({
                     {canApprove && (
                       <Button
                         variant="success"
-                        onClick={() => {
-                          setDecision('approved')
-                          setPhase('confirm')
-                        }}
+                        onClick={() => openConfirm('approved')}
                         className="min-h-11 max-md:h-12 max-md:flex-1 max-md:border-[1.5px] max-md:font-[800] sm:min-h-9"
                       >
                         <Check aria-hidden="true" /> Approve

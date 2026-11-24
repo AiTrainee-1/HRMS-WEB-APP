@@ -20,6 +20,7 @@ import {
   LifeBuoy,
   MapPin,
   MessageCircle,
+  MessageCircleQuestion,
   ShieldUser,
   Umbrella,
   type LucideIcon,
@@ -94,6 +95,7 @@ export const PHONE_DRAWER: PhoneNavGroup[] = [
       item('/employee/permissions', 'Permissions', Hand, { color: '#2980B9' }),
       item('/employee/compensation', 'Compensation', BriefcaseBusiness, { color: '#047857' }),
       item('/employee/hod', 'My Department Head', ShieldUser, { color: '#6D28D9' }),
+      item('/employee/enquiries', 'Enquiries', MessageCircleQuestion, { color: '#0F766E' }),
     ],
   },
   {

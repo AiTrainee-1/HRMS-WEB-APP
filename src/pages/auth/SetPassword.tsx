@@ -5,6 +5,7 @@ import { Circle, CircleCheck, IdCard, Lock, ShieldAlert, ShieldCheck } from 'luc
 import { authApi } from '@/api/resources'
 import { ApiError } from '@/api/client'
 import { useIsPhone } from '@/hooks/useIsPhone'
+import { useLoginOptions } from '@/hooks/useLoginOptions'
 import { AuthShell } from '@/components/auth/AuthShell'
 import { AuthHeadline, AuthPortalChip, AuthTopRow } from '@/components/auth/AuthHeader'
 import { AuthInput } from '@/components/auth/AuthInput'
@@ -13,35 +14,33 @@ import { AuthAlert } from '@/components/auth/AuthAlert'
 import { AuthDialog } from '@/components/auth/AuthDialog'
 import { OtpFlow } from '@/components/auth/OtpFlow'
 import { AuthSupportCard } from '@/components/support/AuthSupportCard'
-import { activateFootnote, activateIntro, activateStepTitle, normalizeChannel, type OtpChannel } from '@/lib/otp-channel'
+import {
+  activateFootnote,
+  activateIntro,
+  activateStepTitle,
+  purposeCodes,
+  singleChannel,
+  unknownCodes,
+  type PurposeCodes,
+} from '@/lib/otp-channel'
 import { PASSWORD_RULES, signInFailureKind } from '@/lib/auth-look'
 
 /**
- * First-time access. A new employee first confirms a code sent (by SMS or WhatsApp, as the server is set up) to
- * the number HR registered for them, then chooses a password. The plain form below is only used when the server
- * has activation codes switched off (or can't send them), so nobody is locked out. Drawn like the mobile app's
- * Set Password screen (step pill, step banner, password checklist).
+ * First-time access. A new employee first confirms a code sent (by WhatsApp or SMS - whichever HR has switched on;
+ * with both, the employee picks) to the number HR registered for them, then chooses a password. The plain form below
+ * is only used when the server has activation codes switched off (or can't send them), so nobody is locked out. Drawn
+ * like the mobile app's Set Password screen (step pill, step banner, password checklist).
  */
 export default function SetPassword() {
   const [, navigate] = useLocation()
-  // null until the server answers; if it can't be reached, assume codes are needed (the request will
-  // then report the connection problem itself).
-  const [otpActivate, setOtpActivate] = React.useState<boolean | null>(null)
-  // The channel the server sends codes on; null when it did not say (an older server): the words are then neutral.
-  const [channel, setChannel] = React.useState<OtpChannel | null>(null)
-  const [codeLength, setCodeLength] = React.useState<number | null>(null)
+  // Asked again whenever the tab comes back into view. null until the server answers; if it can't be reached, assume
+  // codes are needed (the request will then report the connection problem itself).
+  const { options, failed, reload: reloadOptions } = useLoginOptions()
+  const codes = options ? purposeCodes(options, 'activate') : unknownCodes()
+  const otpActivate: boolean | null = options ? codes.available : failed ? true : null
+  // Names the channel when it is the one way on offer; null (neutral words) with both on or from an older server.
+  const channel = singleChannel(codes)
   const [otpStep, setOtpStep] = React.useState<1 | 2>(1)
-
-  React.useEffect(() => {
-    authApi
-      .loginOptions()
-      .then((o) => {
-        setChannel(normalizeChannel(o.otpChannel))
-        setCodeLength(o.codeLength ?? null)
-        setOtpActivate(o.otpActivate)
-      })
-      .catch(() => setOtpActivate(true))
-  }, [])
 
   const stepText = otpActivate === false ? 'STEP 1 OF 1' : `STEP ${otpStep} OF 2`
 
@@ -82,7 +81,12 @@ export default function SetPassword() {
         </div>
       )}
       {otpActivate === true && (
-        <ActivateWithOtp channel={channel} codeLength={codeLength} onStepChange={setOtpStep} onDone={() => navigate('/employee-login')} />
+        <ActivateWithOtp
+          codes={codes}
+          onChannelsChanged={reloadOptions}
+          onStepChange={setOtpStep}
+          onDone={() => navigate('/employee-login')}
+        />
       )}
       {otpActivate === false && <DirectForm onDone={() => navigate('/employee-login')} />}
 
@@ -129,16 +133,17 @@ function PasswordRules({ value }: { value: string }) {
 }
 
 function ActivateWithOtp({
-  channel,
-  codeLength,
+  codes,
+  onChannelsChanged,
   onStepChange,
   onDone,
 }: {
-  channel: OtpChannel | null
-  codeLength: number | null
+  codes: PurposeCodes
+  onChannelsChanged: () => void
   onStepChange: (step: 1 | 2) => void
   onDone: () => void
 }) {
+  const channel = singleChannel(codes)
   const [password, setPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
   const passwordsOk = password.length >= 8 && password === confirm
@@ -148,8 +153,8 @@ function ActivateWithOtp({
     <div className="auth-section">
       <OtpFlow
         purpose="activate"
-        channel={channel}
-        codeLength={codeLength}
+        codes={codes}
+        onChannelsChanged={onChannelsChanged}
         submitLabel="Set Password & Activate"
         submittingLabel="Saving…"
         extraValid={passwordsOk}

@@ -7,7 +7,7 @@
 // early-out times, compensation days), plus the overtime pay each month's salary slip paid. This file reads that reply
 // defensively and groups it; every figure and sentence is the server's.
 
-import { formatMinutes, formatShifts, isoDateOrNull, type CompensationItem } from './compensation.ts'
+import { formatMinutes, formatShifts, isoDateOrNull, parseClaimFields, type CompensationItem } from './compensation.ts'
 import { formatINR } from './money.ts'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -90,8 +90,11 @@ function readItem(raw: unknown, index: number): HistoryItem | null {
   const source: Source = (SOURCES as string[]).includes(rawSource) ? (rawSource as Source) : 'hr'
   const date = isoDateOrNull(raw.date)
   const month = str(raw.month)
+  const key = str(raw.key) || `item-${index}`
   return {
-    key: str(raw.key) || `item-${index}`,
+    // Self-claim keys (2026-11-19): only if the server ever sends them here too; absent = not claimable.
+    ...parseClaimFields(raw, kind, key),
+    key,
     kind,
     group: str(raw.group) || 'other',
     date,

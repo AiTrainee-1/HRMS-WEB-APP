@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Banknote, CalendarCheck, ChevronRight, Clock, IdCard, KeyRound, Lock, LockKeyhole, Umbrella } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useIsPhone } from '@/hooks/useIsPhone'
-import { authApi, type LoginOptions } from '@/api/resources'
+import { useLoginOptions } from '@/hooks/useLoginOptions'
 import { ApiError } from '@/api/client'
 import { AuthShell } from '@/components/auth/AuthShell'
 import { AuthBrandRow, AuthHeadline } from '@/components/auth/AuthHeader'
@@ -13,10 +13,11 @@ import { AuthButton } from '@/components/auth/AuthButton'
 import { AuthAlert } from '@/components/auth/AuthAlert'
 import { AuthDialog } from '@/components/auth/AuthDialog'
 import { OtpFlow } from '@/components/auth/OtpFlow'
-import { ChannelIcon } from '@/components/auth/ChannelIcon'
+import { LoginMethodOption } from '@/components/auth/LoginMethodOption'
 import { AuthSupportCard } from '@/components/support/AuthSupportCard'
 import { SupportInlineLink } from '@/components/support/SupportInlineLink'
-import { normalizeChannel, switchToCodeLabel } from '@/lib/otp-channel'
+import { purposeCodes, type OtpChannel } from '@/lib/otp-channel'
+import { codesForChannel, keepCodeChannel, loginChannelStates } from '@/lib/login-methods'
 import { signInFailureKind } from '@/lib/auth-look'
 
 // What the portal is for, on the header (the mobile login's feature chips).
@@ -38,22 +39,19 @@ export default function Login() {
   const [serverDown, setServerDown] = React.useState(false)
   // The server answered and turned the sign-in down: the "Authentication Failed" notice, with its own sentence.
   const [rejection, setRejection] = React.useState<{ identifier: string; message: string } | null>(null)
-  // Which sign-in methods the server offers. Until it answers (or if it can't), password sign-in works as before.
-  const [options, setOptions] = React.useState<LoginOptions | null>(null)
-  const [mode, setMode] = React.useState<'otp' | 'password'>('password')
-  React.useEffect(() => {
-    authApi
-      .loginOptions()
-      .then((o) => {
-        setOptions(o)
-        setMode(o.otpLogin ? 'otp' : 'password')
-      })
-      .catch(() => {})
-  }, [])
-  const showOtp = mode === 'otp' && options?.otpLogin === true
-  const canSwitch = options?.otpLogin === true && options.passwordLogin
-  // How the server sends codes (SMS or WhatsApp); null when it did not say (an older server): the words are then neutral.
-  const channel = normalizeChannel(options?.otpChannel)
+  // Employee Code + Password is the default and always works (owner 2026-11-24, as in the mobile app). "Continue with
+  // SMS OTP" / "Continue with WhatsApp OTP" sit under it; the one chosen opens the code form for that channel only
+  // (null = the password form).
+  const [codeChannel, setCodeChannel] = React.useState<OtpChannel | null>(null)
+  // Which code channels the server offers, asked again whenever the tab comes back into view (HR switches WhatsApp and
+  // SMS codes on and off separately). A channel switched off while its form is open: back to the password form.
+  const { options, reload: reloadOptions } = useLoginOptions((next) => {
+    setCodeChannel((current) => keepCodeChannel(current, next))
+  })
+  const loginCodes = purposeCodes(options, 'login')
+  const channelStates = loginChannelStates(options, !!options)
+  const anyLocked = channelStates.some((st) => !st.enabled)
+  const showOtp = codeChannel !== null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -105,11 +103,12 @@ export default function Login() {
         </Link>
       </p>
 
-      {showOtp ? (
+      {codeChannel ? (
         <OtpFlow
+          key={codeChannel}
           purpose="login"
-          channel={channel}
-          codeLength={options?.codeLength}
+          codes={codesForChannel(loginCodes, codeChannel)}
+          onChannelsChanged={reloadOptions}
           submitLabel="Verify & Sign In"
           submittingLabel="Signing in…"
           onSubmit={async (employeeCode, otp) => {
@@ -136,7 +135,7 @@ export default function Login() {
             label="Password"
             labelAside={
               <Link
-                href={options?.otpReset ? '/forgot-password' : '/set-password'}
+                href={purposeCodes(options, 'reset').available ? '/forgot-password' : '/set-password'}
                 className="auth-link auth-label-aside"
                 aria-label="Forgot password?"
               >
@@ -158,11 +157,27 @@ export default function Login() {
         </form>
       )}
 
-      {canSwitch && (
-        <button type="button" onClick={() => setMode(showOtp ? 'password' : 'otp')} className="auth-switch">
-          {showOtp ? <Lock aria-hidden /> : <ChannelIcon channel={channel} />}
-          <span>{showOtp ? 'Use my password instead' : switchToCodeLabel(channel)}</span>
+      {showOtp ? (
+        <button type="button" onClick={() => setCodeChannel(null)} className="auth-switch">
+          <Lock aria-hidden />
+          <span>Use my password instead</span>
         </button>
+      ) : (
+        <div className="auth-methods">
+          <div className="auth-divider">
+            <span>OR CONTINUE WITH</span>
+          </div>
+          {channelStates.map((st) => (
+            <LoginMethodOption key={st.channel} state={st} onChoose={() => setCodeChannel(st.channel)} />
+          ))}
+          {anyLocked && (
+            <p className="auth-methods-note">
+              {options
+                ? 'A locked option is switched off by HR right now. Your Employee Code and password always work.'
+                : 'Checking which sign-in codes are available... Your Employee Code and password always work.'}
+            </p>
+          )}
+        </div>
       )}
 
       <div className="auth-divider">

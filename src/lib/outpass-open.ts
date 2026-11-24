@@ -16,6 +16,28 @@ export type OpenPassInput = {
   enteredAt?: string | null
   expectedReturnAt?: string | null
   createdAt: string
+  /** 'on_duty': the pass of an On-Duty request (shown from submission, usable only once approved). */
+  source?: string | null
+}
+
+/**
+ * The newest pass still waiting for approval, asked for today (the device's day): pinned under "Waiting for approval"
+ * when no pass is open (owner 2026-11-24: the card is shown at once; its QR comes with the approval).
+ */
+export function pickPendingPass<T extends OpenPassInput>(items: readonly T[], nowMs: number): T | null {
+  const today = new Date(nowMs).toDateString()
+  let best: T | null = null
+  let bestAt = 0
+  for (const item of items) {
+    if (String(item.status).toLowerCase() !== 'pending') continue
+    const at = ms(item.createdAt)
+    if (at == null || new Date(at).toDateString() !== today) continue
+    if (!best || at > bestAt) {
+      best = item
+      bestAt = at
+    }
+  }
+  return best
 }
 
 export type OpenPassKind = 'out' | 'ready'
@@ -26,6 +48,7 @@ function ms(value: string | null | undefined): number | null {
   return Number.isNaN(t) ? null : t
 }
 
+/** Only an approved pass can be used at the gate (owner 2026-11-24: no QR before HR / HOD approval). */
 export function openKind(p: OpenPassInput, nowMs: number): OpenPassKind | null {
   if (String(p.status).toLowerCase() !== 'approved') return null
   if (p.exitedAt && !p.enteredAt) return 'out'
@@ -96,11 +119,11 @@ export type OutpassRowLabel = { label: string; tone: 'waiting' | 'approved' | 'r
 
 /**
  * The plain-English pill of a pass in the list, from its status and where it is at the gate (`scanStatus`):
- * Waiting / Not approved / Ready to use / Out now / Returned / Not used (the 60 minutes ran out) / Approved.
+ * Pending approval / Not approved / Ready to use / Out now / Returned / Not used (the 60 minutes ran out) / Approved.
  */
 export function outpassRowLabel(p: { status: string; scanStatus?: string | null; exitedAt?: string | null; enteredAt?: string | null }): OutpassRowLabel {
   const s = String(p.status).toLowerCase()
-  if (s === 'pending') return { label: 'Waiting', tone: 'waiting' }
+  if (s === 'pending') return { label: 'Pending approval', tone: 'waiting' }
   if (s === 'rejected') return { label: 'Not approved', tone: 'rejected' }
   if (s !== 'approved') return { label: p.status, tone: 'neutral' }
   switch (p.scanStatus) {

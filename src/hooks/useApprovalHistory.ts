@@ -13,7 +13,7 @@ import {
   type ApprovalItem,
   type ApprovalStatus,
 } from '@/lib/approvals-history'
-import { describeClaim } from '@/lib/holiday-work'
+import { claimDecisionToast } from '@/lib/holiday-work'
 import { waitingText } from '@/lib/approval'
 import type { ApprovalProgress, PendingHolidayWorkClaim, RequestStatus } from '@/types'
 
@@ -98,10 +98,11 @@ export interface DecideArgs {
 export function decisionToast(args: DecideArgs, result: unknown): { title: string; description?: string } {
   const what = CATEGORY_LABEL[args.category] === 'Resignations' ? 'Resignation' : `${CATEGORY_LABEL[args.category]} request`
   if (args.decision === 'rejected') return { title: `${what} rejected`, description: 'The employee will be told.' }
-  const r = (result && typeof result === 'object' ? result : {}) as { approval?: ApprovalProgress | null; credited?: unknown }
-  if (args.category === 'holiday_work' && r.credited) {
-    const claim = describeClaim(args.item as unknown as PendingHolidayWorkClaim)
-    return { title: 'Compensation approved', description: `Added to ${claim.name}'s compensation balance.` }
+  const r = (result && typeof result === 'object' ? result : {}) as { approval?: ApprovalProgress | null }
+  if (args.category === 'holiday_work') {
+    // Any compensation claim kind: the server's own `effect` sentence, else what the kind does (credited, allowance, day off).
+    const claim = claimDecisionToast(args.item as unknown as PendingHolidayWorkClaim, args.decision, result)
+    if (claim) return claim
   }
   const next = waitingText(r.approval)
   return { title: `${what} approved`, description: next ? `${next} now.` : 'The decision is final.' }

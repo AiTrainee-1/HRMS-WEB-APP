@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { ApprovalTrail } from '@/components/employee/ApprovalTrail'
 import { hasTrail, waitingText } from '@/lib/approval'
+import { cleanRejectRemark, rejectRemarkProblem } from '@/lib/reject-remark'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import type { ApprovalProgress } from '@/types'
@@ -31,6 +32,7 @@ export interface ApprovalCardProps {
   canReject?: boolean
   disabled?: boolean
   onApprove: () => void
+  /** The reason, required (at least 3 characters, lib/reject-remark.ts): never called without one. */
   onReject: (comment: string) => void
   isSubmitting?: boolean
 }
@@ -41,6 +43,7 @@ export function ApprovalCard({
 }: ApprovalCardProps) {
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [comment, setComment] = React.useState('')
+  const [remarkError, setRemarkError] = React.useState<string | null>(null)
   const [expanded, setExpanded] = React.useState(false)
 
   const initials = employeeName
@@ -86,7 +89,16 @@ export function ApprovalCard({
       {canApprove || canReject ? (
         <div className="flex shrink-0 gap-2 sm:flex-col lg:flex-row">
           {canReject && (
-            <Button size="sm" variant="destructive" disabled={disabled || isSubmitting} onClick={() => setRejectOpen(true)} className="flex-1">
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={disabled || isSubmitting}
+              onClick={() => {
+                setRemarkError(null)
+                setRejectOpen(true)
+              }}
+              className="flex-1"
+            >
               <X /> Reject
             </Button>
           )}
@@ -111,8 +123,26 @@ export function ApprovalCard({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="reject-comment">Comment (optional)</Label>
-            <Textarea id="reject-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+            <Label htmlFor="reject-comment">
+              Reason for rejecting <span className="font-normal text-muted-foreground">(required)</span>
+            </Label>
+            <Textarea
+              id="reject-comment"
+              value={comment}
+              onChange={(e) => {
+                setComment(e.target.value)
+                if (remarkError && !rejectRemarkProblem(e.target.value)) setRemarkError(null)
+              }}
+              rows={3}
+              required
+              aria-invalid={remarkError ? true : undefined}
+              aria-describedby={remarkError ? 'reject-comment-error' : undefined}
+            />
+            {remarkError && (
+              <p id="reject-comment-error" role="alert" className="text-[13px] font-medium text-rejected">
+                {remarkError}
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>
@@ -121,9 +151,16 @@ export function ApprovalCard({
             <Button
               variant="destructive"
               onClick={() => {
-                onReject(comment)
+                // Rejecting needs the reason: a short one shows the rule and nothing is sent.
+                const problem = rejectRemarkProblem(comment)
+                if (problem) {
+                  setRemarkError(problem)
+                  return
+                }
+                onReject(cleanRejectRemark(comment))
                 setRejectOpen(false)
                 setComment('')
+                setRemarkError(null)
               }}
             >
               Confirm reject

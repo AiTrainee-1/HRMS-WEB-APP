@@ -33,6 +33,9 @@ import { ChoiceTiles, FormError, FormNote, OffNotice, SentState, StepLabel } fro
 import { PHONE_BUTTON_ROW, PHONE_NO_CANCEL, PHONE_SUBMIT } from './phone'
 import { cn } from '@/lib/utils'
 import { TimePickerField } from '@/components/employee/TimePickerField'
+import { isQueued } from '@/offline/submit'
+import { queuedRequests } from '@/offline/queued-requests'
+import { QUEUED_MESSAGE } from '@/lib/offline-ops'
 
 const SLOT_ICON: Record<PunchSlot, LucideIcon> = { morning_in: LogIn, lunch_out: UtensilsCrossed, lunch_in: Utensils, evening_out: LogOut }
 
@@ -49,9 +52,12 @@ export function MissingPunchDialog({
   pipeline,
   offNote,
   onSent,
+  initialDate,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Open on this day (YYYY-MM-DD) instead of today: the attendance day panel's chips (owner 2026-11-24). Checked by the page. */
+  initialDate?: string | null
   /** After a successful send, with the punch date (YYYY-MM-DD): the page opens its month. */
   onSent?: (day: string) => void
   shift: ShiftTimes
@@ -78,7 +84,7 @@ export function MissingPunchDialog({
     if (!open) return
     const now = new Date()
     const win = getRequestWindow(now)
-    const today = win.today >= win.min ? win.today : win.min
+    const today = initialDate || (win.today >= win.min ? win.today : win.min)
     setDate(today)
     setSlot('morning_in')
     setMinutes(startTimeFor(shift, 'morning_in', nowMinutesIfToday(today, now)))
@@ -102,8 +108,15 @@ export function MissingPunchDialog({
   const overlap = date ? overlapNotice(rows, date, slot) : { repeat: null, also: null }
 
   const apply = useMutation({
-    mutationFn: missingPunchApi.apply,
-    onSuccess: (created) => {
+    // Works offline too (owner 2026-11-24): saved on this device and sent once back online.
+    mutationFn: (body: Parameters<typeof missingPunchApi.apply>[0]) => queuedRequests.missingPunch<Awaited<ReturnType<typeof missingPunchApi.apply>>>(body),
+    onSuccess: (result) => {
+      if (isQueued(result)) {
+        setSent(QUEUED_MESSAGE)
+        toast.info('Saved on this device', { description: 'It will be sent automatically when you are back online.' })
+        return
+      }
+      const created = result
       qc.invalidateQueries({ queryKey: ['missing-punch'] })
       qc.invalidateQueries({ queryKey: MY_PENDING_KEY })
       const who = waitingPhrase(created?.approval)

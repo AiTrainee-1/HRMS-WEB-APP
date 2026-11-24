@@ -9,10 +9,12 @@ import { FormNote, OffNotice } from '@/components/requests/FormBits'
 import { PermissionApplyDialog } from '@/components/requests/PermissionApplyDialog'
 import { RequestCard } from '@/components/requests/RequestCard'
 import { RequestList } from '@/components/requests/RequestList'
+import { WithdrawButton } from '@/components/requests/WithdrawButton'
 import { HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
 import { showView } from '@/components/requests/show-view'
 import { attendanceApi, permissionApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
+import { useApplyPrefill } from '@/hooks/useApplyPrefill'
 import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { useFocusItem } from '@/hooks/useFocusItem'
 import { useSelectedMonth } from '@/hooks/useSelectedMonth'
@@ -48,6 +50,13 @@ export default function Permissions() {
   const { user } = useAuth()
   const now = new Date()
   const [applyOpen, setApplyOpen] = React.useState(false)
+  // The attendance day panel's "Permission" (?apply=YYYY-MM-DD&type=morning_late_in|evening_early_out): the form opens on
+  // that day with the kind that fits it (never a future day).
+  const [applyPrefill, setApplyPrefill] = React.useState<{ date: string | null; type: PermissionTypeKey | null } | null>(null)
+  useApplyPrefill((p) => {
+    setApplyPrefill({ date: p.date, type: p.permissionType })
+    setApplyOpen(true)
+  })
   // The pipeline HR configured for permissions, and the note when HR has switched them off.
   const { workflow, offNote } = useApprovalWorkflow('permission')
   const pipeline = pipelineSentence(workflow, 'permission request')
@@ -250,10 +259,14 @@ export default function Permissions() {
                 approval={r.approval}
                 sentAt={r.createdAt}
                 footer={
-                  <p className="hidden max-md:flex max-md:items-center max-md:justify-between max-md:gap-2 max-md:text-[10.5px] max-md:font-bold">
-                    <span className="max-md:text-muted-foreground">Req ID: #PR-{r.id}</span>
-                    <span className="max-md:font-[800] max-md:text-primary">{duration}</span>
-                  </p>
+                  <>
+                    {/* Owner 2026-11-24: a permission still waiting for an answer can be taken back. */}
+                    <WithdrawButton module="permission" id={r.id} status={r.status} label={`permission request for ${dayText(r.date)}`} />
+                    <p className="hidden max-md:flex max-md:items-center max-md:justify-between max-md:gap-2 max-md:text-[10.5px] max-md:font-bold">
+                      <span className="max-md:text-muted-foreground">Req ID: #PR-{r.id}</span>
+                      <span className="max-md:font-[800] max-md:text-primary">{duration}</span>
+                    </p>
+                  </>
                 }
               >
                 {outcome.kind === 'allowed' && effect && <p className="text-[12.5px] font-medium text-approved">{effect}</p>}
@@ -269,7 +282,12 @@ export default function Permissions() {
       </PageShell>
       <PermissionApplyDialog
         open={applyOpen}
-        onOpenChange={setApplyOpen}
+        onOpenChange={(o) => {
+          setApplyOpen(o)
+          if (!o) setApplyPrefill(null)
+        }}
+        initialDate={applyPrefill?.date}
+        initialType={applyPrefill?.type}
         rows={all}
         monthlyLimit={monthlyLimit}
         pipeline={pipeline}

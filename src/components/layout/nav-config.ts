@@ -22,6 +22,7 @@ import {
   LifeBuoy,
   HandCoins,
   UserCheck,
+  MessageCircleQuestion,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -71,6 +72,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Manager Approvals', href: '/employee/approvals', icon: ClipboardCheck, description: 'Requests from your team', managerOnly: true },
       { label: 'My Department Head', href: '/employee/hod', icon: UserCheck, description: 'Who approves your requests' },
+      { label: 'Enquiries', href: '/employee/enquiries', icon: MessageCircleQuestion, description: 'Ask HR a question and follow the answer' },
       { label: 'Team Chat', href: '/employee/chat', icon: MessageCircle, description: 'Company and department messages' },
     ],
   },

@@ -1,11 +1,21 @@
 import { format, parseISO } from 'date-fns'
-import { CalendarDays, History, Megaphone, Sparkles, UserCheck, type LucideIcon } from 'lucide-react'
+import { CalendarDays, Hand, History, Megaphone, Sparkles, UserCheck, type LucideIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
 import { GlassCard } from '@/components/kit'
 import { cn } from '@/lib/utils'
 import { formatMinutes, formatShifts, kindInfo, statusInfo, type CompensationItem } from '@/lib/compensation'
+import { canClaimItem, claimStateOf, type ClaimState } from '@/lib/compensation-claims'
 
 const OVERTIME_KINDS = new Set(['ot_shift', 'ot_shift_relaxation', 'ot_shift_pay'])
+
+/** The claim line under an item (self-claims): where its claim stands, in words. */
+const CLAIM_NOTE: Record<ClaimState, { text: string; cls: string }> = {
+  claimable: { text: 'You can claim this.', cls: 'text-brand-blue' },
+  pending: { text: 'Claimed: waiting for your Department Head.', cls: 'text-waiting' },
+  approved: { text: 'Claim approved.', cls: 'text-approved' },
+  rejected: { text: 'Your claim was not approved.', cls: 'text-rejected' },
+}
 
 /** 'Mon, 12 Oct 2026' for a YYYY-MM-DD string (the parsers only let real calendar dates through). */
 function dayText(iso: string): string {
@@ -63,8 +73,20 @@ const PHONE_SOURCE: Record<CompensationSource, string> = {
  * A kind or status this app has never heard of is drawn with a neutral chip and a generic symbol: never hidden.
  * Phones: the app's card - kind chip and status at the two ends, the source on its own row, the title, a calendar line
  * with the date, the explanation, then the figures as grey pills.
+ * Self-claims (2026-11-19): `onClaim` given (the server said `canClaim`) and the item claimable = a Claim button; an item
+ * with a claim says where it stands. Without `onClaim` the card is read-only, as before.
  */
-export function CompensationItemCard({ item, source, className }: { item: CompensationItem; source?: CompensationSource; className?: string }) {
+export function CompensationItemCard({
+  item,
+  source,
+  className,
+  onClaim,
+}: {
+  item: CompensationItem
+  source?: CompensationSource
+  className?: string
+  onClaim?: (item: CompensationItem) => void
+}) {
   const kind = kindInfo(item.kind)
   const status = statusInfo(item)
   const shifts = formatShifts(item.shifts)
@@ -86,6 +108,10 @@ export function CompensationItemCard({ item, source, className }: { item: Compen
     item.time && { label: `At ${item.time}`, key: 'time' },
   ].filter((f): f is { label: string; key: string } => !!f)
   const workedOn = item.workDate && item.workDate !== item.date ? item.workDate : null
+  const claimState = onClaim ? claimStateOf(item) : null
+  const claimable = !!onClaim && canClaimItem(item, true)
+  // A claimable item whose last claim was rejected says so next to the button.
+  const claimNote = claimState === 'claimable' && item.claim?.status === 'rejected' ? CLAIM_NOTE.rejected : claimState ? CLAIM_NOTE[claimState] : null
 
   return (
     <GlassCard
@@ -145,6 +171,21 @@ export function CompensationItemCard({ item, source, className }: { item: Compen
             </span>
           ))}
         </div>
+        {(claimNote || claimable) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t hairline pt-3 max-md:mt-0 max-md:pt-2.5" data-testid="compensation-item-claim">
+            {claimNote && <p className={cn('min-w-0 flex-1 text-[12.5px] font-semibold max-md:text-[12px]', claimNote.cls)}>{claimNote.text}</p>}
+            {claimable && (
+              <Button
+                size="sm"
+                onClick={() => onClaim?.(item)}
+                className="min-h-11 sm:min-h-8 max-md:h-10 max-md:min-h-10 max-md:w-full max-md:rounded-xl max-md:font-bold"
+                aria-label={`Claim: ${item.title}`}
+              >
+                <Hand aria-hidden="true" /> Claim
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </GlassCard>
   )

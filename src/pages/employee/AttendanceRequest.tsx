@@ -1,39 +1,29 @@
 import * as React from 'react'
 import { Link, useLocation, useSearch } from 'wouter'
-import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { formatDistanceToNowStrict, parseISO } from 'date-fns'
 import {
-  Briefcase, Building2, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Crosshair, Flag, Loader2,
-  LocateFixed, LogIn, LogOut, MapPin, MapPinned, Navigation, Play, Radar, ShieldAlert, Smartphone, XCircle,
+  Briefcase, Building2, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Crosshair, Loader2,
+  LocateFixed, LogIn, LogOut, MapPin, MapPinned, Navigation, Radar, ShieldAlert, XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
-  ApprovalState, GlassCard, PageHero, PageShell, SectionHeader, SegmentedControl, SkeletonList, StatusPill, Stepper,
+  GlassCard, PageHero, PageShell, SectionHeader, SegmentedControl, SkeletonList, StatusPill,
   SuccessCheck, Timeline, fadeIn, listItem, type StatusTone,
 } from '@/components/kit'
-import { CameraCaptureDialog } from '@/components/employee/CameraCaptureDialog'
 import { MonthYearPicker } from '@/components/employee/MonthYearPicker'
 import { SlideToConfirmPunch } from '@/components/employee/SlideToConfirmPunch'
 import { OnDutyRecords } from '@/components/onduty/OnDutyRecords'
+import { OnDutyToday } from '@/components/onduty/OnDutyToday'
 import { monthPickerProps } from '@/components/requests/month-picker'
-import {
-  useCompleteOnDuty, useGeoPunch, useGeoPunchPrecheck, useGeoPunchStatus, useOnDutyPunch,
-  useOnDutyStatus, useStartOnDuty,
-} from '@/hooks/useGeoAttendance'
-import { refreshIfWorkflowOff, useApprovalWorkflow } from '@/hooks/useApprovalSummary'
-import { ON_DUTY_RECORDS_KEY } from '@/hooks/useOnDutyRecords'
+import { useGeoPunch, useGeoPunchPrecheck, useGeoPunchStatus } from '@/hooks/useGeoAttendance'
 import { useSelectedMonth } from '@/hooks/useSelectedMonth'
 import { ApiError } from '@/api/client'
-import { pipelineSentence, waitingText } from '@/lib/approval'
 import { readFocusParams } from '@/lib/focus-item'
 import { monthOf } from '@/lib/month-switch'
-import { completePhotos, ON_DUTY_WEB_TRACKING_NOTE, punchErrorMessage, requiredPhotoCount } from '@/lib/onduty-photos'
+import { isOpenSession } from '@/lib/onduty-punches'
 import { cn } from '@/lib/utils'
-import type { GeoPunchPrecheckResult, OnDutySession, PunchSlot } from '@/types'
+import type { GeoPunchPrecheckResult, PunchSlot } from '@/types'
 
 type Fix = { latitude: number; longitude: number; accuracy?: number; isMocked: boolean }
 
@@ -67,30 +57,12 @@ function getPosition(): Promise<Fix> {
 const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError || err instanceof Error ? err.message : fallback)
 
 /** A session the employee is still working under (the backend's "punchable"). */
-function isLive(s: OnDutySession | null | undefined): boolean {
-  return !!s && !s.employeeEndedAt && ['pending_hod', 'pending_hr', 'active'].includes(s.approvalStatus)
-}
-
-// What a session's status alone can say (an older backend's fixed reading). A session that carries its own `approval`
-// block says who it is waiting for instead (see OnDuty below).
-const SESSION_STATE: Record<string, { label: string; tone: StatusTone }> = {
-  pending_hod: { label: 'Waiting for Department Head', tone: 'waiting' },
-  pending_hr: { label: 'Waiting for HR', tone: 'waiting' },
-  active: { label: 'Approved', tone: 'approved' },
-  completed: { label: 'Completed', tone: 'neutral' },
-  rejected: { label: 'Rejected', tone: 'rejected' },
-}
+const isLive = isOpenSession
 
 const SLOT_STATE: Record<string, { label: string; tone: StatusTone }> = {
   available: { label: 'Open', tone: 'neutral' },
   recorded: { label: 'Recorded', tone: 'approved' },
   approved: { label: 'Approved', tone: 'approved' },
-  pending: { label: 'Waiting for HR', tone: 'waiting' },
-}
-
-const PUNCH_STATE: Record<string, { label: string; tone: StatusTone }> = {
-  approved: { label: 'Approved', tone: 'approved' },
-  rejected: { label: 'Rejected', tone: 'rejected' },
   pending: { label: 'Waiting for HR', tone: 'waiting' },
 }
 
@@ -190,47 +162,6 @@ function PhoneGateCard({
       <h2 className="font-display max-md:mb-1 max-md:text-[14px] max-md:font-semibold">{title}</h2>
       <p className="max-md:text-[12.5px] max-md:leading-[18px] max-md:text-secondary-foreground">{body}</p>
       {children}
-    </div>
-  )
-}
-
-/** The app's On-Duty hero: a sapphire gradient card with the step pill, where you are going and a seven-part bar. */
-function PhoneOnDutyHero({
-  title,
-  subtitle,
-  headline,
-  segments,
-}: {
-  title: string
-  subtitle: string
-  headline: string
-  segments: ('done' | 'current' | 'todo')[]
-}) {
-  const done = segments.filter((s) => s === 'done').length
-  return (
-    <div className="bg-brand-gradient hidden max-md:flex max-md:flex-col max-md:gap-2 max-md:rounded-3xl max-md:p-[18px] max-md:text-white">
-      <div className="max-md:flex max-md:items-center max-md:justify-between max-md:gap-2">
-        <span className="max-md:text-[11px] max-md:font-[800] max-md:tracking-[0.09em] max-md:text-white/80">ON-DUTY</span>
-        <span className="max-md:rounded-full max-md:bg-white/20 max-md:px-[11px] max-md:py-1 max-md:text-[12px] max-md:font-[800]">{headline}</span>
-      </div>
-      <p className="font-display max-md:line-clamp-3 max-md:text-[19px] max-md:leading-[25px] max-md:font-bold max-md:break-words">{title}</p>
-      {subtitle && <p className="max-md:text-[12.5px] max-md:text-white/85 max-md:tabular-nums">{subtitle}</p>}
-      <div
-        role="progressbar"
-        aria-label={`${headline}: ${done} of ${segments.length} steps done`}
-        aria-valuemin={0}
-        aria-valuemax={segments.length}
-        aria-valuenow={done}
-        className="max-md:mt-1 max-md:flex max-md:gap-1"
-      >
-        {segments.map((s, i) => (
-          <span
-            key={i}
-            aria-hidden="true"
-            className={cn('max-md:h-1.5 max-md:flex-1 max-md:rounded-full', s === 'done' ? 'max-md:bg-white' : s === 'current' ? 'max-md:bg-white/65' : 'max-md:bg-white/25')}
-          />
-        ))}
-      </div>
     </div>
   )
 }
@@ -594,296 +525,9 @@ function OfficePunch({ onDutyLive, onSwitch }: { onDutyLive: boolean; onSwitch: 
   )
 }
 
-// ─── On-Duty session ────────────────────────────────────────────────────────
-function OnDuty() {
-  const { data, isLoading, refetch } = useOnDutyStatus()
-  const start = useStartOnDuty()
-  const punch = useOnDutyPunch()
-  const complete = useCompleteOnDuty()
-  const qc = useQueryClient()
-  // The pipeline HR configured for On-Duty, and the note when HR has switched On-Duty requests off.
-  const { workflow, offNote } = useApprovalWorkflow('on_duty')
-  const [destination, setDestination] = React.useState('')
-  const [pendingSlot, setPendingSlot] = React.useState<number | null>(null)
-  const [cameraOpen, setCameraOpen] = React.useState(false)
-  // How many photos the punch being taken needs: read from the status when the punch begins and then kept, so a
-  // status refresh (HR changing the policy) cannot change the camera under the employee's hands.
-  const [photoCount, setPhotoCount] = React.useState(1)
-  const fixRef = React.useRef<Fix | null>(null)
-  const [locating, setLocating] = React.useState<number | null>(null)
-
-  const session = data?.session ?? null
-  const live = isLive(session)
-  const liveSession = live ? session! : null
-  // View Records reads the same sessions: keep it in step with what happens here.
-  const refreshRecords = () => qc.invalidateQueries({ queryKey: ON_DUTY_RECORDS_KEY })
-
-  const startSession = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!destination.trim()) return
-    try {
-      const r = await start.mutateAsync(destination.trim())
-      // The server's own message always names HR; with the session's pipeline on hand say where it really goes.
-      const where = pipelineSentence(r.session.approval, 'session')
-      toast.success('On-Duty session started', { description: where ? `You can begin punching. ${where}` : r.message })
-      setDestination('')
-      refreshRecords()
-    } catch (err) {
-      toast.error(errMsg(err, 'Could not start the session'))
-      refreshIfWorkflowOff(qc, err)
-    }
-  }
-
-  // Location first (fails fast if blocked), then the selfie(s), then submit.
-  const beginPunch = async (slot: number) => {
-    setLocating(slot)
-    try {
-      fixRef.current = await getPosition()
-      setPhotoCount(requiredPhotoCount(data))
-      setPendingSlot(slot)
-      setCameraOpen(true)
-    } catch (err) {
-      toast.error(errMsg(err, 'Could not get your location'))
-    } finally {
-      setLocating(null)
-    }
-  }
-
-  // `photos` are in order: the first goes as `photo`, the second (when HR's policy asks for two) as `photo2`. A punch
-  // never goes out with fewer photos than the policy it was begun under asked for.
-  const submitPunch = async (photos: Blob[]) => {
-    setCameraOpen(false)
-    const all = completePhotos(photos, photoCount)
-    if (!fixRef.current || pendingSlot == null || !all) return
-    try {
-      const r = await punch.mutateAsync({ ...fixRef.current, photo: all[0], photo2: all[1], punchNumber: pendingSlot })
-      toast.success(`Punch ${r.punchNumber} (${r.punchType}) submitted`, {
-        description: r.sessionEnded ? 'All 4 punches are in, so your session has ended for today.' : 'It counts once HR approves it.',
-      })
-    } catch (err) {
-      // PHOTO2_REQUIRED (HR switched the policy to two photos after this page loaded) gets its own sentence; the
-      // refetch below then makes the next punch ask for both.
-      toast.error(punchErrorMessage(err, 'Could not submit the punch'))
-    } finally {
-      setPendingSlot(null)
-      fixRef.current = null
-      refetch()
-      refreshRecords()
-    }
-  }
-
-  const endSession = async () => {
-    try {
-      await complete.mutateAsync()
-      toast.success('On-Duty session marked done')
-      refreshRecords()
-    } catch (err) {
-      toast.error(errMsg(err, 'Could not end the session'))
-    }
-  }
-
-  if (isLoading) return <SkeletonList variant="cards" count={2} label="Loading your On-Duty session" />
-
-  const slots = data?.punchSlots ?? []
-  const requiredPhotos = requiredPhotoCount(data)
-  const base = session ? SESSION_STATE[session.approvalStatus] ?? { label: session.approvalStatus, tone: 'neutral' as StatusTone } : null
-  // While the session waits on the pipeline, say who it waits for (the status alone only knows the old fixed order).
-  const state = base && { ...base, label: waitingText(session?.approval) ?? base.label }
-  const pipeline = pipelineSentence(session?.approval ?? workflow, 'session')
-
-  // Phones: the app's hero - request, approval, four geo-punches, done as a seven-part bar.
-  let hero: { title: string; subtitle: string; headline: string; segments: ('done' | 'current' | 'todo')[] }
-  if (liveSession) {
-    const approved = liveSession.approvalStatus === 'active'
-    const slotList = slots.length ? slots : [1, 2, 3, 4].map((n) => ({ punchNumber: n, available: true }))
-    let currentTaken = !approved
-    const punchSegs = slotList.slice(0, 4).map((s) => {
-      if (!s.available) return 'done' as const
-      if (currentTaken) return 'todo' as const
-      currentTaken = true
-      return 'current' as const
-    })
-    const punched = punchSegs.filter((s) => s === 'done').length
-    hero = {
-      title: liveSession.destination,
-      subtitle: [
-        liveSession.createdAt ? `Started ${formatDistanceToNowStrict(parseISO(liveSession.createdAt), { addSuffix: true })}` : 'Started today',
-        liveSession.branchName,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      headline: !approved && state ? state.label : punched >= 4 ? 'All 4 punches in' : `Geo-punch ${punched + 1} of 4`,
-      segments: ['done', approved ? 'done' : 'current', ...punchSegs, 'todo'],
-    }
-  } else {
-    hero = {
-      title: 'Start your On-Duty',
-      subtitle: session?.approvalStatus === 'completed' ? 'Today’s day is done. You can start another.' : 'Working away from your branch today?',
-      headline: 'Step 1 of 7',
-      segments: ['current', 'todo', 'todo', 'todo', 'todo', 'todo', 'todo'],
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-5 max-md:gap-4">
-      <PhoneOnDutyHero {...hero} />
-      {liveSession ? (
-        // Phones: the hero above carries the place and state, so the title block hides and the rest stacks 16px apart.
-        <GlassCard variant="stitched" tone="emerald" padding="lg" className="max-md:flex max-md:flex-col max-md:gap-4 max-md:border-l-[1px]! max-md:border-l-[var(--glass-border)]! max-md:p-4! max-md:[&>*]:mt-0!">
-          <div className="flex flex-wrap items-start justify-between gap-3 max-md:hidden">
-            <div className="min-w-0">
-              <StatusPill tone="live">On-Duty session live</StatusPill>
-              <h2 className="font-display mt-2 text-[24px] font-semibold break-words">{liveSession.destination}</h2>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                Started {liveSession.createdAt ? formatDistanceToNowStrict(parseISO(liveSession.createdAt), { addSuffix: true }) : 'today'}
-                {liveSession.branchName ? ` • ${liveSession.branchName}` : ''}
-              </p>
-            </div>
-            {state && (
-              <StatusPill tone={state.tone} size="sm">
-                {state.label}
-              </StatusPill>
-            )}
-          </div>
-          {liveSession.isProvisional && (
-            <p className="mt-4 rounded-lg border border-waiting-border bg-waiting-bg px-3 py-2 text-[13px] text-waiting">
-              You can punch right away. Punches count once the session is approved.{pipeline && ` ${pipeline}`}
-            </p>
-          )}
-          {liveSession.approval && (
-            <div className="scrollbar-none mt-4 overflow-x-auto">
-              <Stepper approval={liveSession.approval} sentAt={liveSession.createdAt} />
-            </div>
-          )}
-
-          {requiredPhotos === 2 && <p className="mt-4 text-[12.5px] text-muted-foreground">Each punch takes two selfies, one after the other.</p>}
-          <ul className="mt-5 grid gap-3 max-md:gap-2.5 sm:grid-cols-2 sm:max-md:grid-cols-1">
-            {slots.map((s, i) => {
-              const c = SLOT_STATE[s.status] ?? { label: s.status, tone: 'neutral' as StatusTone }
-              const busy = locating === s.punchNumber || (punch.isPending && pendingSlot === s.punchNumber)
-              return (
-                <motion.li
-                  key={s.punchNumber}
-                  {...listItem(i)}
-                  className={cn('flex items-center gap-3 rounded-xl border p-4 max-md:p-3', s.available ? 'hairline bg-foreground/[0.03]' : 'border-approved-border bg-approved-bg/50')}
-                >
-                  <span aria-hidden="true" className={cn('grid size-10 shrink-0 place-items-center rounded-lg border', s.punchType === 'IN' ? 'border-approved-border bg-approved-bg text-approved' : 'border-waiting-border bg-waiting-bg text-waiting')}>
-                    {s.punchType === 'IN' ? <LogIn className="size-4" /> : <LogOut className="size-4" />}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="label-caps text-muted-foreground">Punch {s.punchNumber}</p>
-                    <p className="mt-0.5 text-[16px] font-semibold">{s.punchType === 'IN' ? 'Check-in' : 'Check-out'}</p>
-                  </div>
-                  {s.available ? (
-                    <Button size="sm" onClick={() => beginPunch(s.punchNumber)} disabled={locating != null || punch.isPending} className="min-h-11 sm:min-h-8">
-                      {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Camera aria-hidden="true" />}
-                      Punch
-                    </Button>
-                  ) : (
-                    <StatusPill tone={c.tone} size="sm" dot={false}>
-                      {c.label}
-                    </StatusPill>
-                  )}
-                </motion.li>
-              )
-            })}
-          </ul>
-
-          {(data?.punchVerifications.length ?? 0) > 0 && (
-            <div className="mt-5">
-              <p className="label-caps mb-2 text-muted-foreground">Sent from the field</p>
-              <ul className="divide-y divide-[var(--glass-border)] rounded-lg border hairline">
-                {data!.punchVerifications.map((v) => {
-                  const st = PUNCH_STATE[v.status] ?? { label: v.status, tone: 'neutral' as StatusTone }
-                  return (
-                    <li key={v.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-[13.5px]">
-                      <span className="font-label w-14 font-semibold tabular-nums">{v.punchTime.slice(0, 5)}</span>
-                      <span className="min-w-0 flex-1">
-                        Punch {v.punchNumber} • {v.punchType === 'IN' ? 'In' : 'Out'}
-                        {v.accuracyM != null && <span className="text-muted-foreground"> • within {Math.round(v.accuracyM)} m</span>}
-                      </span>
-                      <StatusPill tone={st.tone} size="sm" dot={false}>
-                        {st.label}
-                      </StatusPill>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          )}
-
-          <div className="mt-5 flex justify-end border-t hairline pt-4">
-            <Button variant="outline" onClick={endSession} disabled={complete.isPending} className="max-md:w-full">
-              {complete.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Flag aria-hidden="true" />} Mark day done
-            </Button>
-          </div>
-        </GlassCard>
-      ) : (
-        <GlassCard variant="raised" padding="lg" asChild>
-          <form onSubmit={startSession} className="flex flex-col gap-4 max-md:p-4!">
-            <div>
-              <h2 className="font-display text-[22px] font-semibold max-md:text-[16px]">Start an On-Duty session</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Working away from your branch today, like a client visit, a supplier mill or field travel? Start a session and punch from where you are.
-                Each punch needs {requiredPhotos === 2 ? 'two selfies' : 'a selfie'} and your location.
-              </p>
-              <p className="mt-2 flex items-start gap-2 text-[12.5px] text-muted-foreground">
-                <Smartphone className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" /> {ON_DUTY_WEB_TRACKING_NOTE}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="od-destination">Where are you going?</Label>
-              <Input
-                id="od-destination"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="e.g. ABC Spinning Mills, Tirupur"
-                maxLength={200}
-              />
-            </div>
-            {offNote && (
-              <p role="status" className="rounded-lg border border-waiting-border bg-waiting-bg px-3 py-2 text-[13px] text-waiting">
-                {offNote}
-              </p>
-            )}
-            {pipeline && !offNote && <p className="text-[12.5px] text-muted-foreground">{pipeline}</p>}
-            <Button type="submit" size="lg" disabled={!destination.trim() || start.isPending || !!offNote} className="self-start max-md:w-full max-md:self-stretch">
-              {start.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Play aria-hidden="true" />} Start session
-            </Button>
-            {session && state && (
-              <div className="flex flex-wrap items-center gap-3 rounded-lg bg-foreground/[0.04] px-4 py-3 text-[13.5px]">
-                <span className="text-muted-foreground">Today's last session:</span>
-                <span className="font-semibold">{session.destination}</span>
-                <span className="ml-auto">
-                  <ApprovalState approval={session.approval} />
-                  {!session.approval && (
-                    <StatusPill tone={state.tone} size="sm">
-                      {state.label}
-                    </StatusPill>
-                  )}
-                </span>
-              </div>
-            )}
-            {session?.approvalStatus === 'rejected' && (session.hodReviewComment || session.hrReviewComment) && (
-              <p className="text-[13px] text-rejected">Reason: {session.hrReviewComment || session.hodReviewComment}</p>
-            )}
-          </form>
-        </GlassCard>
-      )}
-
-      <CameraCaptureDialog
-        open={cameraOpen}
-        onClose={() => {
-          setCameraOpen(false)
-          setPendingSlot(null)
-        }}
-        onCapture={submitPunch}
-        total={photoCount}
-        title={pendingSlot ? `${photoCount > 1 ? 'Selfies' : 'Selfie'} for punch ${pendingSlot}` : undefined}
-      />
-    </div>
-  )
-}
+// ─── On-Duty ────────────────────────────────────────────────────────────────
+// The On-Duty part (owner 2026-11-24 redesign: Apply On-Duty, the four named punches in any order, OT punches, the gate
+// pass, End On-Duty) is its own component: components/onduty/OnDutyToday.tsx.
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 type Mode = 'office' | 'onduty' | 'records'
@@ -979,7 +623,7 @@ export default function AttendanceRequest() {
       ) : (
         <div className="grid gap-6 max-md:gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
-            {mode === 'office' ? <OfficePunch onDutyLive={onDutyLive} onSwitch={() => setMode('onduty')} /> : <OnDuty />}
+            {mode === 'office' ? <OfficePunch onDutyLive={onDutyLive} onSwitch={() => setMode('onduty')} /> : <OnDutyToday onSeeRecords={() => setMode('records')} />}
           </div>
 
           <aside className="flex flex-col gap-6 max-md:gap-3" aria-label="Today">

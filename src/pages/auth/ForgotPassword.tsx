@@ -3,6 +3,7 @@ import { Link, useLocation } from 'wouter'
 import { toast } from 'sonner'
 import { Lock, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { authApi } from '@/api/resources'
+import { useLoginOptions } from '@/hooks/useLoginOptions'
 import { AuthShell } from '@/components/auth/AuthShell'
 import { AuthHeadline, AuthPortalChip, AuthTopRow } from '@/components/auth/AuthHeader'
 import { AuthInput } from '@/components/auth/AuthInput'
@@ -10,33 +11,24 @@ import { AuthAlert } from '@/components/auth/AuthAlert'
 import { OtpFlow } from '@/components/auth/OtpFlow'
 import { ChannelIcon } from '@/components/auth/ChannelIcon'
 import { AuthSupportCard } from '@/components/support/AuthSupportCard'
-import { normalizeChannel, resetBadge, resetIntro, resetUnavailable, type OtpChannel } from '@/lib/otp-channel'
+import { purposeCodes, resetBadge, resetIntro, resetUnavailable, singleChannel, unknownCodes } from '@/lib/otp-channel'
 
 /**
- * Forgot / reset password: a code (sent by SMS or WhatsApp, as the server is set up) proves it's really you, then
- * choose a new password. The words name the channel the server reports and stay neutral ("a code") when it reports none.
- * Drawn like the mobile app's Forgot Password screen.
+ * Forgot / reset password: a code (by WhatsApp or SMS - whichever HR has switched on; with both, the employee picks)
+ * proves it's really you, then choose a new password. The words name the channel when it is the one way on offer and
+ * stay neutral ("a code") with both on or when the server reports none. Drawn like the mobile app's Forgot Password
+ * screen.
  */
 export default function ForgotPassword() {
   const [, navigate] = useLocation()
   const [password, setPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
-  // null until the server answers; if it can't be reached, assume codes work (the request will then report the
-  // connection problem itself) and keep the words neutral.
-  const [available, setAvailable] = React.useState<boolean | null>(null)
-  const [channel, setChannel] = React.useState<OtpChannel | null>(null)
-  const [codeLength, setCodeLength] = React.useState<number | null>(null)
-
-  React.useEffect(() => {
-    authApi
-      .loginOptions()
-      .then((o) => {
-        setChannel(normalizeChannel(o.otpChannel))
-        setCodeLength(o.codeLength ?? null)
-        setAvailable(o.otpReset)
-      })
-      .catch(() => setAvailable(true))
-  }, [])
+  // Asked again whenever the tab comes back into view. null until the server answers; if it can't be reached, assume
+  // codes work (the request will then report the connection problem itself) and keep the words neutral.
+  const { options, failed, reload: reloadOptions } = useLoginOptions()
+  const codes = options ? purposeCodes(options, 'reset') : unknownCodes()
+  const available: boolean | null = options ? codes.available : failed ? true : null
+  const channel = singleChannel(codes)
 
   const passwordsOk = password.length >= 8 && password === confirm
   const mismatch = confirm.length > 0 && password !== confirm
@@ -76,8 +68,8 @@ export default function ForgotPassword() {
       ) : (
         <OtpFlow
           purpose="reset"
-          channel={channel}
-          codeLength={codeLength}
+          codes={codes}
+          onChannelsChanged={reloadOptions}
           submitLabel="Set new password"
           submittingLabel="Saving…"
           extraValid={passwordsOk}

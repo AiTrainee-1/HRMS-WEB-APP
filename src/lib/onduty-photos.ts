@@ -90,6 +90,12 @@ export interface PunchBody {
   photo: Blob
   /** The second photo: the multipart field `photo2`, sent only when the punch took two. */
   photo2?: Blob | null
+  /** When it was taken (ISO): the server records the punch at this time (2026-11-24). Left out by older callers. */
+  capturedAt?: string
+  /** The session it belongs to (2026-11-24). */
+  sessionId?: number | null
+  /** false: the 4th punch keeps the session open (the page then asks Complete Duty / Continue Duty). */
+  autoEnd?: boolean
 }
 
 /** The multipart body of POST /on-duty-sessions/punch. `photo2` is in it exactly when the caller has a second photo. */
@@ -102,6 +108,9 @@ export function buildPunchForm(body: PunchBody): FormData {
   if (body.punchNumber != null) form.append('punchNumber', String(body.punchNumber))
   form.append('photo', body.photo, 'selfie.jpg')
   if (body.photo2) form.append('photo2', body.photo2, 'selfie2.jpg')
+  if (body.capturedAt) form.append('capturedAt', body.capturedAt)
+  if (body.sessionId != null) form.append('sessionId', String(body.sessionId))
+  if (body.autoEnd != null) form.append('autoEnd', String(body.autoEnd))
   return form
 }
 

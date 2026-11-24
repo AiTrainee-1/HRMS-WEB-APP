@@ -1,7 +1,13 @@
+import { Link } from 'wouter'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { LogIn, LogOut } from 'lucide-react'
+import { CalendarClock, Fingerprint, Hand, LogIn, LogOut, MessageCircleQuestion, Umbrella, type LucideIcon } from 'lucide-react'
 import { Timeline } from '@/components/kit'
-import { punchStory, to12h } from '@/lib/home-punches'
+import { DayPunchStrip } from '@/components/employee/DayPunchStrip'
+import { punchStory } from '@/lib/home-punches'
+import {
+  dayActions, dayPunchViews, earnedShiftHint, earnedShiftText, type DayActionKey, type DayPunchFields, type DayPunchWire,
+} from '@/lib/day-punches'
+import { getRequestWindow } from '@/lib/request-window'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
 import { HrEditDetails } from '@/components/employee/HrEditDetails'
 import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
@@ -62,18 +68,28 @@ function dayNotes(day: AttendanceDay, policy?: ShiftPolicy | null): string[] {
   return notes
 }
 
+// The chips' look: the mobile app's colour per remedy (fixed hues readable in both themes).
+const ACTION_LOOK: Record<DayActionKey, { icon: LucideIcon; className: string }> = {
+  leave: { icon: Umbrella, className: 'border-[#8E44AD]/40 bg-[#8E44AD]/10 text-[#7D3C98] dark:text-[#C39BD3]' },
+  casual_leave: { icon: CalendarClock, className: 'border-[#B7791F]/40 bg-[#B7791F]/10 text-[#975A16] dark:text-[#F6C177]' },
+  missing_punch: { icon: Fingerprint, className: 'border-[#5E35B1]/40 bg-[#5E35B1]/10 text-[#5E35B1] dark:text-[#B39DDB]' },
+  permission: { icon: Hand, className: 'border-[#2980B9]/40 bg-[#2980B9]/10 text-[#21618C] dark:text-[#85C1E9]' },
+}
+
 function todayKey(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function DayDetailPanel({
-  day, onClose, policy,
+  day, onClose, policy, isStaff = false,
 }: {
   day: AttendanceDay | null
   onClose: () => void
   /** Company rules, when the backend sends them (half-day windows, which checks are on). */
   policy?: ShiftPolicy | null
+  /** A staff employee: an absent day also offers Casual Leave. */
+  isStaff?: boolean
 }) {
   const notes = day ? dayNotes(day, policy) : []
   // What compensation did to this day: its colour + symbol + the server's sentence (or a fixed one for the kind).
@@ -82,6 +98,29 @@ export function DayDetailPanel({
   const steps = day?.punches?.length ? punchStory(day.punches, { dayIsOver: day.date < todayKey() }) : []
   // What HR changed on this day and where its approval stands (owner 2026-11-02): first, it explains the day's colour.
   const hrEdit = hrEditOf(day)
+  // Owner 2026-11-24: every punch of the day with its source (the full list from a current server, else the plain
+  // punches), the shift the day earned, and what the employee can do about the day (each chip opens the request form on
+  // that day, while the request window still takes it).
+  const extra = day as (AttendanceDay & DayPunchFields) | null
+  const punchViews = day ? dayPunchViews(extra?.allPunches, day.punches as DayPunchWire[] | undefined) : []
+  const earned = earnedShiftText(extra?.shiftsEarned)
+  const earnedHint = earnedShiftHint(extra?.shiftsEarned)
+  const flags = day ? getDayFlags(day) : null
+  const actions =
+    day && flags
+      ? dayActions(
+          {
+            date: day.date,
+            status: day.status,
+            compensationKind: day.compensationKind,
+            late: flags.late && lateInShown(policy),
+            earlyOut: flags.earlyOut && earlyOutShown(policy),
+          },
+          getRequestWindow(new Date()),
+          isStaff,
+        )
+      : null
+  const noRecord = !day || day.status === 'no_record' || day.status === 'future'
   return (
     <Dialog open={!!day} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
@@ -99,8 +138,51 @@ export function DayDetailPanel({
                 )}
               </DialogDescription>
             </DialogHeader>
+            {actions && actions.actions.length > 0 && (
+              <nav aria-label="Fix this day" className="flex flex-wrap gap-2">
+                {actions.actions.map((a) => {
+                  const look = ACTION_LOOK[a.key]
+                  return (
+                    <Link
+                      key={a.key}
+                      href={a.href}
+                      onClick={onClose}
+                      className={cn(
+                        'focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition-opacity hover:opacity-85 sm:min-h-8',
+                        look.className,
+                      )}
+                    >
+                      <look.icon className="size-3.5" aria-hidden="true" />
+                      {a.label}
+                    </Link>
+                  )
+                })}
+              </nav>
+            )}
+            {actions?.closed && (
+              <p className="rounded-lg border hairline bg-foreground/[0.03] p-3 text-[12.5px] text-muted-foreground max-md:border-0 max-md:bg-muted">
+                This day is outside the request window, so the request forms cannot take it any more. If something is wrong,{' '}
+                <Link href="/employee/enquiries" onClick={onClose} className="focus-ring inline-flex items-center gap-1 rounded font-semibold text-brand-blue underline-offset-2 hover:underline">
+                  <MessageCircleQuestion className="size-3.5" aria-hidden="true" />
+                  ask HR with an enquiry
+                </Link>
+                .
+              </p>
+            )}
             {hrEdit && <HrEditDetails edit={hrEdit} headingId={`day-hr-edit-${day.date}`} />}
-            {day.status === 'no_record' || day.status === 'future' || !day.firstPunch ? (
+            {earned && !noRecord && (
+              <div
+                className="flex items-center justify-between gap-3 rounded-lg border hairline bg-foreground/[0.03] px-3 py-2.5 text-sm max-md:border-0 max-md:bg-muted"
+                data-testid="day-earned-shift"
+              >
+                <p className="label-caps text-muted-foreground">Earned Shift</p>
+                <p className="text-right font-semibold tabular-nums">
+                  {earned}
+                  {earnedHint && <span className="font-normal text-muted-foreground"> · {earnedHint}</span>}
+                </p>
+              </div>
+            )}
+            {noRecord || (!day.firstPunch && punchViews.length === 0) ? (
               // A real record without any punch: a compensation day (birthday leave, a relaxation day), or a day HR set
               // through an attendance edit (Casual Leave, On-Duty, a status change).
               <p className="text-sm text-muted-foreground">
@@ -110,20 +192,7 @@ export function DayDetailPanel({
               </p>
             ) : (
               <div className="flex flex-col gap-4 text-sm">
-                <dl className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border hairline bg-foreground/[0.03] p-2.5 max-md:border-0 max-md:bg-muted">
-                    <dt className="label-caps text-muted-foreground">First in</dt>
-                    <dd className="mt-0.5 font-semibold tabular-nums">{to12h(day.firstPunch)}</dd>
-                  </div>
-                  <div className="rounded-lg border hairline bg-foreground/[0.03] p-2.5 max-md:border-0 max-md:bg-muted">
-                    <dt className="label-caps text-muted-foreground">Last out</dt>
-                    <dd className="mt-0.5 font-semibold tabular-nums">{day.lastPunch ? to12h(day.lastPunch) : '—'}</dd>
-                  </div>
-                  <div className="rounded-lg border hairline bg-foreground/[0.03] p-2.5 max-md:border-0 max-md:bg-muted">
-                    <dt className="label-caps text-muted-foreground">Punches</dt>
-                    <dd className="mt-0.5 font-semibold tabular-nums">{day.totalPunches ?? 0}</dd>
-                  </div>
-                </dl>
+                <DayPunchStrip punches={punchViews} />
                 {steps.length > 0 && (
                   <Timeline
                     ariaLabel="Punches on this day"

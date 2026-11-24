@@ -425,7 +425,7 @@ export default function Attendance() {
         </>
       </PageShell>
 
-      <DayDetailPanel day={selectedDay} onClose={() => setSelectedDay(null)} policy={policy} />
+      <DayDetailPanel day={selectedDay} onClose={() => setSelectedDay(null)} policy={policy} isStaff={isStaff} />
     </>
   )
 }

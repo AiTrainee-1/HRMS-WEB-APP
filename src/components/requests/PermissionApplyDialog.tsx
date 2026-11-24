@@ -20,6 +20,9 @@ import type { PermissionRequest, PermissionTypeKey } from '@/types'
 import { ChoiceTiles, FormError, FormNote, OffNotice, SentState, StepLabel } from './FormBits'
 import { PHONE_BUTTON_ROW, PHONE_NO_CANCEL, PHONE_SUBMIT, PHONE_FIELD_LABEL } from './phone'
 import { cn } from '@/lib/utils'
+import { isQueued } from '@/offline/submit'
+import { queuedRequests } from '@/offline/queued-requests'
+import { QUEUED_MESSAGE } from '@/lib/offline-ops'
 
 const TYPE_ICON: Record<PermissionTypeKey, LucideIcon> = { morning_late_in: LogIn, evening_early_out: LogOut, middle_permission: ArrowLeftRight }
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -37,9 +40,15 @@ export function PermissionApplyDialog({
   pipeline,
   offNote,
   onSent,
+  initialDate,
+  initialType,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Open on this day (YYYY-MM-DD) instead of today: the attendance day panel's chips (owner 2026-11-24). Checked by the page. */
+  initialDate?: string | null
+  /** Open with this kind chosen (a late day -> Late In, an early day -> Early Out). */
+  initialType?: PermissionTypeKey | null
   rows: readonly PermissionRequest[]
   monthlyLimit: number
   pipeline: string | null
@@ -59,12 +68,14 @@ export function PermissionApplyDialog({
   React.useEffect(() => {
     if (!open) return
     const w = getRequestWindow(new Date())
-    setType('')
-    setDate(w.today >= w.min ? w.today : w.min)
+    setType(initialType ?? '')
+    setDate(initialDate || (w.today >= w.min ? w.today : w.min))
     setTime('')
     setReason('')
     setError(null)
     setSent(null)
+    // Read at opening on purpose (the preset day / kind is the page's, set together with `open`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const w = getRequestWindow(new Date())
@@ -76,8 +87,15 @@ export function PermissionApplyDialog({
   const overLimit = used >= monthlyLimit
 
   const apply = useMutation({
-    mutationFn: permissionApi.apply,
-    onSuccess: (created) => {
+    // Works offline too (owner 2026-11-24): saved on this device and sent once back online.
+    mutationFn: (body: Parameters<typeof permissionApi.apply>[0]) => queuedRequests.permission<Awaited<ReturnType<typeof permissionApi.apply>>>(body),
+    onSuccess: (result) => {
+      if (isQueued(result)) {
+        setSent({ text: QUEUED_MESSAGE, pastLimit: false })
+        toast.info('Saved on this device', { description: 'It will be sent automatically when you are back online.' })
+        return
+      }
+      const created = result
       qc.invalidateQueries({ queryKey: ['permissions'] })
       qc.invalidateQueries({ queryKey: MY_PENDING_KEY })
       const pastLimit = created?.monthlyUsed != null && created.monthlyUsed > (created.monthlyLimit ?? monthlyLimit)

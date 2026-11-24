@@ -4,6 +4,7 @@ import { casualLeaveRequestsApi } from '@/api/requests-api'
 import { useAuth } from '@/context/AuthContext'
 import { monthKeyOf, type CLPortion } from '@/lib/casual-leave'
 import { MY_PENDING_KEY } from '@/hooks/useMyPendingRequests'
+import { queuedRequests } from '@/offline/queued-requests'
 
 // Casual Leave data for the Leave page card and the Casual Leave page. Query keys:
 //   ['cl-eligibility', 'full', id] - under the ['cl-eligibility'] prefix the Dashboard and Attendance pages already use (a
@@ -58,7 +59,8 @@ export function useApplyCasualLeave() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: { date: string; reason: string; portion: CLPortion }) =>
-      casualLeaveRequestsApi.apply({ employeeId: user!.employeeId, ...body }),
+      // Works offline too (owner 2026-11-24): the queued marker (isQueued) when it was saved on this device.
+      queuedRequests.casualLeave<unknown>({ employeeId: user!.employeeId, ...body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [CL_LIST_KEY] })
       // The per-month verdicts (and the yearly days) change with this request: the prefix also refreshes the Attendance

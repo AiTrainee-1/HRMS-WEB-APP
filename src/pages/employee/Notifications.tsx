@@ -22,6 +22,7 @@ import {
   MailOpen,
   Megaphone,
   MessageCircle,
+  MessageCircleQuestion,
   PartyPopper,
   Send,
   Timer,
@@ -75,6 +76,13 @@ const ICONS: Record<string, { icon: LucideIcon; tone: Tone }> = {
   experience_letter: { icon: FileText, tone: 'sapphire' },
   resignation_letter: { icon: FileText, tone: 'sapphire' },
   general: { icon: Megaphone, tone: 'sapphire' },
+  // 2026-11-24: HR replied to / moved one of my enquiries.
+  enquiry: { icon: MessageCircleQuestion, tone: 'sapphire' },
+}
+
+/** The heading for a type the server may send without a title of its own (the mobile app's per-type titles). */
+const TYPE_TITLE: Record<string, string> = {
+  enquiry: 'Enquiry Update',
 }
 
 type Filter = 'all' | 'unread'
@@ -300,8 +308,9 @@ function NotificationRow({ n, viewer, onRead }: { n: Notification; viewer: Notif
   const Icon = meta.icon
   const link = notificationLink(n, viewer)
   const unread = !n.isRead
+  const title = n.title || (n.type && Object.hasOwn(TYPE_TITLE, n.type) ? TYPE_TITLE[n.type] : '')
   // Says which notification a button is for (every row has the same two buttons).
-  const name = (n.title || n.message || '').replace(/\s+/g, ' ').trim().slice(0, 60)
+  const name = (title || n.message || '').replace(/\s+/g, ' ').trim().slice(0, 60)
   // Phones: a long message folds to 6 lines with "Show more" (the app's NotificationCard). `clamped` is measured on the
   // real text (it is only ever true on a phone, where the clamp applies); desktop shows the whole message as before.
   const [expanded, setExpanded] = React.useState(false)
@@ -330,15 +339,15 @@ function NotificationRow({ n, viewer, onRead }: { n: Notification; viewer: Notif
         </span>
         {unread && <span aria-hidden="true" className="hidden max-md:absolute max-md:top-[18px] max-md:right-3.5 max-md:block max-md:size-2 max-md:rounded-full max-md:bg-primary" />}
         <div className="min-w-0 flex-1 max-md:pr-3">
-          {n.title && (
-            <p className={cn('text-[14px] leading-5 break-words max-md:font-semibold', unread ? 'font-bold' : 'font-semibold max-md:text-secondary-foreground max-md:opacity-75')}>{n.title}</p>
+          {title && (
+            <p className={cn('text-[14px] leading-5 break-words max-md:font-semibold', unread ? 'font-bold' : 'font-semibold max-md:text-secondary-foreground max-md:opacity-75')}>{title}</p>
           )}
           <p
             ref={messageRef}
             id={`n-msg-${n.id}`}
             className={cn(
               'text-[13.5px] leading-5 break-words whitespace-pre-line max-md:mt-0.5 max-md:text-[13px] max-md:leading-[18px]',
-              unread && !n.title ? 'font-semibold text-foreground' : 'text-foreground/85 max-md:text-secondary-foreground',
+              unread && !title ? 'font-semibold text-foreground' : 'text-foreground/85 max-md:text-secondary-foreground',
               !unread && 'max-md:opacity-75',
               !expanded && 'max-md:line-clamp-6',
             )}

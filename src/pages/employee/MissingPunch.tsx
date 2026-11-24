@@ -22,6 +22,7 @@ import { RequestCard } from '@/components/requests/RequestCard'
 import { RequestList } from '@/components/requests/RequestList'
 import { HERO_NO_KPIS_ON_PHONE } from '@/components/requests/phone'
 import { showView } from '@/components/requests/show-view'
+import { useApplyPrefill } from '@/hooks/useApplyPrefill'
 import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
 import { useCasualLeaveEligibility } from '@/hooks/useCasualLeave'
 import { useFocusItem } from '@/hooks/useFocusItem'
@@ -40,6 +41,12 @@ const PHONE_SLOT_WORDS: Record<PunchSlot, string> = { morning_in: 'Morning in', 
 
 export default function MissingPunch() {
   const [applyOpen, setApplyOpen] = React.useState(false)
+  // The attendance day panel's "Missing Punch" (?apply=YYYY-MM-DD): the form opens on that day (never a future one).
+  const [applyDate, setApplyDate] = React.useState<string | null>(null)
+  useApplyPrefill((p) => {
+    setApplyDate(p.date)
+    setApplyOpen(true)
+  })
   // The pipeline HR configured for missing punches, and the note when HR has switched them off.
   const { workflow, offNote } = useApprovalWorkflow('missing_punch')
   const pipeline = pipelineSentence(workflow)
@@ -217,7 +224,11 @@ export default function MissingPunch() {
       </PageShell>
       <MissingPunchDialog
         open={applyOpen}
-        onOpenChange={setApplyOpen}
+        onOpenChange={(o) => {
+          setApplyOpen(o)
+          if (!o) setApplyDate(null)
+        }}
+        initialDate={applyDate}
         shift={shift}
         rows={list.data ?? []}
         pipeline={pipeline}

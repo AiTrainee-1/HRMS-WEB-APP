@@ -1,0 +1,144 @@
+/* "Continue with SMS OTP / WhatsApp OTP" on the sign-in page (LoginMethodOption.tsx). Uses the auth sheet's tokens. */
+.auth-methods {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 16px;
+}
+.auth-methods-note {
+  margin: 0;
+  color: var(--auth-muted);
+  font-family: var(--auth-body);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.auth-method {
+  --tint: #2563eb;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1.5px solid color-mix(in srgb, var(--tint) 35%, transparent);
+  border-radius: 16px;
+  background: var(--auth-surface);
+  color: var(--auth-text);
+  font-family: var(--auth-body);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+.auth-method--whatsapp {
+  --tint: #16a34a;
+}
+.auth-method:not(.is-locked):hover {
+  border-color: var(--tint);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--tint) 18%, transparent);
+}
+.auth-method:not(.is-locked):active {
+  transform: scale(0.99);
+}
+.auth-method:focus-visible {
+  outline: 2px solid var(--auth-accent-dark);
+  outline-offset: 2px;
+}
+
+.auth-method-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tint) 10%, transparent);
+  color: var(--tint);
+}
+.auth-method-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.auth-method-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.auth-method-title {
+  overflow: hidden;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.auth-method-sub {
+  margin-top: 1px;
+  color: var(--auth-accent-dark);
+  font-size: 11.5px;
+}
+.auth-method-end {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--tint);
+}
+
+/* Locked: switched off by HR. */
+.auth-method.is-locked {
+  border-style: dashed;
+  border-color: var(--auth-border);
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+.auth-method.is-locked .auth-method-icon {
+  background: var(--auth-surface-low);
+  color: var(--auth-outline);
+}
+.auth-method.is-locked .auth-method-title {
+  color: var(--auth-muted);
+}
+.auth-method.is-locked .auth-method-end {
+  color: var(--auth-outline);
+}
+.auth-method-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  color: var(--auth-muted);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+.auth-method-wiggle {
+  width: 13px;
+  height: 13px;
+  transform-origin: 50% 40%;
+  animation: auth-method-wiggle 2.6s ease-in-out infinite;
+}
+@keyframes auth-method-wiggle {
+  0%,
+  84% {
+    transform: rotate(0);
+  }
+  87% {
+    transform: rotate(-12deg);
+  }
+  90% {
+    transform: rotate(12deg);
+  }
+  93% {
+    transform: rotate(-8deg);
+  }
+  96% {
+    transform: rotate(6deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-method-wiggle {
+    animation: none;
+  }
+}

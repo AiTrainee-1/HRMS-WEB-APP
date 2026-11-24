@@ -17,6 +17,9 @@ import { PASS_TYPES, expectedReturnIso, type OutpassPassType } from '@/lib/outpa
 import { ChoiceTiles, FormError, OffNotice, SentState, StepLabel } from './FormBits'
 import { PHONE_BUTTON_ROW, PHONE_NO_CANCEL, PHONE_SUBMIT, PHONE_FIELD_LABEL } from './phone'
 import { cn } from '@/lib/utils'
+import { isQueued } from '@/offline/submit'
+import { queuedRequests } from '@/offline/queued-requests'
+import { QUEUED_MESSAGE } from '@/lib/offline-ops'
 
 const TYPE_ICON: Record<OutpassPassType, LucideIcon> = { official: Briefcase, personal: HeartPulse, early_dismissal: LogOut }
 
@@ -63,8 +66,15 @@ export function OutpassApplyDialog({
   }, [open])
 
   const apply = useMutation({
-    mutationFn: outpassRequestsApi.apply,
-    onSuccess: (created) => {
+    // Works offline too (owner 2026-11-24): saved on this device and sent once back online.
+    mutationFn: (body: Parameters<typeof outpassRequestsApi.apply>[0]) => queuedRequests.outpass<Awaited<ReturnType<typeof outpassRequestsApi.apply>>>(body),
+    onSuccess: (result) => {
+      if (isQueued(result)) {
+        setSent(QUEUED_MESSAGE)
+        toast.info('Saved on this device', { description: 'It will be sent automatically when you are back online.' })
+        return
+      }
+      const created = result
       qc.invalidateQueries({ queryKey: ['outpass-requests'] })
       qc.invalidateQueries({ queryKey: MY_PENDING_KEY })
       const who = waitingPhrase(created?.approval)

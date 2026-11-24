@@ -37,6 +37,7 @@ import {
   popIn,
 } from '@/components/kit'
 import { FocusMissNote } from '@/components/requests/FocusMissNote'
+import { WithdrawButton } from '@/components/requests/WithdrawButton'
 import { useFocusItem } from '@/hooks/useFocusItem'
 import { useMyPendingRequests, useRemindApprover } from '@/hooks/useMyPendingRequests'
 import { useNow } from '@/hooks/useNow'
@@ -342,9 +343,16 @@ function RequestCard({
           )}
         </AnimatePresence>
       </div>
+      {/* Owner 2026-11-24: my own Leave / Permission / Casual Leave can be taken back while it waits (not one HR raised). */}
+      {item.raisedBy !== 'hr' && isWithdrawModule(item.module) && (
+        <WithdrawButton module={item.module} id={item.id} status="pending" />
+      )}
     </GlassCard>
   )
 }
+
+const WITHDRAW_MODULES = new Set(['leave', 'permission', 'casual_leave'])
+const isWithdrawModule = (m: string): m is 'leave' | 'permission' | 'casual_leave' => WITHDRAW_MODULES.has(m)
 
 function RecentHrEdits({ edits, days }: { edits: RecentHrEdit[]; days: number }) {
   return (

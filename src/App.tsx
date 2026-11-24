@@ -45,6 +45,8 @@ const Chat = lazy(() => import('@/pages/employee/Chat'))
 const Resignation = lazy(() => import('@/pages/employee/Resignation'))
 const Company = lazy(() => import('@/pages/employee/Company'))
 const Help = lazy(() => import('@/pages/employee/Help'))
+const Enquiries = lazy(() => import('@/pages/employee/Enquiries'))
+const Sync = lazy(() => import('@/pages/employee/Sync'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -127,6 +129,8 @@ function AppRoutes() {
         <Route path="/employee/resignation">{() => <EmployeePage Component={Resignation} />}</Route>
         <Route path="/employee/company">{() => <EmployeePage Component={Company} />}</Route>
         <Route path="/employee/help">{() => <EmployeePage Component={Help} />}</Route>
+        <Route path="/employee/enquiries">{() => <EmployeePage Component={Enquiries} />}</Route>
+        <Route path="/employee/sync">{() => <EmployeePage Component={Sync} />}</Route>
 
         <Route component={NotFound} />
       </Switch>

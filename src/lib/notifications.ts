@@ -21,7 +21,8 @@ const APPROVALS: NotificationTarget = { href: '/employee/approvals', label: 'Ope
 
 /** A request kind's own page, for the employee it is about. */
 const OWN_PAGE: Record<string, NotificationTarget> = {
-  // Sent to the employee when their Department Head decides a Holiday / Sunday work claim HR raised for them.
+  // Sent to the employee when their Department Head decides one of their compensation claims (any kind, raised by them
+  // or by HR for them).
   compensation: { href: '/employee/compensation', label: 'View compensation' },
   leave: { href: '/employee/leave', label: 'View your leave' },
   permission: { href: '/employee/permissions', label: 'View your permissions' },
@@ -37,9 +38,11 @@ const OWN_PAGE: Record<string, NotificationTarget> = {
   experience_letter: { href: '/employee/documents', label: 'View documents' },
   resignation_letter: { href: '/employee/documents', label: 'View documents' },
   chat: { href: '/employee/chat', label: 'Open chat' },
+  // 2026-11-24: HR replied to / moved one of my enquiries.
+  enquiry: { href: '/employee/enquiries', label: 'View enquiry' },
 }
 
-/** Only ever sent to a Department Head: a Holiday / Sunday work claim waiting for them, or an employee's reminder. */
+/** Only ever sent to a Department Head: a compensation claim waiting for them, or an employee's reminder. */
 const HEAD_ONLY = new Set(['holiday_work', 'approval_reminder'])
 
 /** "Suresh Raj's leave is waiting for your approval." (approval_workflow.notify_hod_of_request) and the reminder's

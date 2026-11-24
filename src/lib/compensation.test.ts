@@ -395,3 +395,128 @@ describe('groups and filters', () => {
     assert.deepEqual(applyFilter(items, 'holiday_work').map((i) => i.key), ['hw-2421'])
   })
 })
+
+// ---- self-claims (2026-11-19): the new keys, and the promise that an older backend stays read-only ------------------
+
+/** The documented answer of a backend with self-claims. */
+function claimsAnswer() {
+  const base = fullAnswer()
+  return {
+    ...base,
+    canClaim: true,
+    claimWindowDays: 45,
+    useBalance: { allowed: true, balanceShifts: 1.5, pendingShifts: 0.5, availableShifts: 1, message: null },
+    items: [
+      { key: 'ot-4001', kind: 'ot_allowance', group: 'detected', date: '2026-11-12', title: 'Late-in allowance to claim: 30 minutes', detail: '', status: 'claimable', statusLabel: 'Ready to claim', shifts: null, minutes: 30, minutesUsed: null, used: false, claimable: true, claimKind: 'ot_allowance', claim: null },
+      { key: 'ot-4002', kind: 'ot_shift', group: 'detected', date: '2026-11-10', title: 'Extra hours to claim', detail: '', status: 'claim_pending', statusLabel: 'Claim waiting for your Department Head', shifts: 0.75, minutes: 420, minutesUsed: null, used: null, claimable: false, claimKind: 'ot_shift', suggestedShifts: 0.75, claim: { id: 77, kind: 'ot_shift', status: 'pending', statusLabel: 'Waiting', shifts: '0.50', minutes: null, raisedByRole: 'employee' } },
+      { key: 'bd-2026-11-05', kind: 'birthday_credit', group: 'birthday', date: '2026-11-05', title: 'You worked on your birthday', detail: '', status: 'claimable', statusLabel: 'Ready to claim', shifts: 1, minutes: null, minutesUsed: null, used: null, claimable: true, claim: null },
+    ],
+  }
+}
+
+describe('parseCompensation: self-claims', () => {
+  test('the top-level claim keys are read', () => {
+    const p = parseCompensation(claimsAnswer())!
+    assert.equal(p.canClaim, true)
+    assert.equal(p.claimsSupported, true)
+    assert.equal(p.claimWindowDays, 45)
+    assert.deepEqual(p.useBalance, { allowed: true, balanceShifts: 1.5, pendingShifts: 0.5, availableShifts: 1, message: null })
+  })
+
+  test('items carry their claim state; the claim kind is inferred when the server says only "claimable"', () => {
+    const p = parseCompensation(claimsAnswer())!
+    const [allowance, extra, birthday] = p.items
+    assert.equal(allowance.claimable, true)
+    assert.equal(allowance.claimKind, 'ot_allowance')
+    assert.equal(allowance.overtimeRecordId, 4001)
+    assert.equal(extra.claimable, false)
+    assert.equal(extra.suggestedShifts, 0.75)
+    assert.deepEqual(extra.claim, { id: 77, kind: 'ot_shift', status: 'pending', statusLabel: 'Waiting', shifts: 0.5, minutes: null, raisedByRole: 'employee' })
+    assert.equal(birthday.claimKind, 'birthday')
+    assert.equal(birthday.claimable, true)
+    assert.equal(birthday.overtimeRecordId, null)
+  })
+
+  test('the new kinds and statuses have their own words and colours', () => {
+    assert.equal(kindInfo('birthday_credit').label, 'Birthday credit')
+    assert.equal(kindInfo('use_balance').label, 'Day off from balance')
+    assert.deepEqual(statusInfo({ status: 'claimable', statusLabel: '' }), { label: 'Ready to claim', chip: 'chip-teal', live: true })
+    assert.equal(statusInfo({ status: 'claim_pending', statusLabel: '' }).chip, 'chip-warning')
+    assert.equal(statusInfo({ status: 'claim_approved', statusLabel: '' }).chip, 'chip-success')
+    assert.equal(statusInfo({ status: 'claim_rejected', statusLabel: '' }).label, 'Claim not approved')
+    assert.equal(filterOf({ kind: 'birthday_credit' }), 'birthday')
+    assert.equal(filterOf({ kind: 'use_balance' }), 'redemption')
+  })
+
+  test('an older backend (no canClaim) is read-only: nothing claimable, no use-balance block', () => {
+    const p = parseCompensation(fullAnswer())!
+    assert.equal(p.canClaim, false)
+    assert.equal(p.claimsSupported, false)
+    assert.equal(p.claimWindowDays, null)
+    assert.equal(p.useBalance, null)
+    for (const item of p.items) {
+      assert.equal(item.claimable, false)
+      assert.equal(item.claim, null)
+      assert.equal(item.suggestedShifts, null)
+    }
+    // The OT record id is still read from the key (harmless: nothing claims it).
+    assert.equal(p.items[0].overtimeRecordId, 3625)
+  })
+
+  test('canClaim false on a newer backend is "supported but off"', () => {
+    const p = parseCompensation({ ...claimsAnswer(), canClaim: false })!
+    assert.equal(p.canClaim, false)
+    assert.equal(p.claimsSupported, true)
+  })
+
+  test('the reason a newer backend gives for canClaim false is kept (and dropped while claims are open)', () => {
+    const why = 'No Department Head may approve your claims yet. Ask HR.'
+    assert.equal(parseCompensation({ ...claimsAnswer(), canClaim: false, claimMessage: why })!.claimMessage, why)
+    assert.equal(parseCompensation({ ...claimsAnswer(), canClaim: true, claimMessage: why })!.claimMessage, null)
+    assert.equal(parseCompensation(fullAnswer())!.claimMessage, null)
+  })
+
+  test('malformed claim keys fall back safely', () => {
+    const p = parseCompensation({
+      isStaff: true,
+      canClaim: 'yes',
+      claimWindowDays: -3,
+      useBalance: { allowed: 'true', balanceShifts: '2', pendingShifts: -1, availableShifts: 5 },
+      items: [
+        { key: 'hw-9', kind: 'holiday_work', date: '2026-11-09', claimable: true, claimKind: 'bonus' },
+        { key: 'x', kind: 'window_late_in', claimable: true },
+        { key: 'ot-abc', kind: 'ot_shift', claimable: 'true', claim: { id: null, status: 'pending' }, overtimeRecordId: '12' },
+      ],
+    })!
+    assert.equal(p.canClaim, false)
+    assert.equal(p.claimWindowDays, null)
+    // Never more available than the balance less what is waiting, and never "allowed" without a real true.
+    assert.deepEqual(p.useBalance, { allowed: false, balanceShifts: 2, pendingShifts: 0, availableShifts: 2, message: null })
+    // An unknown claimKind on a holiday-work item falls back to the item's own kind.
+    assert.equal(p.items[0].claimKind, 'holiday_work')
+    assert.equal(p.items[0].claimable, true)
+    // A kind that cannot be claimed is never claimable, whatever the flag says.
+    assert.equal(p.items[1].claimable, false)
+    assert.equal(p.items[1].claimKind, null)
+    assert.equal(p.items[2].claimable, false)
+    assert.equal(p.items[2].claim, null)
+    assert.equal(p.items[2].overtimeRecordId, 12)
+  })
+
+  test('a production answer never offers claims', () => {
+    const p = parseCompensation({ isStaff: false, canClaim: true, useBalance: { allowed: true } })!
+    assert.equal(p.canClaim, false)
+    assert.equal(p.useBalance, null)
+  })
+
+  test('group words change when the employee claims for themselves', () => {
+    const p = parseCompensation(claimsAnswer())!
+    const plain = groupItems(p.items)
+    const self = groupItems(p.items, { canClaim: true })
+    assert.match(plain.find((g) => g.id === 'detected')!.hint, /automatic/)
+    assert.doesNotMatch(self.find((g) => g.id === 'detected')!.hint, /automatic/)
+    assert.match(self.find((g) => g.id === 'detected')!.hint, /Department Head approves/)
+    assert.equal(self.find((g) => g.id === 'birthday')!.title, 'Birthday')
+    assert.equal(self.find((g) => g.id === 'birthday')!.items.length, 1)
+  })
+})

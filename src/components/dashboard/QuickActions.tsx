@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowUpRight, BadgeCheck, Banknote, Bell, Briefcase, BriefcaseBusiness, Building2, CalendarCheck, CalendarClock, CalendarHeart,
   ChevronDown, ChevronUp, CircleUserRound, ClipboardCheck, Clock, DoorOpen, FileSignature, Fingerprint, Flag, Folder, FolderOpen,
-  Hand, HandCoins, IdCard, Landmark, LayoutGrid, Leaf, LifeBuoy, MapPin, MessageCircle, PartyPopper, Pointer, Route, Send, ShieldUser,
+  Hand, HandCoins, IdCard, Landmark, LayoutGrid, Leaf, LifeBuoy, MapPin, MessageCircle, MessageCircleQuestion, PartyPopper, Pointer, Route, Send, ShieldUser,
   Timer, Wallet, type LucideIcon,
 } from 'lucide-react'
 import { GlassCard, SectionHeader, TONE_SOFT, listItem, type Tone } from '@/components/kit'
@@ -32,6 +32,7 @@ const ACTIONS: Action[] = [
   { label: 'Digital ID', hint: 'Show at the gate', href: '/employee/id-card', icon: BadgeCheck, tone: 'sapphire' },
   { label: 'Holidays', hint: 'This year', href: '/employee/holidays', icon: PartyPopper, tone: 'violet' },
   { label: 'Team Chat', hint: 'Company & department', href: '/employee/chat', icon: MessageCircle, tone: 'emerald' },
+  { label: 'Enquiries', hint: 'Ask HR a question', href: '/employee/enquiries', icon: MessageCircleQuestion, tone: 'sapphire' },
 ]
 
 /** The things people open most, one click each. Casual Leave only for staff; Manager Approvals for heads (with a count). */
@@ -125,6 +126,7 @@ const PHONE_ACTIONS: PhoneAction[] = [
   { label: 'Holidays', href: '/employee/holidays', icon: Flag, color: '#C0392B', bg: '#FFF1F2' },
   { label: 'Compensation', href: '/employee/compensation', icon: BriefcaseBusiness, color: '#047857', bg: '#E1F5EC', staffOnly: true },
   { label: 'Department Head', href: '/employee/hod', icon: ShieldUser, color: '#6D28D9', bg: '#EFEBFF' },
+  { label: 'Enquiries', href: '/employee/enquiries', icon: MessageCircleQuestion, color: '#0F766E', bg: '#E0F2F1' },
   { label: 'Notifications', href: '/employee/notifications', icon: Bell, color: '#D97706', bg: '#FEF3C7' },
   { label: 'Team Chat', href: '/employee/chat', icon: MessageCircle, color: '#0984E3', bg: '#DBEAFE' },
   { label: 'My Profile', href: '/employee/profile', icon: CircleUserRound, color: '#2C3E50', bg: '#F1F5F9' },

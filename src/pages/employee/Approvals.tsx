@@ -19,7 +19,7 @@ import {
 } from '@/components/kit'
 import { CategoryRail } from '@/components/approvals/CategoryRail'
 import { ApprovalRequestCard } from '@/components/approvals/ApprovalRequestCard'
-import { DecisionDialog, type DialogTarget } from '@/components/approvals/DecisionDialog'
+import { DecisionDialog, type DecideResult, type DialogTarget } from '@/components/approvals/DecisionDialog'
 import { CATEGORY_META } from '@/components/approvals/categoryMeta'
 import { FocusMissNote } from '@/components/requests/FocusMissNote'
 import { ApiError } from '@/api/client'
@@ -54,6 +54,7 @@ import {
   type CategoryCounts,
 } from '@/lib/approvals-history'
 import { loadErrorMessage } from '@/lib/load-error'
+import { REJECT_REMARK_MESSAGE, isRemarkRequiredError, rejectRemarkProblem } from '@/lib/reject-remark'
 import { cn } from '@/lib/utils'
 
 const TO_VIEW: Record<ApprovalStatus, RequestView> = { pending: 'waiting', approved: 'approved', rejected: 'rejected' }
@@ -76,9 +77,9 @@ function useDebounced<T>(value: T, ms: number): T {
 
 /**
  * Manager Approvals for a Department Head (mirror of the mobile app's Approvals tab, 2026-10-31). Each kind of request the
- * head may see has three lists: Pending (waiting for YOUR decision now: Approve / Reject, each confirmed with an optional
- * comment), Approved (finally approved, or approved by you and now with HR) and Rejected, with WHO decided each one shown
- * prominently. Search by name or code. Server: GET /manager/requests(/summary); decisions use the unchanged PATCH
+ * head may see has three lists: Pending (waiting for YOUR decision now: Approve with an optional comment / Reject with the
+ * reason, which is required), Approved (finally approved, or approved by you and now with HR) and Rejected, with WHO
+ * decided each one shown prominently. Search by name or code. Server: GET /manager/requests(/summary); decisions use the unchanged PATCH
  * endpoints. An older server without the history gets the old pending list (searched here) and a note.
  * `?category=on_duty&status=approved` opens a given list.
  */
@@ -186,8 +187,11 @@ export default function Approvals() {
     void (legacy ? legacyQuery.refetch() : listQuery.refetch())
   }
 
-  const decide = async (d: 'approved' | 'rejected', comment: string): Promise<boolean> => {
+  const decide = async (d: 'approved' | 'rejected', comment: string): Promise<DecideResult> => {
     if (!target) return false
+    // A rejection is never sent without its reason (the dialog checks first; this keeps the rule for any caller).
+    const remarkProblem = d === 'rejected' ? rejectRemarkProblem(comment) : null
+    if (remarkProblem) return remarkProblem
     const args = { category: target.category, item: target.item, decision: d, comment }
     try {
       const result = await decision.mutateAsync(args)
@@ -196,6 +200,9 @@ export default function Approvals() {
       else toast(t.title, { description: t.description })
       return true
     } catch (err) {
+      // The server wants the rejection's reason (400 remark_required): its words go under the reason box, the dialog stays
+      // open (the request has not moved on).
+      if (isRemarkRequiredError(err)) return err instanceof ApiError && err.message ? err.message : REJECT_REMARK_MESSAGE
       // The server's own words (not your turn any more, switched off, already decided ...).
       toast.error(err instanceof ApiError ? err.message : 'Could not send your decision. Check your connection and try again.')
       // A refusal means what is on screen is out of date: the lists are read again (onSettled) and the dialog closes.

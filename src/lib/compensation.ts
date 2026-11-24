@@ -24,9 +24,28 @@ export type CompensationKind =
   | 'window_late_in'
   | 'window_early_out'
   | 'birthday'
+  | 'birthday_credit'
+  | 'use_balance'
   | 'compensation_day'
   | 'balance_credit'
   | 'alternative_day'
+
+/** What an employee may claim themselves (POST /employee/compensation/claims `kind`). */
+export type ClaimKind = 'holiday_work' | 'ot_allowance' | 'ot_shift' | 'birthday'
+export const CLAIM_KINDS: readonly ClaimKind[] = ['holiday_work', 'ot_allowance', 'ot_shift', 'birthday']
+
+/** The claim an item already has (the latest one), as GET /employee/compensation sends it on each item. */
+export interface ItemClaim {
+  id: number | string
+  kind: string
+  /** pending | approved | rejected | withdrawn (anything else is drawn generically) */
+  status: string
+  statusLabel: string
+  shifts: number | null
+  minutes: number | null
+  /** Who raised it: the employee themselves or HR; null when the server did not say. */
+  raisedByRole: 'employee' | 'hr' | null
+}
 
 export interface CompensationItem {
   /** Unique within the list (made unique here if the server ever repeats one). */
@@ -51,6 +70,28 @@ export interface CompensationItem {
   legacy: boolean
   /** HH:MM of an announced company window. */
   time: string | null
+  /** The employee may claim it now (self-claims, 2026-11-19). Always false on an older backend. */
+  claimable: boolean
+  /** The `kind` a claim for it is sent with; null when it cannot be claimed (or the server did not say). */
+  claimKind: ClaimKind | null
+  /** Its latest claim, or null. */
+  claim: ItemClaim | null
+  /** Extra hours (ot_shift): the most a claim may ask for, in shifts (the quarters rule); null elsewhere. */
+  suggestedShifts: number | null
+  /** The overtime record an ot_allowance / ot_shift item is about (`overtimeRecordId`, else read from the key "ot-<id>"). */
+  overtimeRecordId: number | null
+}
+
+/** Asking to use the balance as a day off (POST /employee/compensation/use): what the server allows right now. */
+export interface UseBalanceInfo {
+  allowed: boolean
+  balanceShifts: number
+  /** Already asked for and still waiting for the Department Head. */
+  pendingShifts: number
+  /** balance - pending: what a new request may use. */
+  availableShifts: number
+  /** Why it is not allowed (or a note), in the server's words. */
+  message: string | null
 }
 
 export interface AllowanceInfo {
@@ -95,6 +136,22 @@ export interface CompensationPayload {
   tomorrowAllowance: AllowanceInfo | null
   askHr: CompensationAskHr | null
   message: string | null
+  /**
+   * The employee may claim compensation and ask to use their balance themselves (their Department Head approves). False
+   * on an older backend (no `canClaim` key): the page then stays read-only with its old "ask HR" wording.
+   */
+  canClaim: boolean
+  /** The server sent `canClaim` at all (a backend with self-claims), whatever its value. */
+  claimsSupported: boolean
+  /**
+   * Why the employee cannot claim right now when a newer backend says `canClaim: false` (no Department Head who may
+   * approve, the feature switched off ...); null otherwise.
+   */
+  claimMessage: string | null
+  /** How many days after the day a claim may still be made (45); null when the server did not say. */
+  claimWindowDays: number | null
+  /** null on an older backend or when the server sent none. */
+  useBalance: UseBalanceInfo | null
 }
 
 export const STAFF_ONLY_MESSAGE = 'Compensation is for staff employees only.'
@@ -137,12 +194,83 @@ export function isoDateOrNull(value: unknown): string | null {
   return isIsoDate(day) ? day : null
 }
 
+/** A record id: a positive whole number, also from a digit string; else null. */
+function idOrNull(value: unknown): number | null {
+  const n = typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value) : value
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null
+}
+
+function claimKindOrNull(value: unknown): ClaimKind | null {
+  const kind = text(value)
+  return (CLAIM_KINDS as readonly string[]).includes(kind) ? (kind as ClaimKind) : null
+}
+
+/** The claim kind an item is claimed with when the server says it is claimable but not how (an item kind -> a claim kind). */
+const CLAIM_KIND_OF_ITEM: Record<string, ClaimKind> = {
+  holiday_work: 'holiday_work',
+  ot_allowance: 'ot_allowance',
+  ot_shift: 'ot_shift',
+  birthday_credit: 'birthday',
+}
+
+function parseItemClaim(raw: unknown): ItemClaim | null {
+  if (!isObject(raw)) return null
+  const id = idOrNull(raw.id) ?? (text(raw.id) || null)
+  if (id === null) return null
+  const role = text(raw.raisedByRole)
+  return {
+    id,
+    kind: text(raw.kind),
+    status: text(raw.status),
+    statusLabel: text(raw.statusLabel),
+    shifts: numberOrNull(raw.shifts),
+    minutes: numberOrNull(raw.minutes),
+    raisedByRole: role === 'employee' || role === 'hr' ? role : null,
+  }
+}
+
+export type ClaimFields = Pick<CompensationItem, 'claimable' | 'claimKind' | 'claim' | 'suggestedShifts' | 'overtimeRecordId'>
+
+/**
+ * The self-claim keys of one item (GET /employee/compensation, and the year timeline should it ever send them). All absent
+ * on an older backend: not claimable, no claim. The overtime record comes from `overtimeRecordId`, else from the item's
+ * key "ot-<id>" (the key the server gives every OT item).
+ */
+export function parseClaimFields(raw: Record<string, unknown>, kind: string, key: string): ClaimFields {
+  const claimKind = claimKindOrNull(raw.claimKind) ?? (raw.claimable === true ? (CLAIM_KIND_OF_ITEM[kind] ?? null) : null)
+  const fromKey = /^ot-(\d+)$/.exec(key)
+  return {
+    claimable: raw.claimable === true && claimKind !== null,
+    claimKind,
+    claim: parseItemClaim(raw.claim),
+    suggestedShifts: numberOrNull(raw.suggestedShifts),
+    overtimeRecordId: idOrNull(raw.overtimeRecordId) ?? (fromKey ? idOrNull(fromKey[1]) : null),
+  }
+}
+
+function parseUseBalance(raw: unknown, balance: number): UseBalanceInfo | null {
+  if (!isObject(raw)) return null
+  const balanceShifts = numberOrNull(raw.balanceShifts) ?? balance
+  const pendingShifts = Math.max(0, numberOrNull(raw.pendingShifts) ?? 0)
+  const available = numberOrNull(raw.availableShifts) ?? balanceShifts - pendingShifts
+  return {
+    allowed: raw.allowed === true,
+    balanceShifts,
+    pendingShifts,
+    // Never more than the balance less what is already asked for, whatever the server says.
+    availableShifts: Math.max(0, Math.min(available, balanceShifts - pendingShifts)),
+    message: textOrNull(raw.message),
+  }
+}
+
 function parseItem(raw: unknown): CompensationItem | null {
   if (!isObject(raw)) return null
   const kind = text(raw.kind) || 'unknown'
   const date = isoDateOrNull(raw.date)
+  const key = text(raw.key) || `${kind}-${date ?? 'undated'}`
   return {
-    key: text(raw.key) || `${kind}-${date ?? 'undated'}`,
+    ...parseClaimFields(raw, kind, key),
+    key,
     kind,
     group: text(raw.group) || 'other',
     date,
@@ -229,18 +357,30 @@ export function parseCompensation(raw: unknown): CompensationPayload | null {
       tomorrowAllowance: null,
       askHr: null,
       message: textOrNull(raw.message) ?? STAFF_ONLY_MESSAGE,
+      canClaim: false,
+      claimsSupported: typeof raw.canClaim === 'boolean',
+      claimMessage: null,
+      claimWindowDays: null,
+      useBalance: null,
     }
   }
   const items = Array.isArray(raw.items) ? raw.items.map(parseItem).filter((i): i is CompensationItem => i !== null) : []
+  const balanceShifts = numberOrNull(raw.balanceShifts) ?? 0
+  const windowDays = numberOrNull(raw.claimWindowDays)
   return {
     isStaff: true,
     enabled: parseEnabled(raw.enabled),
-    balanceShifts: numberOrNull(raw.balanceShifts) ?? 0,
+    balanceShifts,
     items: uniqueKeys(items),
     todayAllowance: parseAllowance(raw.todayAllowance),
     tomorrowAllowance: parseAllowance(raw.tomorrowAllowance),
     askHr: parseAskHr(raw.askHr),
     message: textOrNull(raw.message),
+    canClaim: raw.canClaim === true,
+    claimsSupported: typeof raw.canClaim === 'boolean',
+    claimMessage: raw.canClaim === true ? null : textOrNull(raw.claimMessage),
+    claimWindowDays: windowDays !== null && windowDays > 0 ? Math.floor(windowDays) : null,
+    useBalance: parseUseBalance(raw.useBalance, balanceShifts),
   }
 }
 
@@ -264,6 +404,9 @@ const KIND_INFO: Record<CompensationKind, KindInfo> = {
   window_late_in: { label: 'Company late-in time', symbol: 'sunrise', chip: 'chip-sky' },
   window_early_out: { label: 'Company early-out time', symbol: 'sunset', chip: 'chip-indigo' },
   birthday: { label: 'Birthday leave', symbol: 'cake', chip: 'chip-pink' },
+  // A birthday the employee worked (present or half day): one shift to claim (2026-11-19 birthday rule).
+  birthday_credit: { label: 'Birthday credit', symbol: 'cake', chip: 'chip-pink' },
+  use_balance: { label: 'Day off from balance', symbol: 'bed', chip: 'chip-fuchsia' },
   // Only the year timeline (GET /my/compensation-history) sends these three.
   compensation_day: { label: 'Compensation day', symbol: 'party', chip: 'chip-teal' },
   balance_credit: { label: 'Added to balance', symbol: 'handCoins', chip: 'chip-indigo' },
@@ -310,9 +453,18 @@ const STATUS_LABEL: Record<string, string> = {
   not_applicable: 'Not applicable',
   paid: 'Paid',
   auto: 'Automatic',
+  // Self-claims (2026-11-19).
+  claimable: 'Ready to claim',
+  claim_pending: 'Claim waiting for your Department Head',
+  claim_approved: 'Claim approved',
+  claim_rejected: 'Claim not approved',
 }
 
 const STATUS_CHIP: Record<string, string> = {
+  claimable: 'chip-teal',
+  claim_pending: 'chip-warning',
+  claim_approved: 'chip-success',
+  claim_rejected: 'chip-danger',
   approved: 'chip-success',
   applied: 'chip-success',
   used: 'chip-success',
@@ -333,7 +485,7 @@ const STATUS_CHIP: Record<string, string> = {
   auto: 'chip-muted',
 }
 
-const LIVE_STATUSES = new Set(['pending', 'pending_hod', 'detected', 'upcoming', 'today', 'scheduled'])
+const LIVE_STATUSES = new Set(['pending', 'pending_hod', 'detected', 'upcoming', 'today', 'scheduled', 'claimable', 'claim_pending'])
 
 export function statusInfo(item: Pick<CompensationItem, 'status' | 'statusLabel'>): StatusInfo {
   const status = item.status
@@ -464,6 +616,23 @@ const GROUPS: { id: string; title: string; hint: string }[] = [
 ]
 const OTHER_GROUP = { id: 'other', title: 'Other', hint: '' }
 
+/** The same groups when the employee claims for themselves (`canClaim`): nothing is "automatic" or "HR only" any more. */
+const SELF_CLAIM_GROUPS: Record<string, { title: string; hint: string }> = {
+  detected: {
+    title: 'Detected for you',
+    hint: 'Found by the system from your punches. Claim what you are owed: your Department Head approves each claim.',
+  },
+  assigned: {
+    title: 'Claims and HR assignments',
+    hint: 'Raised by you or by HR. A claim counts once your Department Head approves it.',
+  },
+  birthday: {
+    title: 'Birthday',
+    hint: 'Absent or on leave on your birthday: a paid birthday leave. Worked on your birthday: one shift you can claim.',
+  },
+  balance: { title: 'Compensation days taken', hint: 'Days off taken from your compensation balance.' },
+}
+
 /** Newest date first, undated last; stable for equal dates (the server's own order is kept). */
 export function sortNewestFirst(items: CompensationItem[]): CompensationItem[] {
   return items
@@ -477,11 +646,15 @@ export function sortNewestFirst(items: CompensationItem[]): CompensationItem[] {
     .map(({ item }) => item)
 }
 
-/** The items in their groups, in a fixed order; empty groups are left out, an unknown group is listed under "Other". */
-export function groupItems(items: CompensationItem[]): ItemGroup[] {
+/**
+ * The items in their groups, in a fixed order; empty groups are left out, an unknown group is listed under "Other".
+ * `canClaim`: the employee claims for themselves, so the group words say so instead of "automatic" / "given by HR".
+ */
+export function groupItems(items: CompensationItem[], opts: { canClaim?: boolean } = {}): ItemGroup[] {
   const known = new Set(GROUPS.map((g) => g.id))
   const out: ItemGroup[] = GROUPS.map((g) => ({
     ...g,
+    ...(opts.canClaim ? own(SELF_CLAIM_GROUPS, g.id) : undefined),
     items: sortNewestFirst(items.filter((i) => i.group === g.id)),
   }))
   out.push({ ...OTHER_GROUP, items: sortNewestFirst(items.filter((i) => !known.has(i.group))) })
@@ -496,9 +669,9 @@ const FILTERS: { id: Exclude<CompensationFilterId, 'all' | 'other'>; label: stri
   { id: 'allowance', label: 'Late-in allowance', kinds: ['ot_allowance'] },
   { id: 'shift', label: 'Shift compensation', kinds: ['ot_shift', 'ot_shift_relaxation', 'ot_shift_pay'] },
   { id: 'holiday_work', label: 'Sunday / holiday work', kinds: ['holiday_work'] },
-  { id: 'redemption', label: 'Days taken', kinds: ['redemption'] },
+  { id: 'redemption', label: 'Days taken', kinds: ['redemption', 'use_balance'] },
   { id: 'window', label: 'Company times', kinds: ['window_late_in', 'window_early_out'] },
-  { id: 'birthday', label: 'Birthday', kinds: ['birthday'] },
+  { id: 'birthday', label: 'Birthday', kinds: ['birthday', 'birthday_credit'] },
 ]
 
 const KNOWN_KINDS = new Set(FILTERS.flatMap((f) => f.kinds))

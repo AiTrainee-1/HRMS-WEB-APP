@@ -7,7 +7,8 @@
 
 import { fmtDay, type ApprovalCategory, type ApprovalItem, type ApprovalStatus } from './approvals-history.ts'
 import { approvalPath, type PathStep } from './decider.ts'
-import { claimBadge, describeClaim } from './holiday-work.ts'
+import { claimBadge, claimRaisedBy, describeClaim } from './holiday-work.ts'
+import { formatMinutes, formatShifts } from './compensation.ts'
 import type { ApprovalProgress, PendingHolidayWorkClaim } from '../types/index.ts'
 
 const PUNCH_SLOT_LABEL: Record<string, string> = {
@@ -121,8 +122,10 @@ export function itemDateLabel(category: ApprovalCategory, item: Item): string {
       return Array.isArray(item.punches) ? `${base} · ${count ? `${count} ${count === 1 ? 'punch' : 'punches'}` : 'No punches yet'}` : base
     }
     case 'holiday_work': {
+      // A compensation claim (any kind): "09 Nov 2026" for Sunday / holiday work, "Day off on 24 Nov 2026", ...
       const claim = describeClaim(item as unknown as PendingHolidayWorkClaim)
-      return claim.workDate ? fmtDay(claim.workDate) : claim.workDateText || '—'
+      const day = claim.workDate ? fmtDay(claim.workDate) : claim.workDateText || '—'
+      return claim.dateWord ? `${claim.dateWord} ${day}` : day
     }
     case 'resignation':
       return `Sent ${fmtDay(item.createdAt)}${s(item.lastWorkingDate) ? ` · Last day ${fmtDay(item.lastWorkingDate)}` : ''}`
@@ -253,8 +256,52 @@ export function itemApproval(item: Item | null | undefined): ApprovalProgress | 
 export function headSteps(category: ApprovalCategory, item: Item, when?: (iso: string) => string | null): PathStep[] {
   const steps = approvalPath(itemApproval(item), s(item.createdAt) || null, when)
   if (!steps.length) return steps
-  const raisedByHr = category === 'attendance' || category === 'holiday_work'
+  // A compensation claim may be raised by HR or (since 2026-11-19) by the employee; an older backend: always HR.
+  const raisedByHr =
+    category === 'attendance' || (category === 'holiday_work' && claimRaisedBy(item as unknown as PendingHolidayWorkClaim) === 'hr')
   const first = empName(item).split(/\s+/)[0]
   steps[0] = { ...steps[0], label: raisedByHr ? 'HR' : first && first !== 'Employee' ? first : 'Employee' }
   return steps
+}
+
+// ---- compensation claims ---------------------------------------------------------------------------------------------
+
+/** "6:00 PM", "2:10 AM (next day)" for an overtime's last punch (a full timestamp is cut to its time). */
+function punchClock(value: string | null, nextDay: boolean): string | null {
+  if (!value) return null
+  const time = /T(\d{1,2}:\d{2})/.exec(value)?.[1] ?? value
+  return `${clock12(time)}${nextDay ? ' (next day)' : ''}`
+}
+
+/**
+ * The facts a head needs on a compensation claim, as label / value rows for the detail dialog: who raised it, the
+ * overtime (day, shift end, last punch, extra time), the allowance minutes, the shifts. Only the rows the claim carries
+ * (an older backend's Sunday claim: who raised it and the shifts).
+ */
+export function claimFacts(item: Item): [string, string][] {
+  const claim = item as unknown as PendingHolidayWorkClaim
+  const v = describeClaim(claim)
+  const shifts = Number(claim.shifts)
+  const rows: [string, string | null][] = [
+    ['Raised by', v.raisedBy === 'employee' ? `${v.name} (employee)` : v.raisedByText.replace(/^Raised by /, '')],
+    ['Overtime day', v.overtime?.date ? fmtDay(v.overtime.date) : null],
+    ['Shift end', v.overtime?.shiftEnd ? clock12(v.overtime.shiftEnd) : null],
+    ['Last punch', v.overtime ? punchClock(v.overtime.lastPunch, v.overtime.lastPunchNextDay) : null],
+    ['Extra time', v.overtime?.extraMinutes ? formatMinutes(v.overtime.extraMinutes) : null],
+    ['Allowance', v.kind === 'ot_allowance' && v.minutes ? `${formatMinutes(v.minutes)} late-in` : null],
+    ['Shifts', v.kind !== 'ot_allowance' && shifts > 0 ? formatShifts(shifts) : null],
+  ]
+  return rows.filter((r): r is [string, string] => !!r[1])
+}
+
+/** One line for a claim's card: "Shift end 6:00 PM · Last punch 9:30 PM · 3 h 30 min extra"; null without overtime. */
+export function claimLine(item: Item): string | null {
+  const o = describeClaim(item as unknown as PendingHolidayWorkClaim).overtime
+  if (!o) return null
+  const parts = [
+    o.shiftEnd ? `Shift end ${clock12(o.shiftEnd)}` : null,
+    o.lastPunch ? `Last punch ${punchClock(o.lastPunch, o.lastPunchNextDay)}` : null,
+    o.extraMinutes ? `${formatMinutes(o.extraMinutes)} extra` : null,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
 }
