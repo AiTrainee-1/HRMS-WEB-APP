@@ -95,8 +95,17 @@ function NotFound() {
 }
 
 function RootRedirect() {
-  const { user } = useAuth()
+  const { user, isRestoring } = useAuth()
+  if (isRestoring) return <PageLoader label="Signing you in" />
   return <Redirect to={user ? '/employee/dashboard' : '/employee-login'} />
+}
+
+/** The sign-in page, unless this browser was just signed back in from its saved session (owner 2026-11-25). */
+function LoginRoute() {
+  const { user, isRestoring, restored } = useAuth()
+  if (isRestoring) return <PageLoader label="Signing you in" />
+  if (user && restored) return <Redirect to="/employee/dashboard" />
+  return <Login />
 }
 
 function AppRoutes() {
@@ -104,7 +113,7 @@ function AppRoutes() {
     <Suspense fallback={<PageFallback />}>
       <Switch>
         <Route path="/" component={RootRedirect} />
-        <Route path="/employee-login" component={Login} />
+        <Route path="/employee-login" component={LoginRoute} />
         <Route path="/set-password" component={SetPassword} />
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/verify/:code" component={VerifyEmployee} />

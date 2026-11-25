@@ -63,7 +63,13 @@ apiClient.interceptors.response.use(
   (error) => {
     const status: number | undefined = error?.response?.status
     const skipOffline = error?.config?.skipOfflineDetection === true
-    if (status === 401 && !error?.config?.isPublic) {
+    // Only a request that carried the token stored NOW speaks for this session (owner 2026-11-25): one sent with an older
+    // token (signed in again in another tab, or renewed meanwhile) must not sign everyone out of the new one.
+    const sentAuth = String(error?.config?.headers?.Authorization ?? error?.config?.headers?.get?.('Authorization') ?? '')
+    const sentToken = sentAuth.replace(/^Bearer\s+/i, '')
+    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY)
+    const staleRequest = !!sentToken && !!storedToken && sentToken !== storedToken
+    if (status === 401 && !error?.config?.isPublic && !staleRequest) {
       try {
         unauthorizedHandler?.()
       } catch {
