@@ -24,35 +24,11 @@ import { monthOf } from '@/lib/month-switch'
 import { isOpenSession } from '@/lib/onduty-punches'
 import { cn } from '@/lib/utils'
 import type { GeoPunchPrecheckResult, PunchSlot } from '@/types'
+import { getCurrentFix, useLocationPrompt, type Fix } from '@/hooks/useLocationPrompt'
+import { LocationOffPopup } from '@/components/system/LocationOffPopup'
 
-type Fix = { latitude: number; longitude: number; accuracy?: number; isMocked: boolean }
-
-function getPosition(): Promise<Fix> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Location is not supported on this device or browser.'))
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          isMocked: !!(pos as unknown as { mocked?: boolean }).mocked,
-        }),
-      (err) =>
-        reject(
-          new Error(
-            err.code === err.PERMISSION_DENIED
-              ? "Location access is blocked. Allow it in your browser's site settings, then try again."
-              : 'Could not get your location. Move to an open area and try again.',
-          ),
-        ),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    )
-  })
-}
+// The position, and the "location is off / blocked" popup when there is none (owner 2026-11-25, hooks/useLocationPrompt).
+const getPosition = getCurrentFix
 
 const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError || err instanceof Error ? err.message : fallback)
 
@@ -178,6 +154,7 @@ function OfficePunch({ onDutyLive, onSwitch }: { onDutyLive: boolean; onSwitch: 
   const [done, setDone] = React.useState<string | null>(null)
   // Phones: the app's stepper. Allow location -> capture it -> review; the last two follow `result` / `done` below.
   const [phoneStart, setPhoneStart] = React.useState<'permission' | 'locate'>('permission')
+  const locationPrompt = useLocationPrompt()
 
   const allowLocation = async () => {
     setLocating(true)
@@ -192,6 +169,7 @@ function OfficePunch({ onDutyLive, onSwitch }: { onDutyLive: boolean; onSwitch: 
       setPhoneStart('locate')
     } catch (err) {
       setError(errMsg(err, 'Could not get your location.'))
+      locationPrompt.offer(err, () => void allowLocation())
     } finally {
       setLocating(false)
     }
@@ -215,6 +193,7 @@ function OfficePunch({ onDutyLive, onSwitch }: { onDutyLive: boolean; onSwitch: 
       setResult(await precheck.mutateAsync({ latitude: f.latitude, longitude: f.longitude }))
     } catch (err) {
       setError(errMsg(err, 'Could not check your location.'))
+      locationPrompt.offer(err, () => void locate())
     } finally {
       setLocating(false)
     }
@@ -521,6 +500,7 @@ function OfficePunch({ onDutyLive, onSwitch }: { onDutyLive: boolean; onSwitch: 
           )}
         </div>
       </GlassCard>
+      <LocationOffPopup prompt={locationPrompt.prompt} reason="punch" onClose={locationPrompt.close} />
     </>
   )
 }

@@ -1,8 +1,9 @@
 // Salary Advance and Term Loan (Advances & Settlement page): the rules the page shows, in ONE place. Pure, unit-tested in
 // advances.test.ts (`npm test`). Twin of the mobile app's src/lib/settlement.ts.
 //
-// The server decides everything (backend api/mobile_settlement_views.py): when applications are open (from the 20th of
-// the month to its last day, factory date), the 60% limit of the monthly fixed salary, the 1-12 month Term Loan, the
+// The server decides everything (backend api/mobile_settlement_views.py): when applications are open (owner 2026-11-25: a
+// Salary Advance only from the 20th to the 22nd of each month, a Term Loan on any day; factory date, the server answers
+// 400 window_closed outside), the 60% limit of the monthly fixed salary, the 1-12 month Term Loan, the
 // whole-rupee EMI, and what HR approved. This file reads those answers defensively, words them, and gives the forms a LIVE
 // preview that matches what the server will store, so an employee sees the same EMI and months before and after sending.
 
@@ -66,11 +67,24 @@ const num0 = (v: unknown): number => num(v) ?? 0
 export interface WindowInfo {
   isOpen: boolean
   opensOn: string
+  /** '' for a form that is open every day (a Term Loan since 2026-11-25). */
   closesOn: string
   nextOpensOn: string
   daysUntilOpen: number
+  /** 0 for a form that is open every day. */
   daysLeft: number
   message: string
+  /** Open every day, no dates (a Term Loan since 2026-11-25; false on an older server). */
+  alwaysOpen: boolean
+  /** The days of the month the window runs (20 and 22 for a Salary Advance), when the server says. */
+  opensOnDay: number | null
+  closesOnDay: number | null
+}
+
+/** Each form's own window (GET /my/advances/eligibility `windows`, 2026-11-25). */
+export interface WindowsInfo {
+  general: WindowInfo
+  term: WindowInfo
 }
 
 export interface ScheduleRow {
@@ -216,7 +230,10 @@ export function normalizeAdvances(raw: unknown): MyAdvance[] | null {
 
 export interface AdvanceEligibility {
   today: string
+  /** The Salary Advance window (on an older server: the one window both forms shared). */
   window: WindowInfo
+  /** Each form's own window (2026-11-25), or null on an older server. Read through salaryAdvanceWindow / termLoanWindow. */
+  windows: WindowsInfo | null
   workflowEnabled: boolean
   workflowMessage: string | null
   employeeActive: boolean
@@ -248,10 +265,26 @@ export interface AdvanceEligibility {
   approvalPath: string
 }
 
+/** One window of the eligibility reply (`window`, `windows.general`, `windows.term`). */
+function normalizeWindow(w: Record<string, unknown>): WindowInfo {
+  return {
+    isOpen: w.isOpen === true,
+    opensOn: str(w.opensOn),
+    closesOn: str(w.closesOn),
+    nextOpensOn: str(w.nextOpensOn),
+    daysUntilOpen: num0(w.daysUntilOpen),
+    daysLeft: num0(w.daysLeft),
+    message: str(w.message),
+    alwaysOpen: w.alwaysOpen === true,
+    opensOnDay: num(w.opensOnDay),
+    closesOnDay: num(w.closesOnDay),
+  }
+}
+
 /** The reply of GET /my/advances/eligibility, or null when it is not one. */
 export function normalizeEligibility(raw: unknown): AdvanceEligibility | null {
   if (!isObject(raw) || !isObject(raw.window) || !isObject(raw.salaryAdvance) || !isObject(raw.termLoan)) return null
-  const w = raw.window
+  const ws = isObject(raw.windows) && isObject(raw.windows.general) && isObject(raw.windows.term) ? raw.windows : null
   const g = raw.salaryAdvance
   const t = raw.termLoan
   const today = str(raw.today)
@@ -263,15 +296,10 @@ export function normalizeEligibility(raw: unknown): AdvanceEligibility | null {
   const pending = isObject(t.pending) && num(t.pending.id) != null ? { id: num0(t.pending.id), amount: num0(t.pending.amount) } : null
   return {
     today,
-    window: {
-      isOpen: w.isOpen === true,
-      opensOn: str(w.opensOn),
-      closesOn: str(w.closesOn),
-      nextOpensOn: str(w.nextOpensOn),
-      daysUntilOpen: num0(w.daysUntilOpen),
-      daysLeft: num0(w.daysLeft),
-      message: str(w.message),
-    },
+    window: normalizeWindow(raw.window),
+    windows: ws
+      ? { general: normalizeWindow(ws.general as Record<string, unknown>), term: normalizeWindow(ws.term as Record<string, unknown>) }
+      : null,
     workflowEnabled: raw.workflowEnabled !== false,
     workflowMessage: strOrNull(raw.workflowMessage),
     employeeActive: raw.employeeActive !== false,
@@ -314,9 +342,29 @@ export function dayMonth(iso: string | null | undefined): string {
   return `${Number(m[3])} ${MONTH_SHORT[Number(m[2]) - 1]}`
 }
 
-/** The headline of the window banner: "Open now: 6 days left", "Opens on 20 Nov: in 5 days", "Open now: last day today". */
+/** What the window helpers need from the eligibility reply. */
+export type WindowSource = Pick<AdvanceEligibility, 'window'> & { windows?: Partial<WindowsInfo> | null }
+
+/** The Salary Advance window: `windows.general`, else (an older server) the one shared `window`. */
+export function salaryAdvanceWindow(e: WindowSource): WindowInfo {
+  return e.windows?.general ?? e.window
+}
+
+/**
+ * The Term Loan window, or null when a Term Loan can be applied for on any day (the current server: `windows.term` is
+ * `alwaysOpen`). An older server has one window for both forms, so that window applies.
+ */
+export function termLoanWindow(e: WindowSource): WindowInfo | null {
+  const term = e.windows?.term
+  if (term) return term.alwaysOpen ? null : term
+  return e.window
+}
+
+/** The headline of the window banner: "Open now: 2 days left", "Opens on 20 Dec: in 25 days", "Open now: last day
+ *  today", "Open every day". */
 export function windowHeadline(w: WindowInfo | null | undefined): string {
   if (!w) return ''
+  if (w.alwaysOpen) return 'Open every day'
   if (w.isOpen) {
     if (w.daysLeft <= 1) return 'Open now: last day today'
     return `Open now: ${w.daysLeft} days left`
@@ -329,19 +377,71 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n))
 }
 
-/** How far through the waiting period (1st -> 20th) or the open period (20th -> month end) we are, 0-1, for the bar. */
+/** The short line on a form's card / tab: "Open · 2 days left", "Last day today", "Opens 20 Dec · in 25 days",
+ *  "Any day". `open` false = the form cannot be sent today because of its window. */
+export function windowChip(w: WindowInfo | null | undefined): { open: boolean; text: string } {
+  if (!w || w.alwaysOpen) return { open: true, text: 'Any day' }
+  if (w.isOpen) return { open: true, text: w.daysLeft <= 1 ? 'Last day today' : `Open · ${w.daysLeft} days left` }
+  const when = w.daysUntilOpen === 1 ? 'tomorrow' : `in ${w.daysUntilOpen} days`
+  return { open: false, text: `Opens ${dayMonth(w.opensOn)} · ${when}` }
+}
+
+/** "Opens on 20 Dec" for a closed window (a disabled button), '' otherwise. */
+export function opensOnText(w: WindowInfo | null | undefined): string {
+  return w && !w.alwaysOpen && !w.isOpen && dayMonth(w.opensOn) ? `Opens on ${dayMonth(w.opensOn)}` : ''
+}
+
+function dayOf(iso: string | null | undefined): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''))
+  return m ? Number(m[3]) : null
+}
+
+/** Days in the month of a "YYYY-MM-DD" (30 when it is not a date). */
+export function daysInMonthOf(iso: string | null | undefined): number {
+  const m = /^(\d{4})-(\d{2})/.exec(String(iso ?? ''))
+  return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate() : 30
+}
+
+export interface WindowStrip {
+  /** The month's last day (the strip runs 1 .. lastDay). */
+  lastDay: number
+  /** The open days, as day numbers and as % positions along the strip. */
+  fromDay: number
+  toDay: number
+  startPct: number
+  endPct: number
+  /** Today's position, 0-100 (kept on the strip). */
+  todayPct: number
+}
+
+/** The banner's strip of today's month with the window's days lit (the 20th to the 22nd for a Salary Advance; an older
+ *  server's 20th to the month end), or null for a form with no window. */
+export function windowStrip(w: WindowInfo | null | undefined, today: string | null | undefined): WindowStrip | null {
+  if (!w || w.alwaysOpen) return null
+  const lastDay = daysInMonthOf(today)
+  const fromDay = Math.min(lastDay, w.opensOnDay ?? dayOf(w.opensOn) ?? 20)
+  const toDay = Math.min(lastDay, Math.max(fromDay, w.closesOnDay ?? dayOf(w.closesOn) ?? lastDay))
+  const span = Math.max(1, lastDay - 1)
+  const pct = (d: number) => clamp01((d - 1) / span) * 100
+  return { lastDay, fromDay, toDay, startPct: pct(fromDay), endPct: pct(toDay), todayPct: pct(dayOf(today) ?? 1) }
+}
+
+/** How far through the waiting period or the open period we are, 0-1, for a progress bar. */
 export function windowProgress(w: WindowInfo | null | undefined): number {
   if (!w) return 0
-  const end = /^(\d{4})-(\d{2})-(\d{2})/.exec(w.closesOn)
-  const lastDay = end ? Number(end[3]) : 30
-  const openDays = Math.max(1, lastDay - 19)
+  if (w.alwaysOpen) return 1
+  const from = w.opensOnDay ?? dayOf(w.opensOn) ?? 20
+  const to = w.closesOnDay ?? dayOf(w.closesOn) ?? 30
+  const openDays = Math.max(1, to - from + 1)
   if (w.isOpen) return clamp01((openDays - w.daysLeft + 1) / openDays)
-  return clamp01((19 - w.daysUntilOpen + 1) / 19)
+  const waitDays = Math.max(1, 31 - openDays)
+  return clamp01((waitDays - w.daysUntilOpen + 1) / waitDays)
 }
 
 /** The instant the window changes (closes at the end of `closesOn`, or opens at the start of `opensOn`), factory time
- *  (IST, +05:30). NaN when the dates are missing. */
+ *  (IST, +05:30). NaN when the dates are missing or the form is open every day. */
 export function windowDeadline(w: WindowInfo): number {
+  if (w.alwaysOpen) return NaN
   const day = w.isOpen ? w.closesOn : w.opensOn
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return NaN
   const start = Date.parse(`${day}T00:00:00+05:30`)

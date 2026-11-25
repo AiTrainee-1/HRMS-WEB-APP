@@ -10,6 +10,7 @@ import { MonthCard } from '@/components/dashboard/MonthCard'
 import { QuickActions, QuickActionsPhone } from '@/components/dashboard/QuickActions'
 import { PhoneHomeTop } from '@/components/dashboard/PhoneHome'
 import { NextHolidayCard } from '@/components/dashboard/NextHolidayCard'
+import { InsightsSection } from '@/components/dashboard/InsightsSection'
 import { useAuth } from '@/context/AuthContext'
 import { employeeApi } from '@/api/resources'
 import { useTodayAttendance } from '@/hooks/useTodayAttendance'
@@ -186,6 +187,9 @@ export default function Dashboard() {
       </div>
 
       <QuickActions isStaff={isStaff} isManager={isManager} pendingApprovals={flags?.pendingApprovalsCount ?? 0} />
+
+      {/* My Insights (owner 2026-11-25): after Quick Actions and Last salary, on the desktop and on phones alike. */}
+      <InsightsSection />
     </PageShell>
   )
 }

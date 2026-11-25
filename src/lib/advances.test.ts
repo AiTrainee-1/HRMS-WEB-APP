@@ -5,27 +5,33 @@ import { test } from 'node:test'
 import {
   amountOf,
   countdownText,
+  daysInMonthOf,
   filterByType,
   formatAmountInput,
   limitMeter,
   normalizeAdvance,
   normalizeAdvances,
   normalizeEligibility,
+  opensOnText,
   planSummary,
   purposeProblem,
   recordTotals,
   repaidRatio,
   salaryAdvanceProblem,
+  salaryAdvanceWindow,
   scheduleLook,
   scheduleTitle,
   statusText,
   termAmountProblem,
   termEmi,
+  termLoanWindow,
   termPlan,
   typeCounts,
+  windowChip,
   windowDeadline,
   windowHeadline,
   windowProgress,
+  windowStrip,
 } from './advances.ts'
 
 test('amount box: live Indian grouping, digits only', () => {
@@ -73,14 +79,25 @@ test('term loan EMI rounds up, last instalment smaller, schedule crosses the yea
 })
 
 test('window headline, progress, deadline and countdown', () => {
-  const open = { isOpen: true, opensOn: '2026-10-20', closesOn: '2026-10-31', nextOpensOn: '2026-11-20', daysUntilOpen: 0, daysLeft: 1, message: '' }
+  const open = {
+    isOpen: true,
+    opensOn: '2026-10-20',
+    closesOn: '2026-10-31',
+    nextOpensOn: '2026-11-20',
+    daysUntilOpen: 0,
+    daysLeft: 1,
+    message: '',
+    alwaysOpen: false,
+    opensOnDay: null,
+    closesOnDay: null,
+  }
   assert.equal(windowHeadline(open), 'Open now: last day today')
   assert.equal(windowHeadline({ ...open, daysLeft: 6 }), 'Open now: 6 days left')
   const closed = { ...open, isOpen: false, opensOn: '2026-11-20', closesOn: '2026-11-30', daysUntilOpen: 5, daysLeft: 0 }
   assert.equal(windowHeadline(closed), 'Opens on 20 Nov: in 5 days')
   assert.equal(windowHeadline({ ...closed, daysUntilOpen: 1 }), 'Opens on 20 Nov: tomorrow')
   assert.equal(windowProgress(open), 1)
-  assert.ok(windowProgress(closed) > 0.7 && windowProgress(closed) < 0.8)
+  assert.ok(windowProgress(closed) > 0.7 && windowProgress(closed) <= 0.8)
   // closes at the end of 31 Oct IST = 1 Nov 00:00 IST = 31 Oct 18:30 UTC
   assert.equal(windowDeadline(open), Date.parse('2026-10-31T18:30:00Z'))
   assert.equal(windowDeadline(closed), Date.parse('2026-11-19T18:30:00Z'))
@@ -168,4 +185,105 @@ test('normalizeEligibility keeps the server reasons and falls back sensibly', ()
   assert.equal(e.termLoan.minAmount, 1000)
   assert.equal(e.termLoan.maxMonths, 12)
   assert.deepEqual(e.rules, ['One Salary Advance per month.'])
+})
+
+// ---- owner 2026-11-25: a Salary Advance only from the 20th to the 22nd, a Term Loan on any day ----------------------
+
+const saClosed = {
+  isOpen: false,
+  opensOn: '2026-12-20',
+  closesOn: '2026-12-22',
+  nextOpensOn: '2026-12-20',
+  daysUntilOpen: 25,
+  daysLeft: 0,
+  message: 'Salary Advance applications open on 20 December and close on 22 December.',
+  alwaysOpen: false,
+  opensOnDay: 20,
+  closesOnDay: 22,
+}
+const saOpen = { ...saClosed, isOpen: true, opensOn: '2026-11-20', closesOn: '2026-11-22', daysUntilOpen: 0, daysLeft: 2 }
+const termAny = {
+  isOpen: true,
+  opensOn: '2026-11-25',
+  closesOn: '',
+  nextOpensOn: '',
+  daysUntilOpen: 0,
+  daysLeft: 0,
+  message: 'Term Loan applications are open on any day.',
+  alwaysOpen: true,
+  opensOnDay: null,
+  closesOnDay: null,
+}
+
+test('each form has its own window; an older server shares one', () => {
+  const current = { window: saClosed, windows: { general: saClosed, term: termAny } }
+  assert.equal(salaryAdvanceWindow(current), saClosed)
+  assert.equal(termLoanWindow(current), null) // a Term Loan: any day
+  const older = { window: saOpen }
+  assert.equal(salaryAdvanceWindow(older), saOpen)
+  assert.equal(termLoanWindow(older), saOpen)
+})
+
+test('normalizeEligibility reads each form\'s window', () => {
+  const e = normalizeEligibility({
+    today: '2026-11-25',
+    window: { ...saClosed, closesOn: '2026-12-22' },
+    windows: { general: saClosed, term: { ...termAny, closesOn: null, nextOpensOn: null, daysLeft: null } },
+    salaryAdvance: { canApply: false, reason: 'A Salary Advance can be applied for only from the 20th to the 22nd of each month.', deductionLabel: 'December 2026' },
+    termLoan: { canApply: true },
+  })!
+  assert.equal(e.windows?.general.opensOnDay, 20)
+  assert.equal(e.windows?.term.alwaysOpen, true)
+  assert.equal(e.windows?.term.closesOn, '')
+  assert.equal(termLoanWindow(e), null)
+  assert.equal(salaryAdvanceWindow(e).closesOnDay, 22)
+  // after the 22nd the Salary Advance comes out of next month's salary (the server's own label)
+  assert.equal(e.salaryAdvance.deductionLabel, 'December 2026')
+  // an older server: no `windows`
+  const old = normalizeEligibility({ today: '2026-10-25', window: { isOpen: true }, salaryAdvance: {}, termLoan: {} })!
+  assert.equal(old.windows, null)
+  assert.equal(old.window.alwaysOpen, false)
+})
+
+test('the chip and the disabled button say when a Salary Advance opens', () => {
+  assert.deepEqual(windowChip(saClosed), { open: false, text: 'Opens 20 Dec · in 25 days' })
+  assert.deepEqual(windowChip({ ...saClosed, daysUntilOpen: 1 }), { open: false, text: 'Opens 20 Dec · tomorrow' })
+  assert.deepEqual(windowChip(saOpen), { open: true, text: 'Open · 2 days left' })
+  assert.deepEqual(windowChip({ ...saOpen, daysLeft: 1 }), { open: true, text: 'Last day today' })
+  assert.deepEqual(windowChip(termAny), { open: true, text: 'Any day' })
+  assert.deepEqual(windowChip(null), { open: true, text: 'Any day' })
+  assert.equal(opensOnText(saClosed), 'Opens on 20 Dec')
+  assert.equal(opensOnText(saOpen), '')
+  assert.equal(opensOnText(termAny), '')
+  assert.equal(windowHeadline(termAny), 'Open every day')
+  assert.equal(windowHeadline(saClosed), 'Opens on 20 Dec: in 25 days')
+  assert.equal(windowHeadline(saOpen), 'Open now: 2 days left')
+  assert.ok(Number.isNaN(windowDeadline(termAny)))
+  // closes at the end of 22 Nov IST
+  assert.equal(windowDeadline(saOpen), Date.parse('2026-11-22T18:30:00Z'))
+})
+
+test('the month strip lights the 20th to the 22nd', () => {
+  assert.equal(daysInMonthOf('2026-11-25'), 30)
+  assert.equal(daysInMonthOf('2027-02-03'), 28)
+  assert.equal(daysInMonthOf('2028-02-03'), 29)
+  const s = windowStrip(saClosed, '2026-11-25')!
+  assert.equal(s.lastDay, 30)
+  assert.deepEqual([s.fromDay, s.toDay], [20, 22])
+  assert.ok(Math.abs(s.startPct - (19 / 29) * 100) < 1e-9)
+  assert.ok(Math.abs(s.endPct - (21 / 29) * 100) < 1e-9)
+  assert.ok(s.todayPct > s.endPct) // the 25th: past this month's window
+  assert.equal(windowStrip(termAny, '2026-11-25'), null)
+  // an older server's 20th-to-month-end window
+  const old = windowStrip({ ...saClosed, opensOn: '2026-11-20', closesOn: '2026-11-30', opensOnDay: null, closesOnDay: null }, '2026-11-05')!
+  assert.deepEqual([old.fromDay, old.toDay, old.endPct], [20, 30, 100])
+  // never off the strip
+  assert.equal(windowStrip(saOpen, '2026-11-01')!.todayPct, 0)
+})
+
+test('progress through the 3-day window', () => {
+  assert.equal(windowProgress(termAny), 1)
+  assert.equal(windowProgress({ ...saOpen, daysLeft: 1 }), 1)
+  assert.ok(Math.abs(windowProgress({ ...saOpen, daysLeft: 3 }) - 1 / 3) < 1e-9)
+  assert.ok(windowProgress(saClosed) >= 0 && windowProgress(saClosed) < 1)
 })

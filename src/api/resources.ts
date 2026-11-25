@@ -107,8 +107,10 @@ export const authApi = {
       url: '/auth/otp/activate',
       data: { employeeCode, otp, password },
     }),
+  // Public (2026-11-25, as in the mobile app): no token is sent, and its 401 (a wrong password / unknown code, worded by
+  // lib/login-errors.ts) is a refused attempt, never the end of a session already signed in on this browser.
   login: (identifier: string, password: string) =>
-    apiRequest<LoginResponse>({ method: 'POST', url: '/auth/employee-login', data: { identifier, password } }),
+    apiRequest<LoginResponse>({ method: 'POST', url: '/auth/employee-login', data: { identifier, password }, isPublic: true }),
   setPassword: (identifier: string, password: string) =>
     apiRequest<{ success: boolean }>({ method: 'POST', url: '/auth/set-password', data: { identifier, password } }),
   me: () => apiRequest<{ role: string; employeeId: string; name: string }>({ method: 'GET', url: '/auth/me' }),

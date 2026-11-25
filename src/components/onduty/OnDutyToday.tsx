@@ -40,37 +40,13 @@ import { isQueued } from '@/offline/submit'
 import { useQueuedOps } from '@/offline/useOfflineStatus'
 import { queuedOtCount, queuedPunchNumbers, withQueuedPunches } from '@/lib/onduty-queued'
 import { Link } from 'wouter'
+import { getCurrentFix, useLocationPrompt, type Fix } from '@/hooks/useLocationPrompt'
+import { LocationOffPopup } from '@/components/system/LocationOffPopup'
 
 const ON_DUTY_KINDS = ['onDuty.request', 'onDuty.punch', 'onDuty.otPunch', 'onDuty.end'] as const
 
-type Fix = { latitude: number; longitude: number; accuracy?: number; isMocked: boolean }
-
-function getPosition(): Promise<Fix> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Location is not supported on this device or browser.'))
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          isMocked: !!(pos as unknown as { mocked?: boolean }).mocked,
-        }),
-      (err) =>
-        reject(
-          new Error(
-            err.code === err.PERMISSION_DENIED
-              ? "Location access is blocked. Allow it in your browser's site settings, then try again."
-              : 'Could not get your location. Move to an open area and try again.',
-          ),
-        ),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    )
-  })
-}
+// The position, and the "location is off / blocked" popup when there is none (owner 2026-11-25, hooks/useLocationPrompt).
+const getPosition = getCurrentFix
 
 const errMsg = (err: unknown, fallback: string) => (err instanceof ApiError || err instanceof Error ? err.message || fallback : fallback)
 
@@ -208,6 +184,7 @@ export function OnDutyToday({ onSeeRecords }: { onSeeRecords: () => void }) {
   // refresh (HR changing the policy) cannot change the camera under the employee's hands.
   const [photoCount, setPhotoCount] = React.useState(1)
   const fixRef = React.useRef<Fix | null>(null)
+  const locationPrompt = useLocationPrompt()
   const requiredPhotos = requiredPhotoCount(data)
 
   const dropPending = () => setPending(null)
@@ -222,7 +199,8 @@ export function OnDutyToday({ onSeeRecords }: { onSeeRecords: () => void }) {
       setPhotoCount(requiredPhotoCount(data))
       setCameraOpen(true)
     } catch (err) {
-      toast.error(errMsg(err, 'Could not get your location'))
+      // location off / blocked: the popup explains how to turn it on, with Try again; anything else is a toast
+      if (!locationPrompt.offer(err, () => void beginCapture(t))) toast.error(errMsg(err, 'Could not get your location'))
       setTarget(null)
     } finally {
       setLocating(false)
@@ -533,6 +511,8 @@ export function OnDutyToday({ onSeeRecords }: { onSeeRecords: () => void }) {
           <RecentOnDuty onSeeAll={onSeeRecords} />
         </>
       )}
+
+      <LocationOffPopup prompt={locationPrompt.prompt} reason="on_duty" onClose={locationPrompt.close} />
 
       <CameraCaptureDialog
         open={cameraOpen}

@@ -27,7 +27,8 @@ export function ResignationGuard() {
   React.useEffect(() => {
     if (data?.status === 'approved' && !handledRef.current) {
       handledRef.current = true
-      logout()
+      // forced: no farewell animation (owner 2026-11-25), straight to the deactivated screen
+      logout({ silent: true })
       qc.clear()
       navigate('/account-deactivated')
     }

@@ -9,12 +9,16 @@ import {
   initialsOf,
   isHrMessage,
   isNearLatest,
+  mergeLatestPage,
   mergeMessages,
   newestId,
   oldestId,
   pageMayHaveMore,
   prepareOutgoing,
+  reactionTotal,
+  reactionsHaveNames,
   reactionsSummary,
+  reactorRows,
   replaceMessage,
   slidOutOfPage,
   timeLabel,
@@ -173,5 +177,61 @@ describe('new messages pill', () => {
     assert.equal(initialsOf('Priya Raman'), 'PR')
     assert.equal(initialsOf('HR'), 'HR')
     assert.equal(initialsOf(''), '?')
+  })
+})
+
+describe('a message removed on the server (2026-11-25)', () => {
+  const page = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => msg(from + i))
+  test('inside the stretch the newest page covers, it goes; older ones stay', () => {
+    const previous = [...page(1, 10), ...page(11, 60)]
+    const fresh = page(11, 60).filter((m) => m.id !== 30)
+    const next = mergeLatestPage(previous, [...fresh, msg(61)], 50)
+    assert.equal(next.some((m) => m.id === 30), false)
+    assert.deepEqual(next.slice(0, 10).map((m) => m.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    assert.equal(next[next.length - 1].id, 61)
+  })
+  test('a short page holds the whole channel: anything not in it was removed', () => {
+    const next = mergeLatestPage([msg(1), msg(2), msg(3)], [msg(2), msg(3)], 50)
+    assert.deepEqual(next.map((m) => m.id), [2, 3])
+    assert.deepEqual(mergeLatestPage([msg(1)], [], 50), [])
+  })
+  test('nothing fetched yet keeps what is there; string and number ids are the same', () => {
+    assert.deepEqual(mergeLatestPage([msg(2), msg(1)], undefined, 50).map((m) => m.id), [1, 2])
+    const full = page(5, 54)
+    const next = mergeLatestPage([msg('3'), msg('20')], full, 50)
+    assert.deepEqual(next.slice(0, 2).map((m) => String(m.id)), ['3', '5'])
+    assert.equal(next.filter((m) => String(m.id) === '20').length, 1)
+  })
+})
+
+describe('who reacted (2026-11-25)', () => {
+  const people = [
+    { employeeId: 7, name: 'Meena K', isMe: false },
+    { employeeId: 5, name: 'Priya Raman', isMe: true },
+  ]
+  test('my reaction adds me first and removing it takes me out', () => {
+    const m = msg(1, { reactions: [{ emoji: '👍', count: 1, reactedByMe: false, people: [people[0]] }] })
+    const added = toggleReactionLocal(m, '👍', false, { id: 5, name: 'Priya Raman' })
+    assert.deepEqual(added.reactions[0].people?.map((p) => p.name), ['Priya Raman', 'Meena K'])
+    assert.equal(added.reactions[0].count, 2)
+    const removed = toggleReactionLocal(added, '👍', true, { id: 5, name: 'Priya Raman' })
+    assert.deepEqual(removed.reactions[0].people?.map((p) => p.name), ['Meena K'])
+    const fresh = toggleReactionLocal(msg(2), '🙏', false, { id: '5', name: 'Priya Raman' })
+    assert.deepEqual(fresh.reactions, [{ emoji: '🙏', count: 1, reactedByMe: true, people: [{ employeeId: '5', name: 'Priya Raman', isMe: true }] }])
+  })
+  test('rows for the dialog: you first, one per person per emoji, filtered by emoji', () => {
+    const reactions = [
+      { emoji: '👍', count: 2, reactedByMe: true, people },
+      { emoji: '❤️', count: 1, reactedByMe: false, people: [{ employeeId: null, name: '' }] },
+    ]
+    const all = reactorRows(reactions)
+    assert.deepEqual(all.map((r) => [r.emoji, r.name]), [['👍', 'You'], ['👍', 'Meena K'], ['❤️', 'A colleague']])
+    assert.deepEqual(reactorRows(reactions, '❤️').map((r) => r.name), ['A colleague'])
+    assert.equal(new Set(all.map((r) => r.key)).size, 3)
+    assert.equal(reactionTotal(reactions), 3)
+    assert.equal(reactionsHaveNames(reactions), true)
+    assert.equal(reactionsHaveNames([{ emoji: '👍', count: 1, reactedByMe: false }]), false)
+    assert.equal(reactionsHaveNames([]), false)
+    assert.deepEqual(reactorRows([{ emoji: '👍', count: 4, reactedByMe: false }]), [])
   })
 })

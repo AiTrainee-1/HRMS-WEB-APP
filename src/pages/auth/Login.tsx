@@ -1,6 +1,5 @@
 import * as React from 'react'
 import { Link, useLocation } from 'wouter'
-import { toast } from 'sonner'
 import { Banknote, CalendarCheck, ChevronRight, Clock, IdCard, KeyRound, Lock, LockKeyhole, Umbrella } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useIsPhone } from '@/hooks/useIsPhone'
@@ -19,6 +18,9 @@ import { SupportInlineLink } from '@/components/support/SupportInlineLink'
 import { purposeCodes, type OtpChannel } from '@/lib/otp-channel'
 import { codesForChannel, keepCodeChannel, loginChannelStates } from '@/lib/login-methods'
 import { signInFailureKind } from '@/lib/auth-look'
+import { GENERIC_LOGIN_TITLE, loginFailure, type LoginFailure } from '@/lib/login-errors'
+import { firstNameOf, type Point } from '@/lib/auth-transition'
+import { centreOf, playSignIn, speakWelcome, unlockSpeech } from '@/components/transitions/auth-transitions'
 
 // What the portal is for, on the header (the mobile login's feature chips).
 const FEATURES = [
@@ -27,6 +29,14 @@ const FEATURES = [
   { icon: Umbrella, label: 'Leave' },
   { icon: Banknote, label: 'Salary slips' },
 ] as const
+
+/** The centre of the sign-in button of the form being submitted (the code form's own button), for the portal. */
+function submitOrigin(): Point | null {
+  const active = document.activeElement as HTMLElement | null
+  if (active?.tagName === 'BUTTON') return centreOf(active)
+  const form = (active as HTMLInputElement | null)?.form ?? active?.closest('form') ?? null
+  return centreOf(form?.querySelector('button[type="submit"]'))
+}
 
 export default function Login() {
   const { login, loginWithOtp, isLoading } = useAuth()
@@ -37,8 +47,15 @@ export default function Login() {
   // On the form: a missing field, or the server not answering (then the software-support contact shows too).
   const [error, setError] = React.useState<string | null>(null)
   const [serverDown, setServerDown] = React.useState(false)
-  // The server answered and turned the sign-in down: the "Authentication Failed" notice, with its own sentence.
-  const [rejection, setRejection] = React.useState<{ identifier: string; message: string } | null>(null)
+  // The server answered and turned the sign-in down (owner 2026-11-25, lib/login-errors.ts): "Employee code not found" /
+  // "Incorrect password" / "Password not set" (else "Authentication Failed") with the server's own sentence, and the
+  // field it is about marked until it is edited.
+  const [rejection, setRejection] = React.useState<{ identifier: string; failure: LoginFailure } | null>(null)
+  const [fieldMark, setFieldMark] = React.useState<{ field: 'identifier' | 'password'; note: string } | null>(null)
+  // The last refusal, kept while the dialog fades out (its title would otherwise flick back to the generic one).
+  const lastRejection = React.useRef(rejection)
+  if (rejection) lastRejection.current = rejection
+  const shownRejection = rejection ?? lastRejection.current
   // Employee Code + Password is the default and always works (owner 2026-11-24, as in the mobile app). "Continue with
   // SMS OTP" / "Continue with WhatsApp OTP" sit under it; the one chosen opens the code form for that channel only
   // (null = the password form).
@@ -53,22 +70,37 @@ export default function Login() {
   const anyLocked = channelStates.some((st) => !st.enabled)
   const showOtp = codeChannel !== null
 
+  /**
+   * Signed in (owner 2026-11-25): "Welcome back, <first name>" in a portal that opens from the sign-in button, then the
+   * dashboard behind it - the navigation never waits on the animation (components/transitions/auth-transitions.ts).
+   */
+  function welcome(name: string | null | undefined, origin: Point | null) {
+    const first = firstNameOf(name)
+    speakWelcome(first)
+    playSignIn(origin, first, () => navigate('/employee/dashboard'))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setServerDown(false)
+    setFieldMark(null)
     if (!identifier || !password) {
       setError('Enter your employee code and password.')
       return
     }
+    // the portal opens from the button that was pressed; the spoken welcome may only start inside the person's own click
+    const origin = centreOf((e.nativeEvent as SubmitEvent).submitter ?? (e.currentTarget as HTMLFormElement).querySelector('button[type="submit"]'))
+    unlockSpeech()
     try {
-      await login(identifier.trim(), password)
-      toast.success('Welcome back!')
-      navigate('/employee/dashboard')
+      const signedIn = await login(identifier.trim(), password)
+      welcome(signedIn.name, origin)
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Login failed. Please try again.'
       if (err instanceof ApiError && signInFailureKind(err.status) === 'rejected') {
-        setRejection({ identifier: identifier.trim(), message })
+        const failure = loginFailure(err, message)
+        setRejection({ identifier: identifier.trim(), failure })
+        if (failure.field && failure.fieldNote) setFieldMark({ field: failure.field, note: failure.fieldNote })
       } else {
         setError(message)
         setServerDown(err instanceof ApiError)
@@ -112,9 +144,10 @@ export default function Login() {
           submitLabel="Verify & Sign In"
           submittingLabel="Signing in…"
           onSubmit={async (employeeCode, otp) => {
-            await loginWithOtp(employeeCode, otp)
-            toast.success('Welcome back!')
-            navigate('/employee/dashboard')
+            const origin = submitOrigin()
+            unlockSpeech()
+            const signedIn = await loginWithOtp(employeeCode, otp)
+            welcome(signedIn.name, origin)
           }}
         />
       ) : (
@@ -127,7 +160,13 @@ export default function Login() {
             // Not on a phone: it would scroll past the header and may raise the keyboard on arrival (the app never does).
             autoFocus={!isPhone}
             autoComplete="username"
-            onChange={(e) => setIdentifier(e.target.value)}
+            // Codes may have letters ("UKT-10482"): the full keyboard on phones, never a number pad.
+            inputMode="text"
+            error={fieldMark?.field === 'identifier' ? fieldMark.note : null}
+            onChange={(e) => {
+              setIdentifier(e.target.value)
+              if (fieldMark?.field === 'identifier') setFieldMark(null)
+            }}
             placeholder="e.g. UKT-10482"
           />
           <AuthInput
@@ -147,7 +186,11 @@ export default function Login() {
             className="auth-field--snug"
             value={password}
             autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)}
+            error={fieldMark?.field === 'password' ? fieldMark.note : null}
+            onChange={(e) => {
+              setPassword(e.target.value)
+              if (fieldMark?.field === 'password') setFieldMark(null)
+            }}
             placeholder="Enter your password"
           />
           {error && <AuthAlert tone="error">{error}</AuthAlert>}
@@ -207,18 +250,23 @@ export default function Login() {
 
       <AuthDialog
         open={rejection !== null}
-        onClose={() => setRejection(null)}
+        onClose={() => {
+          setRejection(null)
+          // Back to the field the refusal is about (marked under it), ready to correct.
+          const field = rejection?.failure.field
+          if (field) window.setTimeout(() => document.getElementById(field)?.focus(), 0)
+        }}
         icon={<LockKeyhole />}
         iconTone="solid"
-        title="Authentication Failed"
+        title={shownRejection?.failure.title ?? GENERIC_LOGIN_TITLE}
         subtitle="Security System Notice"
         info={
           <div className="auth-dialog-inforow">
             <span className="auth-dialog-infolabel">Attempted Employee Code</span>
-            <span className="auth-dialog-infopill">{rejection?.identifier}</span>
+            <span className="auth-dialog-infopill">{shownRejection?.identifier}</span>
           </div>
         }
-        message={rejection?.message}
+        message={shownRejection?.failure.message}
         retryLabel="Try Again"
         retryTone="danger"
       />

@@ -176,6 +176,18 @@ describe('advances', () => {
       'Open today only: last day',
     )
     assert.equal(advanceAttention(readAdvanceEligibility(reply({ window: { isOpen: false, closesOn: '', daysLeft: 0 } }))), null)
+    // 2026-11-25: each form has its own window; only the Salary Advance's 20th-22nd is news (a Term Loan is open every day)
+    const general = { isOpen: true, closesOn: '2026-11-22', daysLeft: 2 }
+    const term = { isOpen: true, alwaysOpen: true, closesOn: null, daysLeft: null }
+    assert.equal(
+      advanceAttention(readAdvanceEligibility(reply({ windows: { general, term } })))!.title,
+      'Salary Advance applications are open',
+    )
+    assert.equal(advanceAttention(readAdvanceEligibility(reply({ windows: { general, term } })))!.detail, 'Open until 22 Nov')
+    assert.equal(
+      advanceAttention(readAdvanceEligibility(reply({ windows: { general: { ...general, isOpen: false }, term } }))),
+      null,
+    )
     assert.equal(advanceAttention(readAdvanceEligibility(reply({ workflowEnabled: false }))), null)
     assert.equal(advanceAttention(readAdvanceEligibility(reply({ salaryAdvance: null, termLoan: null }))), null)
     assert.equal(readAdvanceEligibility({}), null)

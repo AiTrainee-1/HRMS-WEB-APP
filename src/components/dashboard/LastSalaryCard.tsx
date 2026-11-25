@@ -1,23 +1,15 @@
-import * as React from 'react'
 import { Link } from 'wouter'
 import { motion } from 'framer-motion'
 import { ArrowDownCircle, Banknote, CheckCircle2, ChevronRight, Eye, EyeOff, Info, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { GlassCard, MoneyText, SectionHeader, EASE_OUT, useReducedMotion } from '@/components/kit'
 import { useSalaryPeriodsLite } from '@/hooks/useHomeSources'
+import { useSalaryShown } from '@/hooks/useSalaryShown'
 import { lastSalary } from '@/lib/home-attention'
 import { cn } from '@/lib/utils'
 
 const SHOW_KEY = 'uktex_home_salary_shown_v1'
 const HIDDEN = '₹ • • • • •'
-
-function readShown(): boolean {
-  try {
-    return localStorage.getItem(SHOW_KEY) === '1'
-  } catch {
-    return false
-  }
-}
 
 /**
  * "Last salary": what the newest slip paid, paid vs allocated, and what attendance cost, one click from the slip. The
@@ -28,7 +20,8 @@ function readShown(): boolean {
 export function LastSalaryCard() {
   const { data } = useSalaryPeriodsLite()
   const reduced = useReducedMotion()
-  const [shown, setShown] = React.useState(readShown)
+  // Shared with My Insights below (hooks/useSalaryShown.ts): one eye shows or hides the amounts on both.
+  const [shown, setShown] = useSalaryShown()
   const s = lastSalary(data)
   if (!s) return null
 

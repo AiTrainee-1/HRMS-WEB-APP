@@ -12,7 +12,9 @@ import {
   type ApprovalCategory,
   type ApprovalItem,
   type ApprovalStatus,
+  type StatusCounts,
 } from '@/lib/approvals-history'
+import { feedOrder, feedStart, nextFeedCursor, type ApprovalFilter, type FeedCursor } from '@/lib/approvals-feed'
 import { claimDecisionToast } from '@/lib/holiday-work'
 import { waitingText } from '@/lib/approval'
 import type { ApprovalProgress, PendingHolidayWorkClaim, RequestStatus } from '@/types'
@@ -61,6 +63,56 @@ export function useApprovalHistoryList(category: ApprovalCategory, status: Appro
     retry: retryTransient,
   })
 }
+
+export interface FeedPage {
+  /** Each row carries `listStatus`: the list it came from (lib/approvals-feed.ts rowStatus). */
+  items: ApprovalItem[]
+  /** The category's Pending / Approved / Rejected numbers, from the first list read for this page. */
+  counts: StatusCounts
+  /** Where the next page starts, or null when every list of the filter has been read. */
+  next: FeedCursor | null
+}
+
+/**
+ * One category's list of every status together (owner 2026-11-25, lib/approvals-feed.ts): every page of Pending, then
+ * Approved, then Rejected (`filter` 'all'), or one status alone. The server's three lists are unchanged (20 a page); one
+ * page here fills up to 20 rows, reading on into the next status when a list ends.
+ */
+export function useApprovalFeed(category: ApprovalCategory, filter: ApprovalFilter, search: string, enabled: boolean) {
+  const order = feedOrder(filter)
+  return useInfiniteQuery({
+    queryKey: [...MANAGER_REQUESTS_KEY, 'feed', category, filter, search],
+    initialPageParam: feedStart(filter) as FeedCursor,
+    queryFn: async ({ pageParam }): Promise<FeedPage> => {
+      const items: ApprovalItem[] = []
+      let counts: StatusCounts | null = null
+      let cursor: FeedCursor | undefined = pageParam
+      while (cursor) {
+        const status: ApprovalStatus = cursor.status
+        const page = normalizeHistoryPage(await approvalsHistoryApi.list({ category, status, search, page: cursor.page }), cursor.page)
+        counts = counts ?? page.counts
+        for (const item of page.items) items.push({ ...item, listStatus: status })
+        cursor = nextFeedCursor({ status, page: page.page }, page.hasMore, order)
+        if (items.length >= FEED_PAGE_SIZE) break
+      }
+      return { items, counts: counts ?? { pending: 0, approved: 0, rejected: 0 }, next: cursor ?? null }
+    },
+    getNextPageParam: (last) => last.next ?? undefined,
+    // While only the search text changes the previous rows stay (no skeleton flash per keystroke); another category or
+    // filter never shows the last one's rows.
+    placeholderData: (previous, previousQuery) => {
+      const key = previousQuery?.queryKey as readonly unknown[] | undefined
+      return key && key[1] === 'feed' && key[2] === category && key[3] === filter ? previous : undefined
+    },
+    enabled,
+    // Pending is what the head has to act on: keep a list that holds it as fresh as the counts. History changes rarely.
+    refetchInterval: order.includes('pending') ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    retry: retryTransient,
+  })
+}
+
+const FEED_PAGE_SIZE = 20
 
 /** The older GET /manager/pending-requests (every category's pending list at once), for a server without the history. */
 export function useLegacyPendingRequests(enabled: boolean) {

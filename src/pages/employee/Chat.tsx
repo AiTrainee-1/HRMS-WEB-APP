@@ -66,7 +66,7 @@ export default function Chat() {
         title="Team Chat"
         subtitle={
           <>
-            <span className="max-md:hidden">Talk with the whole company or your department. HR messages are marked HR.</span>
+            <span className="max-md:hidden">Talk with the whole company or your department: messages, GIFs and voice notes. HR messages are marked HR.</span>
             <span className="hidden max-md:flex max-md:items-center max-md:gap-1.5">
               <span
                 aria-hidden="true"
@@ -107,7 +107,14 @@ export default function Chat() {
       ) : !channel ? (
         <EmptyState icon={MessageCircle} title="No chat yet" description="HR has not opened a chat channel for you. Ask HR if you expected one." />
       ) : (
-        <ChannelThread key={channel.id} channelId={channel.id} channelName={channelName} myId={user?.employeeId ?? null} />
+        <ChannelThread
+          key={channel.id}
+          channelId={channel.id}
+          channelName={channelName}
+          myId={user?.employeeId ?? null}
+          myName={user?.name ?? 'You'}
+          expiryDays={typeof channel.mediaExpiryDays === 'number' ? channel.mediaExpiryDays : null}
+        />
       )}
     </PageShell>
   )

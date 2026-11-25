@@ -3,6 +3,7 @@ import { Link } from 'wouter'
 import { Bell, User } from 'lucide-react'
 import { UktLogo } from './UktLogo'
 import { useUnreadNotifications } from './useUnreadNotifications'
+import { HeaderAvatar } from '../HeaderAvatar'
 
 /**
  * The mobile app's sidebar glyph (src/components/HamburgerToggle.tsx): three offset strokes drawn from one path that
@@ -95,8 +96,14 @@ export function MobileTopBar({
         aria-label="My Profile"
         className="focus-ring max-md:-ml-3 max-md:grid max-md:size-11 max-md:shrink-0 max-md:place-items-center max-md:rounded-full"
       >
-        <span className="max-md:grid max-md:size-[30px] max-md:place-items-center max-md:rounded-full max-md:bg-primary max-md:text-primary-foreground">
-          <User className="max-md:size-[18px]" fill="currentColor" strokeWidth={1.5} aria-hidden="true" />
+        {/* The person's photo (owner 2026-11-25, the app's HeaderAvatarButton), initials without one, the glyph until the
+            name is known. */}
+        <span className="max-md:grid max-md:size-[34px] max-md:place-items-center max-md:rounded-full max-md:border-[1.5px] max-md:border-accent">
+          <HeaderAvatar
+            className="max-md:size-[30px]"
+            fallbackClassName="max-md:bg-primary max-md:font-[family-name:var(--font-display)] max-md:text-[11.5px] max-md:font-bold max-md:tracking-[0.3px] max-md:text-primary-foreground"
+            icon={<User className="max-md:size-[18px]" fill="currentColor" strokeWidth={1.5} aria-hidden="true" />}
+          />
         </span>
       </Link>
       {children}

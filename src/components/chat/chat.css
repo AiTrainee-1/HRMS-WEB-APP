@@ -1,0 +1,21 @@
+/* Team Chat (owner 2026-11-25): the flash on a message reached from a quote. Reduced motion: a steady ring for a moment. */
+.chat-flash {
+  animation: chat-flash 1.4s ease-out both;
+}
+@keyframes chat-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+  15% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-flash {
+    animation: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+}

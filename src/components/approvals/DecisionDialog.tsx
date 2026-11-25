@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, Check, ChevronRight, Loader2, Route, X } from 'lucide-react'
+import { Check, ChevronRight, Info, Loader2, Lock, Route, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -25,14 +25,13 @@ import {
   empName,
   headSteps,
   itemApproval,
-  itemDateLabel,
   itemNote,
   itemReason,
   onDutyJourneyId,
   onDutyPunches,
 } from '@/lib/approvals-items'
 import { describeClaim } from '@/lib/holiday-work'
-import { cleanRejectRemark, rejectRemarkProblem } from '@/lib/reject-remark'
+import { REJECT_REMARK_MIN, cleanRejectRemark, rejectRemarkProblem } from '@/lib/reject-remark'
 import { cn } from '@/lib/utils'
 import type { PendingHolidayWorkClaim } from '@/types'
 import { JourneyDialog } from '@/components/onduty/JourneyDialog'
@@ -40,16 +39,17 @@ import { FormError } from '@/components/requests/FormBits'
 import { typeLabel } from './words'
 import { CATEGORY_META } from './categoryMeta'
 import { OnDutyPunchList } from './OnDutyPunchList'
+import { RequestTiming } from './RequestTiming'
 
 export interface DialogTarget {
   category: ApprovalCategory
   status: ApprovalStatus
   item: ApprovalItem
-  /** Open straight on the confirm step of this decision (the card's Approve / Reject). */
+  /** Opened from the card's Approve / Reject: 'rejected' puts the cursor in the reason box straight away. */
   decision?: 'approved' | 'rejected' | null
 }
 
-type Phase = 'view' | 'confirm' | 'done'
+type Phase = 'view' | 'done'
 
 /**
  * What the page says about a decision it sent: true = the server accepted it; false = it did not (the page has shown the
@@ -59,10 +59,12 @@ type Phase = 'view' | 'confirm' | 'done'
 export type DecideResult = boolean | string
 
 /**
- * A request in full, and the place every decision is made: the details, the On-Duty punches with selfies and map links,
- * the approval path, who decided it; on a Pending request Approve / Reject, each confirmed in a second step. Approving
- * takes an optional comment; rejecting needs the reason (owner, 2026-11-21: at least 3 characters, lib/reject-remark.ts) -
- * a short one shows the rule under the box and nothing is sent. Either is sent with the decision as its `comment`.
+ * A request in full, and the place every decision is made: when it is for, when it was submitted and how far ahead
+ * (RequestTiming), the details, the On-Duty punches with selfies and map links, the approval path, who decided it; on a
+ * Pending request the comment box with Approve / Reject (owner 2026-11-25, mirror of the mobile app's DecisionSheet).
+ * Approve is sent straight away, with the optional comment. Reject needs the reason (lib/reject-remark.ts, at least
+ * REJECT_REMARK_MIN characters): the button stays disabled until it is written, and the line under the box says why and
+ * how many characters are still missing; the server checks again (400 remark_required, its words shown under the box).
  * `onDecide` resolves true when the server accepted it - the dialog then shows a tick and closes - and false when it did
  * not (the page shows the server's words; the dialog stays for another try unless the page closes it because the request
  * has moved on), or with the server's words about the reason (see DecideResult).
@@ -79,6 +81,7 @@ export function DecisionDialog({
   busy: boolean
 }) {
   const [phase, setPhase] = React.useState<Phase>('view')
+  // The decision on its way (or just made): the spinner on its button, the tick's words.
   const [decision, setDecision] = React.useState<'approved' | 'rejected'>('approved')
   const [comment, setComment] = React.useState('')
   // "Write the reason for rejecting ..." under the box: from the check below, or the server's own words.
@@ -88,9 +91,9 @@ export function DecisionDialog({
   // "View route" on an On-Duty request: the day's recorded journey, opened over this dialog (closing it comes back here).
   const [routeOpen, setRouteOpen] = React.useState(false)
 
-  // Each opening starts fresh (on its confirm step when the card's button opened it). The key goes back to '' whenever
-  // the dialog closes, so reopening the very request just decided starts over too, not on the old 'done' screen. The
-  // reset happens during render (not in an effect) so a stale screen never shows, even for one frame.
+  // Each opening starts fresh. The key goes back to '' whenever the dialog closes, so reopening the very request just
+  // decided starts over too, not on the old 'done' screen. The reset happens during render (not in an effect) so a stale
+  // screen never shows, even for one frame.
   const key = target ? `${target.category}-${target.item.id}-${target.decision ?? ''}` : ''
   const [openedKey, setOpenedKey] = React.useState('')
   if (key !== openedKey) {
@@ -98,7 +101,7 @@ export function DecisionDialog({
     setComment('')
     setRemarkError(null)
     setDecision(target?.decision ?? 'approved')
-    setPhase(target?.decision ? 'confirm' : 'view')
+    setPhase('view')
     setRouteOpen(false)
   }
 
@@ -133,17 +136,22 @@ export function DecisionDialog({
         .join(' · ')
     : ''
 
-  const rejecting = decision === 'rejected'
+  // The box asks for the reason when the card's Reject opened the dialog, or when Reject is the only button.
+  const reasonMode = canReject && (target?.decision === 'rejected' || !canApprove)
+  // Reject is only possible once the reason is long enough; how many characters are still missing, for the hint.
+  const reasonReady = !rejectRemarkProblem(comment)
+  const missing = Math.max(0, REJECT_REMARK_MIN - cleanRejectRemark(comment).length)
 
-  // The view step's Approve / Reject start the confirm step clean: no leftover reason message.
-  const openConfirm = (d: 'approved' | 'rejected') => {
-    setDecision(d)
-    setRemarkError(null)
-    setPhase('confirm')
-  }
+  // The card's Reject: the cursor goes to the reason box once the dialog has opened.
+  React.useEffect(() => {
+    if (!target || target.decision !== 'rejected') return
+    const t = window.setTimeout(() => commentRef.current?.focus(), 120)
+    return () => window.clearTimeout(t)
+  }, [target])
 
-  const confirm = async () => {
-    // Rejecting needs the reason: a short one shows the rule under the box and nothing is sent.
+  const send = async (d: 'approved' | 'rejected') => {
+    const rejecting = d === 'rejected'
+    // Rejecting needs the reason (the button stays disabled without it; the rule is kept here for any other way in).
     const problem = rejecting ? rejectRemarkProblem(comment) : null
     if (problem) {
       setRemarkError(problem)
@@ -151,8 +159,9 @@ export function DecisionDialog({
       return
     }
     setRemarkError(null)
+    setDecision(d)
     const sentFor = key
-    const result = await onDecide(decision, rejecting ? cleanRejectRemark(comment) : comment)
+    const result = await onDecide(d, rejecting ? cleanRejectRemark(comment) : comment)
     // Closed (or moved to another request) while the decision was on its way: nothing left here to show.
     if (keyRef.current !== sentFor) return
     if (typeof result === 'string') {
@@ -167,12 +176,12 @@ export function DecisionDialog({
     closeTimer.current = window.setTimeout(onClose, 1100)
   }
 
+  // When it is for and when it was submitted are in the timing block above these rows (RequestTiming).
   const rows: [string, string | null][] = item
     ? [
         ['Request', typeLabel(category, item)],
-        ['When', itemDateLabel(category, item)],
         ['Department', empDepartment(item)],
-        ['Sent', item.createdAt ? `${fmtDay(item.createdAt)}${pending ? ` · ${waitingFor(item.createdAt, now)?.toLowerCase() ?? ''}` : ''}` : null],
+        ['Waiting', pending && item.createdAt ? (waitingFor(item.createdAt, now)?.replace(/^Waiting /, '') ?? null) : null],
         // A compensation claim: who raised it (the employee or HR), the overtime times, the allowance, the shifts.
         ...(category === 'holiday_work' ? claimFacts(item) : []),
       ]
@@ -190,62 +199,6 @@ export function DecisionDialog({
                 <DialogTitle className="font-display text-xl">{decision === 'approved' ? 'Approved' : 'Rejected'}</DialogTitle>
                 <DialogDescription>{first} will be told.</DialogDescription>
               </motion.div>
-            ) : phase === 'confirm' ? (
-              <motion.div key="confirm" variants={fadeIn} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-4">
-                <DialogHeader>
-                  <DialogTitle>
-                    {decision === 'approved' ? 'Approve' : 'Reject'} {first}'s {CATEGORY_LABEL[category].toLowerCase().replace(/s$/, '')} request?
-                  </DialogTitle>
-                  <DialogDescription>
-                    {typeLabel(category, item)} · {itemDateLabel(category, item)}
-                  </DialogDescription>
-                </DialogHeader>
-                <div
-                  className={cn(
-                    'rounded-lg border px-3 py-2.5 text-[13px] font-medium max-md:border-0 max-md:text-[12.5px]',
-                    decision === 'approved' ? 'border-approved-border bg-approved-bg text-approved' : 'border-rejected-border bg-rejected-bg text-rejected',
-                  )}
-                >
-                  {decision === 'approved'
-                    ? (effect ?? 'Your approval is sent straight away.')
-                    : category === 'on_duty'
-                      ? 'Rejecting voids every punch recorded under it. This cannot be undone.'
-                      : 'Rejecting is final. The employee will be told.'}
-                </div>
-                <div className="flex flex-col gap-2">
-                  {/* Approving: an optional comment. Rejecting: the reason is required (lib/reject-remark.ts). */}
-                  <Label htmlFor="decision-comment">
-                    {rejecting ? 'Reason for rejecting' : 'Comment'}{' '}
-                    <span className="font-normal text-muted-foreground">{rejecting ? '(required)' : '(optional)'}</span>
-                  </Label>
-                  <Textarea
-                    ref={commentRef}
-                    id="decision-comment"
-                    value={comment}
-                    onChange={(e) => {
-                      setComment(e.target.value)
-                      // The message goes once the reason is long enough (it never appears while typing).
-                      if (remarkError && !rejectRemarkProblem(e.target.value)) setRemarkError(null)
-                    }}
-                    rows={3}
-                    maxLength={500}
-                    required={rejecting}
-                    aria-invalid={rejecting && remarkError ? true : undefined}
-                    aria-describedby={rejecting && remarkError ? 'decision-comment-error' : undefined}
-                    placeholder={rejecting ? 'Tell them why, so they know what to do next' : 'Anything they or HR should know'}
-                  />
-                  {rejecting && <FormError id="decision-comment-error">{remarkError}</FormError>}
-                </div>
-                <DialogFooter className="gap-2 sm:justify-between">
-                  <Button variant="ghost" onClick={() => (target?.decision ? onClose() : setPhase('view'))} disabled={busy}>
-                    <ArrowLeft aria-hidden="true" /> {target?.decision ? 'Cancel' : 'Back'}
-                  </Button>
-                  <Button variant={decision === 'approved' ? 'success' : 'destructive'} onClick={confirm} disabled={busy} className="min-h-11 sm:min-h-9">
-                    {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : decision === 'approved' ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-                    {busy ? 'Sending…' : decision === 'approved' ? 'Yes, approve' : 'Yes, reject'}
-                  </Button>
-                </DialogFooter>
-              </motion.div>
             ) : (
               <motion.div key="view" variants={fadeIn} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-4">
                 {/* Phones: the app's DecisionSheet - the employee row over a hairline, then label / value rows. */}
@@ -262,6 +215,8 @@ export function DecisionDialog({
                 </DialogHeader>
 
                 {pending ? <ApprovalState approval={approval} /> : line && <DecisionBadge text={line.text} tone={line.tone} note={line.note} />}
+
+                <RequestTiming category={category} item={item} variant="dialog" />
 
                 <dl className="grid gap-2 max-md:-mt-2 max-md:gap-0 sm:grid-cols-2 sm:max-md:grid-cols-1">
                   {rows
@@ -328,27 +283,88 @@ export function DecisionDialog({
                 )}
 
                 {(canApprove || canReject) && (
-                  // Phones: the app's two pill buttons side by side, Approve first.
-                  <DialogFooter className="gap-2 border-t hairline pt-4 max-md:flex-row-reverse! max-md:gap-2.5 max-md:border-t-0 max-md:pt-1">
-                    {canReject && (
-                      <Button
-                        variant="destructive"
-                        onClick={() => openConfirm('rejected')}
-                        className="min-h-11 max-md:h-12 max-md:flex-1 max-md:border-[1.5px] max-md:font-[800] sm:min-h-9"
-                      >
-                        <X aria-hidden="true" /> Reject
-                      </Button>
+                  <div className="flex flex-col gap-2 border-t hairline pt-4 max-md:border-t-0 max-md:pt-1">
+                    {/* Approving: an optional comment. Rejecting: the reason is required (lib/reject-remark.ts). */}
+                    <Label htmlFor="decision-comment">
+                      {reasonMode ? 'Reason for rejecting' : 'Comment'}{' '}
+                      <span className="font-normal text-muted-foreground">
+                        {reasonMode ? '(required)' : canReject ? '(optional to approve, required to reject)' : '(optional)'}
+                      </span>
+                    </Label>
+                    <Textarea
+                      ref={commentRef}
+                      id="decision-comment"
+                      value={comment}
+                      onChange={(e) => {
+                        setComment(e.target.value)
+                        // The message goes once the reason is long enough (it never appears while typing).
+                        if (remarkError && !rejectRemarkProblem(e.target.value)) setRemarkError(null)
+                      }}
+                      rows={3}
+                      maxLength={500}
+                      disabled={busy}
+                      aria-invalid={remarkError ? true : undefined}
+                      aria-describedby="decision-comment-hint"
+                      placeholder={reasonMode ? 'Tell them why, so they know what to do next' : canReject ? 'Anything they or HR should know (to reject, the reason)' : 'Anything they or HR should know'}
+                      data-testid="approvals-dialog-comment"
+                    />
+                    <div id="decision-comment-hint" aria-live="polite">
+                      {remarkError ? (
+                        <FormError>{remarkError}</FormError>
+                      ) : canReject && !reasonReady ? (
+                        <p className="flex items-start gap-1.5 text-[12px] text-muted-foreground" data-testid="approvals-dialog-reject-locked">
+                          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          <span>
+                            {canApprove ? 'Approve needs no comment. ' : ''}Reject unlocks once you write the reason (at least {REJECT_REMARK_MIN} characters
+                            {missing < REJECT_REMARK_MIN ? `, ${missing} more` : ''}).
+                          </span>
+                        </p>
+                      ) : canReject ? (
+                        <p className="text-[12px] text-muted-foreground">The employee will see this reason if you reject.</p>
+                      ) : null}
+                    </div>
+                    {canApprove && effect && (
+                      <p className="flex items-start gap-1.5 text-[12px] text-muted-foreground">
+                        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span>{effect}</span>
+                      </p>
                     )}
-                    {canApprove && (
-                      <Button
-                        variant="success"
-                        onClick={() => openConfirm('approved')}
-                        className="min-h-11 max-md:h-12 max-md:flex-1 max-md:border-[1.5px] max-md:font-[800] sm:min-h-9"
-                      >
-                        <Check aria-hidden="true" /> Approve
-                      </Button>
-                    )}
-                  </DialogFooter>
+                    {/* Phones: the app's two pill buttons side by side, Approve first. */}
+                    <DialogFooter className="mt-1 gap-2 max-md:flex-row-reverse! max-md:gap-2.5">
+                      {canReject && (
+                        // Disabled until the reason is written (at least REJECT_REMARK_MIN characters): the line above says why.
+                        <Button
+                          variant="destructive"
+                          onClick={() => void send('rejected')}
+                          disabled={busy || !reasonReady}
+                          aria-describedby={reasonReady ? undefined : 'decision-comment-hint'}
+                          className="min-h-11 max-md:h-12 max-md:flex-1 max-md:border-[1.5px] max-md:font-[800] sm:min-h-9"
+                          data-testid="approvals-dialog-reject"
+                        >
+                          {busy && decision === 'rejected' ? (
+                            <Loader2 className="animate-spin" aria-hidden="true" />
+                          ) : reasonReady ? (
+                            <X aria-hidden="true" />
+                          ) : (
+                            <Lock aria-hidden="true" />
+                          )}
+                          {busy && decision === 'rejected' ? 'Rejecting…' : 'Reject'}
+                        </Button>
+                      )}
+                      {canApprove && (
+                        <Button
+                          variant="success"
+                          onClick={() => void send('approved')}
+                          disabled={busy}
+                          className="min-h-11 max-md:h-12 max-md:flex-1 max-md:border-[1.5px] max-md:font-[800] sm:min-h-9"
+                          data-testid="approvals-dialog-approve"
+                        >
+                          {busy && decision === 'approved' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
+                          {busy && decision === 'approved' ? 'Approving…' : 'Approve'}
+                        </Button>
+                      )}
+                    </DialogFooter>
+                  </div>
                 )}
               </motion.div>
             )}

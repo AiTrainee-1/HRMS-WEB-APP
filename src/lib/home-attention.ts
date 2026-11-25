@@ -340,7 +340,10 @@ export function pendingRequestsAttention(items: readonly PendingRequestLite[] | 
 
 // The reply of GET /my/advances/eligibility (only what the Dashboard needs).
 export interface AdvanceEligibilityLite {
+  /** The Salary Advance window (`windows.general`), else (an older server) the one window both forms shared. */
   window: { isOpen: boolean; closesOn: string; daysLeft: number }
+  /** Each form has its own window (2026-11-25): a Salary Advance the 20th to the 22nd, a Term Loan any day. */
+  separate: boolean
   workflowEnabled: boolean
   employeeActive: boolean
   salaryAdvance: boolean
@@ -349,9 +352,11 @@ export interface AdvanceEligibilityLite {
 
 export function readAdvanceEligibility(raw: unknown): AdvanceEligibilityLite | null {
   if (!isObject(raw) || !isObject(raw.window)) return null
-  const w = raw.window
+  const general = isObject(raw.windows) && isObject(raw.windows.general) ? raw.windows.general : null
+  const w = general ?? raw.window
   return {
     window: { isOpen: w.isOpen === true, closesOn: str(w.closesOn), daysLeft: num(w.daysLeft) ?? 0 },
+    separate: general !== null,
     workflowEnabled: raw.workflowEnabled !== false,
     employeeActive: raw.employeeActive !== false,
     salaryAdvance: isObject(raw.salaryAdvance) && raw.salaryAdvance.canApply === true,
@@ -368,12 +373,18 @@ export function dayMonth(iso: string | null | undefined): string {
   return `${Number(m[3])} ${MONTH_SHORT[Number(m[2]) - 1]}`
 }
 
-/** "Advance & loan applications are open" while the window is open AND this employee can apply for one; else null. */
+/**
+ * "Salary Advance applications are open" while its window is open AND this employee can apply; else null. Owner
+ * 2026-11-25: a Salary Advance only from the 20th to the 22nd, a Term Loan on any day - so the Term Loan, always open, is
+ * never news on the Dashboard and only the Salary Advance's 3 days are ("Open until 22 Nov"). An older server (no
+ * `windows`) had one window, the 20th to the month end, for both forms: "Advance & loan applications are open".
+ */
 export function advanceAttention(e: AdvanceEligibilityLite | null | undefined): AttentionItem | null {
   if (!e?.window.isOpen) return null
   if (!e.workflowEnabled || !e.employeeActive) return null
-  if (!e.salaryAdvance && !e.termLoan) return null
-  const what = e.salaryAdvance && e.termLoan ? 'Advance & loan applications' : e.salaryAdvance ? 'Salary Advance applications' : 'Term Loan applications'
+  const loan = e.termLoan && !e.separate
+  if (!e.salaryAdvance && !loan) return null
+  const what = e.salaryAdvance && loan ? 'Advance & loan applications' : e.salaryAdvance ? 'Salary Advance applications' : 'Term Loan applications'
   const until = dayMonth(e.window.closesOn)
   const detail = e.window.daysLeft <= 1 ? 'Open today only: last day' : until ? `Open until ${until}` : `Open for ${e.window.daysLeft} more days`
   return item({ key: 'advance', tone: 'money', title: `${what} are open`, detail })

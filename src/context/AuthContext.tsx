@@ -5,14 +5,23 @@ import { TOKEN_STORAGE_KEY, setUnauthorizedHandler } from '@/api/client'
 import { runSignOutCleanups } from '@/lib/session-cleanup'
 import { refreshTokenIfDue, revokeSessionOnServer } from '@/api/session'
 import { refreshOfflineCounts, startOfflineSync, syncNow } from '@/offline/engine'
+import { playSignOut, stopSpeaking, transitionPlaying } from '@/components/transitions/auth-transitions'
 import type { AuthUser, LoginResponse } from '@/types'
+import { ACCOUNT_STATUS_KEY } from '@/hooks/useAccountStatus'
+import { accountStatusOf } from '@/lib/inactive-account'
 
 interface AuthContextValue {
   user: AuthUser | null
   isLoading: boolean
-  login: (identifier: string, password: string) => Promise<void>
-  loginWithOtp: (employeeCode: string, otp: string) => Promise<void>
-  logout: () => void
+  /** Signs in; resolves with who is now signed in (the sign-in page greets them by name). */
+  login: (identifier: string, password: string) => Promise<AuthUser>
+  loginWithOtp: (employeeCode: string, otp: string) => Promise<AuthUser>
+  /**
+   * The employee's own sign-out (a button): plays the short walk-out-of-the-door farewell and ends the session behind it
+   * (owner 2026-11-25). A forced sign-out (resignation / deactivation) passes `{ silent: true }` and ends it at once,
+   * as a 401 from the server always does. Any other argument (e.g. a click event) counts as the employee's own.
+   */
+  logout: (options?: unknown) => void
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined)
@@ -49,12 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser))
         // Whatever an earlier session left behind (e.g. one ended by a 401 on the sign-in page) must not reach this one.
         forgetUserData()
+        // The password sign-in says whether the HRMS account is active (2026-11-25): an inactive one is covered at once
+        // (components/layout/InactiveAccountGate.tsx); GET /auth/me keeps asking after that.
+        const status = accountStatusOf(res)
+        if (status) queryClient.setQueryData([...ACCOUNT_STATUS_KEY, String(res.employeeId)], status)
         setUser(nextUser)
+        return nextUser
       } finally {
         setIsLoading(false)
       }
     },
-    [forgetUserData],
+    [forgetUserData, queryClient],
   )
 
   const login = React.useCallback(
@@ -79,7 +93,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [forgetUserData],
   )
-  const logout = React.useCallback(() => endSession(true), [endSession])
+  const logout = React.useCallback(
+    (options?: unknown) => {
+      const silent = !!options && typeof options === 'object' && (options as { silent?: unknown }).silent === true
+      if (silent) {
+        endSession(true)
+        return
+      }
+      if (transitionPlaying('sign-out')) return // already on its way out: a second click changes nothing
+      stopSpeaking()
+      playSignOut(() => endSession(true))
+    },
+    [endSession],
+  )
 
   // The offline queue (owner 2026-11-24): requests saved on this device while offline are sent automatically once the
   // browser is back online / the tab is back in view. Started once; each sign-in shows (and sends) only its own items.

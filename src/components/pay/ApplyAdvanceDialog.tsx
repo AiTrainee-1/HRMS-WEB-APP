@@ -21,8 +21,11 @@ import {
   planSummary,
   purposeProblem,
   salaryAdvanceProblem,
+  salaryAdvanceWindow,
   termAmountProblem,
+  termLoanWindow,
   termPlan,
+  windowChip,
   type AdvanceEligibility,
   type AdvanceType,
   type MyAdvance,
@@ -101,12 +104,18 @@ export function ApplyAdvanceDialog({
   const [created, setCreated] = React.useState<MyAdvance | null>(null)
   const ids = React.useId()
 
-  // A fresh form every time the dialog opens.
+  // Each form's window (owner 2026-11-25): a Salary Advance only from the 20th to the 22nd ("Opens 20 Dec · in 25 days"
+  // outside it), a Term Loan on any day ("Any day"). A form outside its window cannot be chosen while the other one is
+  // open (an older server's one shared window closes both: then both stay choosable, to work out the amount).
+  const chips = { general: windowChip(salaryAdvanceWindow(eligibility)), term: windowChip(termLoanWindow(eligibility)) }
+  const tabClosed = (k: AdvanceType) => !chips[k].open && chips[k === 'general' ? 'term' : 'general'].open
+
+  // A fresh form every time the dialog opens (on the form that is open now when the asked one is closed).
   const [wasOpen, setWasOpen] = React.useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
-      setKind(initialType)
+      setKind(tabClosed(initialType) ? (initialType === 'general' ? 'term' : 'general') : initialType)
       setAmountText('')
       setMonths(Math.min(6, eligibility.termLoan.maxMonths))
       setPurpose('')
@@ -244,7 +253,10 @@ export function ApplyAdvanceDialog({
           <form onSubmit={review} noValidate className="flex flex-col gap-5">
             <DialogHeader>
               <DialogTitle>Apply for an advance or loan</DialogTitle>
-              <DialogDescription>HR approves every application. Applications are open from the 20th to the month end.</DialogDescription>
+              <DialogDescription>
+                HR approves every application. A Salary Advance can be applied for from the 20th to the 22nd of each month, a Term Loan on any
+                day.
+              </DialogDescription>
             </DialogHeader>
 
             <SegmentedControl
@@ -252,10 +264,27 @@ export function ApplyAdvanceDialog({
               fullWidth
               value={kind}
               onChange={switchKind}
-              options={[
-                { value: 'general', label: 'Salary Advance', icon: Wallet },
-                { value: 'term', label: 'Term Loan', icon: Landmark },
-              ]}
+              options={(['general', 'term'] as const).map((k) => ({
+                value: k,
+                icon: k === 'general' ? Wallet : Landmark,
+                disabled: tabClosed(k),
+                ariaLabel: `${TYPE_LABEL[k]}, ${chips[k].text}`,
+                label: (
+                  <span className="flex flex-col items-start leading-tight">
+                    <span>{TYPE_LABEL[k]}</span>
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 text-[10.5px] font-bold',
+                        kind === k ? 'text-white/85' : chips[k].open ? 'text-approved' : 'text-waiting',
+                      )}
+                      data-testid={`settlement-tab-${k}-window`}
+                    >
+                      {tabClosed(k) && <LockKeyhole className="size-2.5" aria-hidden="true" />}
+                      {chips[k].text}
+                    </span>
+                  </span>
+                ),
+              }))}
             />
 
             {blocked && section.reason && (

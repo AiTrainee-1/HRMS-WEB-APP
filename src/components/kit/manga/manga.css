@@ -1,0 +1,160 @@
+/* The manga card kit (owner 2026-11-25, the mobile app's UpdatePrompt look): a manga panel with a hard offset shadow,
+   halftone dots and speed lines, an original chibi mascot that waves and blinks, sparkles that twinkle in turn.
+   Everything that moves stops under reduced motion (and the global block in index.css ends any CSS animation at once). */
+
+.manga-ink {
+  --manga-ink: var(--foreground);
+  --manga-paper: color-mix(in srgb, var(--primary) 13%, var(--card));
+}
+
+/* the comic "hard shadow": an offset copy of the card in the brand colour, outlined in ink */
+.manga-shadow {
+  box-shadow:
+    7px 7px 0 0 var(--primary),
+    7px 7px 0 3px var(--manga-ink);
+}
+.manga-btn {
+  box-shadow: 4px 4px 0 0 var(--manga-ink);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.manga-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 var(--manga-ink);
+}
+.manga-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 0 var(--manga-ink);
+}
+
+.manga-title {
+  transform: skewX(-6deg);
+  letter-spacing: -0.01em;
+}
+
+/* speed lines: a slow turn */
+.manga-lines {
+  animation: manga-spin 30s linear infinite;
+  transform-origin: 50% 50%;
+}
+@keyframes manga-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* the mascot's idle bob, blink and wave */
+.manga-bob {
+  animation: manga-bob 2.2s ease-in-out 0.9s infinite alternate;
+}
+@keyframes manga-bob {
+  to {
+    transform: translateY(-4px);
+  }
+}
+.manga-eyes {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: manga-blink 2.6s ease-in-out infinite;
+}
+@keyframes manga-blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(1);
+  }
+  94% {
+    transform: scaleY(0.08);
+  }
+}
+.manga-wave {
+  transform-box: view-box;
+  transform-origin: 75px 108px;
+  animation: manga-wave 2.5s ease-in-out 0.6s infinite;
+}
+@keyframes manga-wave {
+  0%,
+  40%,
+  100% {
+    transform: rotate(0deg);
+  }
+  8%,
+  24% {
+    transform: rotate(-24deg);
+  }
+  16%,
+  32% {
+    transform: rotate(10deg);
+  }
+}
+.manga-sweat {
+  animation: manga-sweat 1.8s ease-in 0.5s infinite;
+}
+@keyframes manga-sweat {
+  0% {
+    transform: translateY(-3px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}
+
+/* four-point stars that twinkle in turn */
+.manga-sparkle {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  opacity: 0;
+  animation: manga-twinkle 2.4s linear infinite;
+}
+@keyframes manga-twinkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  16% {
+    opacity: 1;
+    transform: scale(1) rotate(30deg);
+  }
+  33% {
+    opacity: 0;
+    transform: scale(0.3) rotate(60deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(60deg);
+  }
+}
+
+/* the tour's spotlight ring around the element it talks about */
+.manga-spot {
+  box-shadow:
+    0 0 0 3px var(--background),
+    0 0 0 6px var(--primary),
+    0 0 0 9999px rgb(2 6 23 / 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manga-lines,
+  .manga-bob,
+  .manga-eyes,
+  .manga-wave,
+  .manga-sweat {
+    animation: none !important;
+  }
+  .manga-sparkle {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+  .manga-btn,
+  .manga-btn:hover,
+  .manga-btn:active {
+    transition: none;
+    transform: none;
+  }
+}

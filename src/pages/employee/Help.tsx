@@ -4,6 +4,7 @@ import { ChevronRight, Fingerprint, Info, KeyRound, LifeBuoy, Send, Wallet, type
 import { GlassCard, PageHero, PageShell, SectionHeader, TONE_SOFT, listItem, type Tone } from '@/components/kit'
 import { SupportContactCard } from '@/components/support/SupportContactCard'
 import { useSupportContact } from '@/hooks/useSupportContact'
+import { AppTipsSection } from '@/components/system/AppTipsSection'
 import { cn } from '@/lib/utils'
 
 // Questions people usually call HR about that the app already answers: try these first.
@@ -76,6 +77,9 @@ export default function Help() {
           ))}
         </ul>
       </section>
+
+      {/* owner 2026-11-25: replay the dashboard's welcome tour; the spoken welcome after sign-in on / off */}
+      <AppTipsSection />
     </PageShell>
   )
 }

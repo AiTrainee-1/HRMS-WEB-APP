@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { CalendarDays, Check, ChevronRight, Clock, Hourglass, MapPinned, ShieldAlert, UserCog, UserRound, X } from 'lucide-react'
+import { Check, ChevronRight, Clock, Hourglass, MapPinned, ShieldAlert, UserCog, UserRound, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ApprovalState, DecisionBadge, GlassCard, StatusPill, Stepper, TONE_SOFT } from '@/components/kit'
 import { hodCanAct, hodCanReject } from '@/lib/approval'
@@ -21,7 +21,6 @@ import {
   hasMockedPunch,
   headSteps,
   itemApproval,
-  itemDateLabel,
   itemReason,
   onDutyPunchLine,
 } from '@/lib/approvals-items'
@@ -30,6 +29,7 @@ import { cn } from '@/lib/utils'
 import type { PendingHolidayWorkClaim } from '@/types'
 import { badgeFor, typeLabel } from './words'
 import { CATEGORY_META, TONE_STRIPE } from './categoryMeta'
+import { RequestTiming } from './RequestTiming'
 
 const WAIT_TONE = {
   fresh: 'bg-neutral-bg text-neutral border-neutral-border',
@@ -38,9 +38,12 @@ const WAIT_TONE = {
 } as const
 
 /**
- * One request in a head's list: who (avatar, name, code, department), what and when, how long it has waited (Pending,
- * coloured by age: under a day grey, 1-2 days amber, 3+ days rose) or WHO decided it (Approved / Rejected: the decider
- * band), the approval path, the reason, and - while it is the head's turn - Approve / Reject.
+ * One request in a head's list: who (avatar, name, code, department), what, the day(s) it is for, when it was submitted
+ * and how far ahead ("Applied 3 days before", RequestTiming), how long it has waited (Pending, coloured by age: under a
+ * day grey, 1-2 days amber, 3+ days rose) or WHO decided it (Approved / Rejected: the decider band), the approval path,
+ * the reason. Owner 2026-11-25: the list mixes every status (Pending first), so `status` is this row's own and a pending
+ * row is highlighted with an amber frame. Clicking the card opens the request; there it is approved straight away or
+ * rejected with the reason. The card's Approve / Reject open it too (Reject with the reason box focused).
  */
 export function ApprovalRequestCard({
   category,
@@ -56,7 +59,9 @@ export function ApprovalRequestCard({
   item: ApprovalItem
   now: Date
   busy?: boolean
+  /** Opens the request's details (where the decision is made). */
   onOpen: () => void
+  /** Opens the details ready for that decision ('rejected': the reason box is focused). */
   onDecide: (decision: 'approved' | 'rejected') => void
 }) {
   const meta = CATEGORY_META[category]
@@ -81,7 +86,22 @@ export function ApprovalRequestCard({
   const raisedBy = category === 'holiday_work' ? claimRaisedBy(item as unknown as PendingHolidayWorkClaim) : null
 
   return (
-    <GlassCard padding="none" className="relative flex h-full flex-col overflow-hidden" data-testid={`approval-card-${item.id}`}>
+    <GlassCard
+      padding="none"
+      hover
+      // The whole card opens the request (pointer); keyboard and screen readers use its Details button.
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, a')) return
+        onOpen()
+      }}
+      className={cn(
+        'relative flex h-full cursor-pointer flex-col overflow-hidden',
+        // Waiting for this head's decision: an amber frame, so it stands out among the decided rows.
+        pending && 'border-warning! shadow-[0_2px_14px_-4px_color-mix(in_srgb,var(--warning)_45%,transparent)] ring-1 ring-warning/60 max-md:border-[1.5px]',
+      )}
+      data-testid={`approval-card-${item.id}`}
+      data-pending={pending || undefined}
+    >
       <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-1', TONE_STRIPE[meta.tone])} />
       <div className="flex flex-1 flex-col gap-3 p-4 pl-5 max-md:gap-2.5 max-md:p-3.5! max-md:pl-[18px]! sm:p-5 sm:pl-6">
         {/* Who */}
@@ -115,10 +135,7 @@ export function ApprovalRequestCard({
             <TypeIcon className="size-3.5 shrink-0 max-md:size-3" aria-hidden="true" />
             <span className="truncate">{typeLabel(category, item)}</span>
           </span>
-          <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-foreground/90 tabular-nums max-md:gap-[5px] max-md:text-[12.5px] max-md:font-normal max-md:text-secondary-foreground">
-            <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            {itemDateLabel(category, item)}
-          </p>
+          <RequestTiming category={category} item={item} />
           {punchLine && (
             <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground tabular-nums">
               <MapPinned className="size-3.5 shrink-0" aria-hidden="true" /> {punchLine}
@@ -179,6 +196,8 @@ export function ApprovalRequestCard({
               size="sm"
               disabled={busy}
               onClick={() => onDecide('rejected')}
+              aria-label={`Reject ${name}'s request`}
+              title="Opens the request to write the reason for rejecting"
               className="min-h-11 max-md:h-10 max-md:min-h-10 max-md:flex-1 max-md:rounded-xl max-md:border-0 max-md:text-[12.5px] max-md:font-[800] sm:min-h-8"
             >
               <X aria-hidden="true" /> Reject
@@ -191,6 +210,8 @@ export function ApprovalRequestCard({
                 size="sm"
                 disabled={busy}
                 onClick={() => onDecide('approved')}
+                aria-label={`Approve ${name}'s request`}
+                title="Opens the request to approve it"
                 className="min-h-11 max-md:h-10 max-md:min-h-10 max-md:flex-1 max-md:rounded-xl max-md:border-0 max-md:text-[12.5px] max-md:font-[800] sm:min-h-8"
               >
                 <Check aria-hidden="true" /> Approve

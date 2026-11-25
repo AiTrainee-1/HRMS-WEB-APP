@@ -44,14 +44,16 @@ import { formatINR } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import {
   countdownText,
-  dayMonth,
   repaidRatio,
+  salaryAdvanceWindow,
   scheduleLook,
   scheduleTitle,
   statusText,
+  termLoanWindow,
   windowDeadline,
   windowHeadline,
   windowProgress,
+  windowStrip,
   type AdvanceEligibility,
   type AdvanceEvent,
   type MyAdvance,
@@ -70,17 +72,31 @@ function useNow(ms = 30_000): number {
   return now
 }
 
+/** The Salary Advance rule, as the banner words it once each form has its own window (owner 2026-11-25). */
+const SALARY_ADVANCE_RULE = 'Salary Advance: apply from the 20th to the 22nd of each month.'
+
 /**
- * When applications are open: from the 20th to the month end (factory time). Open = green seam with the time left;
- * closed = amber with when it opens. A thread shows how far through the period we are. The server's own sentence below.
+ * When applications are open (owner 2026-11-25): a Salary Advance only from the 20th to the 22nd of each month (factory
+ * time), a Term Loan on any day. The banner is the Salary Advance window: open = green seam with the time left; closed =
+ * amber with when it opens; a thread shows how far through the period we are; a line under it says a Term Loan can be
+ * applied for on any day. An older server sends one window for both forms (the 20th to the month end): the banner then
+ * shows that one, worded by the server.
  */
 export function WindowBanner({ eligibility }: { eligibility: AdvanceEligibility }) {
-  const w = eligibility.window
+  const w = salaryAdvanceWindow(eligibility)
+  // The current server: each form has its own window, and a Term Loan has none.
+  const separate = !!eligibility.windows
+  const termAnyDay = separate && termLoanWindow(eligibility) === null
   const now = useNow()
   const left = countdownText(now, windowDeadline(w))
   const open = w.isOpen
   return (
-    <GlassCard variant="stitched" tone={open ? 'emerald' : 'amber'} className="flex flex-col gap-4 max-md:p-3.5! sm:flex-row sm:items-center sm:gap-6">
+    <GlassCard
+      variant="stitched"
+      tone={open ? 'emerald' : 'amber'}
+      className="flex flex-col gap-4 max-md:p-3.5! sm:flex-row sm:items-center sm:gap-6"
+      data-testid="settlement-window-banner"
+    >
       <span
         aria-hidden="true"
         className={cn(
@@ -92,7 +108,7 @@ export function WindowBanner({ eligibility }: { eligibility: AdvanceEligibility 
         {open && <span className="pulse-ring absolute inset-0 rounded-2xl text-approved" />}
       </span>
       <div className="min-w-0 flex-1 max-md:hidden">
-        <p className="label-caps text-muted-foreground">Applications</p>
+        <p className="label-caps text-muted-foreground">{separate ? 'Salary Advance window' : 'Applications'}</p>
         <p className="font-display mt-0.5 text-[22px] leading-7 font-semibold">{windowHeadline(w)}</p>
         <p className="mt-1 text-[13.5px] text-muted-foreground">
           {left && (
@@ -100,13 +116,21 @@ export function WindowBanner({ eligibility }: { eligibility: AdvanceEligibility 
               {open ? `Closes in ${left}. ` : `Opens in ${left}. `}
             </span>
           )}
-          {w.message}
+          {separate ? SALARY_ADVANCE_RULE : w.message}
         </p>
         <ThreadProgress
           className="mt-3"
           value={Math.round(windowProgress(w) * 100)}
-          label={open ? 'How much of this month’s application period has passed' : 'How close the next application period is'}
+          label={open ? 'How much of this month’s Salary Advance window has passed' : 'How close the next Salary Advance window is'}
         />
+        {termAnyDay && (
+          <p className="mt-3 flex items-center gap-2 border-t hairline pt-3 text-[13px] text-muted-foreground" data-testid="settlement-term-any-day">
+            <CheckCircle2 className="size-4 shrink-0 text-approved" aria-hidden="true" />
+            <span>
+              <span className="font-semibold text-foreground">Term Loan: </span>you can apply on any day.
+            </span>
+          </p>
+        )}
       </div>
       <PhoneWindow eligibility={eligibility} />
     </GlassCard>
@@ -114,18 +138,18 @@ export function WindowBanner({ eligibility }: { eligibility: AdvanceEligibility 
 }
 
 /**
- * Phones only (< 768px): the mobile app's window banner - the headline and the server's sentence, the days left (or to
- * go) as a big number, and a strip of the month with the 20th-to-month-end part lit and a ring on today.
+ * Phones only (< 768px): the mobile app's window banner - the headline and the rule, the days left (or to go) as a big
+ * number, a strip of the month with the Salary Advance window's days lit (the 20th to the 22nd) and a ring on today,
+ * and the line that a Term Loan can be applied for on any day.
  */
 function PhoneWindow({ eligibility: e }: { eligibility: AdvanceEligibility }) {
-  const w = e.window
-  const lastDay = Number(/-(\d{2})$/.exec(w.closesOn)?.[1] ?? 30)
-  const day = Number(/-(\d{2})$/.exec(e.today)?.[1] ?? 1)
-  const span = Math.max(1, lastDay - 1)
-  const openStart = (19 / span) * 100
-  const todayPos = Math.max(0, Math.min(100, ((day - 1) / span) * 100))
+  const w = salaryAdvanceWindow(e)
+  const separate = !!e.windows
+  const termAnyDay = separate && termLoanWindow(e) === null
+  const strip = windowStrip(w, e.today)
   const big = w.isOpen ? w.daysLeft : w.daysUntilOpen
   const unit = w.isOpen ? (big === 1 ? 'day left' : 'days left') : big === 1 ? 'day to go' : 'days to go'
+  const rule = separate ? SALARY_ADVANCE_RULE : w.message
   return (
     <div className="hidden max-md:flex max-md:flex-col max-md:gap-3">
       <div className="max-md:flex max-md:items-center max-md:gap-3">
@@ -139,8 +163,9 @@ function PhoneWindow({ eligibility: e }: { eligibility: AdvanceEligibility }) {
           {w.isOpen ? <CalendarCheck2 className="max-md:size-[22px]" /> : <CalendarClock className="max-md:size-[22px]" />}
         </span>
         <div className="max-md:min-w-0 max-md:flex-1">
+          {separate && <p className="max-md:text-[10px] max-md:font-extrabold max-md:tracking-[0.06em] max-md:text-muted-foreground max-md:uppercase">Salary Advance window</p>}
           <p className="max-md:font-[family-name:var(--font-display)] max-md:text-[15px] max-md:leading-5 max-md:font-bold">{windowHeadline(w)}</p>
-          {w.message && <p className="max-md:mt-0.5 max-md:text-[12px] max-md:leading-[17px] max-md:text-muted-foreground">{w.message}</p>}
+          {rule && <p className="max-md:mt-0.5 max-md:text-[12px] max-md:leading-[17px] max-md:text-muted-foreground">{rule}</p>}
         </div>
         <p className="max-md:flex max-md:min-w-14 max-md:flex-col max-md:items-center">
           <span
@@ -154,28 +179,42 @@ function PhoneWindow({ eligibility: e }: { eligibility: AdvanceEligibility }) {
           <span className="max-md:text-[10px] max-md:font-bold max-md:text-muted-foreground">{unit}</span>
         </p>
       </div>
-      <div className="max-md:flex max-md:flex-col max-md:gap-1" aria-hidden="true">
-        <div className="max-md:relative max-md:h-2 max-md:rounded max-md:bg-border">
-          <span className="max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:rounded max-md:bg-success max-md:opacity-85" style={{ left: `${openStart}%` }} />
-          <motion.span
-            className={cn(
-              'max-md:absolute max-md:top-1/2 max-md:-mt-2 max-md:-ml-2 max-md:size-4 max-md:rounded-full max-md:border-[3px] max-md:bg-card',
-              w.isOpen ? 'max-md:border-success' : 'max-md:border-warning',
-            )}
-            style={{ left: `${todayPos}%` }}
-            initial={{ opacity: 0, scale: 0.4 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.42, ease: EASE_OUT, delay: 0.2 }}
-          />
+      {strip && (
+        <div className="max-md:flex max-md:flex-col max-md:gap-1" aria-hidden="true">
+          <div className="max-md:relative max-md:h-2 max-md:rounded max-md:bg-border">
+            {/* at least a few points wide, so a 3-day window still reads as a lit stretch */}
+            <span
+              className="max-md:absolute max-md:inset-y-0 max-md:rounded max-md:bg-success max-md:opacity-85"
+              style={{ left: `${strip.startPct}%`, width: `${Math.max(strip.endPct - strip.startPct, 3)}%` }}
+            />
+            <motion.span
+              className={cn(
+                'max-md:absolute max-md:top-1/2 max-md:-mt-2 max-md:-ml-2 max-md:size-4 max-md:rounded-full max-md:border-[3px] max-md:bg-card',
+                w.isOpen ? 'max-md:border-success' : 'max-md:border-warning',
+              )}
+              style={{ left: `${strip.todayPct}%` }}
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.42, ease: EASE_OUT, delay: 0.2 }}
+            />
+          </div>
+          <div className="max-md:relative max-md:flex max-md:h-3.5 max-md:justify-between max-md:text-[10px] max-md:font-semibold max-md:text-muted-foreground">
+            <span>1</span>
+            <span className="max-md:absolute max-md:-translate-x-1/2 max-md:font-extrabold max-md:text-approved" style={{ left: `${strip.startPct}%` }}>
+              {strip.toDay > strip.fromDay ? `${strip.fromDay}–${strip.toDay}` : `${strip.fromDay}`}
+            </span>
+            <span>{strip.lastDay}</span>
+          </div>
         </div>
-        <div className="max-md:relative max-md:flex max-md:h-3.5 max-md:justify-between max-md:text-[10px] max-md:font-semibold max-md:text-muted-foreground">
-          <span>1</span>
-          <span className="max-md:absolute max-md:-translate-x-1/2" style={{ left: `${openStart}%` }}>
-            {dayMonth(w.opensOn)}
+      )}
+      {termAnyDay && (
+        <p className="max-md:flex max-md:items-center max-md:gap-2 max-md:border-t max-md:border-input max-md:pt-2.5 max-md:text-[12.5px] max-md:leading-[17px] max-md:text-secondary-foreground">
+          <CheckCircle2 className="max-md:size-[15px] max-md:shrink-0 max-md:text-approved" aria-hidden="true" />
+          <span>
+            <span className="max-md:font-semibold max-md:text-foreground">Term Loan: </span>you can apply on any day.
           </span>
-          <span>{lastDay}</span>
-        </div>
-      </div>
+        </p>
+      )}
       {e.workflowMessage && (
         <p className="max-md:flex max-md:items-start max-md:gap-2 max-md:rounded-xl max-md:bg-waiting-bg max-md:p-3 max-md:text-[12px] max-md:leading-[17px] max-md:font-semibold max-md:text-waiting">
           <CirclePause className="max-md:mt-px max-md:size-4 max-md:shrink-0" aria-hidden="true" />

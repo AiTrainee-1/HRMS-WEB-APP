@@ -4,13 +4,23 @@
 //  - day separators ("Today", "Yesterday", "Mon, 27 Oct", "12 Dec 2025"),
 //  - grouping consecutive messages from one person,
 //  - how many new messages arrived while the employee was reading older ones,
-//  - flipping a reaction straight away (the server's answer then replaces it).
+//  - flipping a reaction straight away (the server's answer then replaces it), and who reacted with what,
+//  - dropping a message the server no longer sends (HR deleted it) from the stretch the newest page covers.
 // Message ids are numbers on the server; the web app's older types call them strings, so both are accepted.
+
+/** One person who reacted (servers since 2026-11-25). */
+export interface ChatReactorLike {
+  employeeId: number | string | null
+  name: string
+  isMe?: boolean
+}
 
 export interface ChatReactionLike {
   emoji: string
   count: number
   reactedByMe: boolean
+  /** Who reacted, you first (servers since 2026-11-25); missing from older servers. */
+  people?: ChatReactorLike[]
 }
 
 export interface ChatMessageLike {
@@ -58,6 +68,25 @@ export function mergeMessages<T extends { id: number | string }>(...lists: (read
     }
   }
   return [...byId.values()].sort((a, b) => idNum(a.id) - idNum(b.id))
+}
+
+/**
+ * The newest page from the server is the truth for the stretch of history it covers: a message inside that stretch that
+ * the server no longer sends was removed there (HR deleted it, or its channel was cleaned up), so it goes from the
+ * screen too. Messages older than the page are kept as they are - unless the page is short, which means it holds the
+ * whole channel, so nothing older exists any more. The mobile app's mergeLatestPage (2026-11-25).
+ */
+export function mergeLatestPage<T extends { id: number | string }>(
+  previous: readonly T[] | null | undefined,
+  fresh: readonly T[] | null | undefined,
+  pageSize = CHAT_PAGE_SIZE,
+): T[] {
+  if (!fresh) return mergeMessages(previous)
+  if (!fresh.length) return [] // the channel has no messages any more
+  if (!pageMayHaveMore(fresh.length, pageSize)) return mergeMessages(fresh)
+  const floor = oldestId(fresh)
+  const keptOlder = floor == null ? [] : (previous ?? []).filter((m) => idNum(m.id) < floor)
+  return mergeMessages(keptOlder, fresh)
 }
 
 /** Puts one changed message (e.g. the server's answer to a reaction) into a list, if it is there. */
@@ -113,23 +142,74 @@ export function slidOutOfPage<T extends { id: number | string }>(
 
 // ── reactions ────────────────────────────────────────────────────────────────
 
-/** Adds or removes MY reaction on a message, the way the server will once it answers. */
-export function toggleReactionLocal<T extends ChatMessageLike>(message: T, emoji: string, remove: boolean): T {
-  const reactions = message.reactions.map((r) => ({ ...r }))
+/**
+ * Adds or removes MY reaction on a message, the way the server will once it answers. With `me`, the list of who
+ * reacted changes too (you first, as the server sends it).
+ */
+export function toggleReactionLocal<T extends ChatMessageLike>(
+  message: T,
+  emoji: string,
+  remove: boolean,
+  me?: { id: number | string | null; name: string },
+): T {
+  const reactions: ChatReactionLike[] = message.reactions.map((r) => (r.people ? { ...r, people: [...r.people] } : { ...r }))
   const existing = reactions.find((r) => r.emoji === emoji)
+  const isMe = (p: ChatReactorLike) => p.isMe === true || (me?.id != null && sameId(p.employeeId, me.id))
   if (remove) {
     if (!existing || !existing.reactedByMe) return message
     existing.count -= 1
     existing.reactedByMe = false
+    if (existing.people) existing.people = existing.people.filter((p) => !isMe(p))
     return { ...message, reactions: reactions.filter((r) => r.count > 0) }
   }
+  const mine: ChatReactorLike | null = me ? { employeeId: me.id, name: me.name, isMe: true } : null
   if (existing) {
     if (existing.reactedByMe) return message
     existing.count += 1
     existing.reactedByMe = true
+    if (mine) existing.people = [mine, ...(existing.people ?? []).filter((p) => !isMe(p))]
     return { ...message, reactions }
   }
-  return { ...message, reactions: [...reactions, { emoji, count: 1, reactedByMe: true }] }
+  const added: ChatReactionLike = { emoji, count: 1, reactedByMe: true }
+  if (mine) added.people = [mine]
+  return { ...message, reactions: [...reactions, added] }
+}
+
+export interface ReactorRow {
+  key: string
+  emoji: string
+  name: string
+  isMe: boolean
+}
+
+/**
+ * Everyone who reacted, for the "who reacted" dialog: one row per person per emoji, you first, then in the order the
+ * server sent them. `emoji` null = every emoji ("All"). Reactions from an older server (no names) give no rows.
+ */
+export function reactorRows(reactions: readonly ChatReactionLike[], emoji: string | null = null): ReactorRow[] {
+  const rows: ReactorRow[] = []
+  for (const r of reactions) {
+    if (emoji != null && r.emoji !== emoji) continue
+    ;(r.people ?? []).forEach((p, i) => {
+      rows.push({
+        key: `${r.emoji}-${p.employeeId ?? `x${i}`}`,
+        emoji: r.emoji,
+        name: p.isMe ? 'You' : p.name || 'A colleague',
+        isMe: p.isMe === true,
+      })
+    })
+  }
+  return rows.sort((a, b) => Number(b.isMe) - Number(a.isMe))
+}
+
+/** True when the reactions say who reacted (servers since 2026-11-25); false means ask the server for the names. */
+export function reactionsHaveNames(reactions: readonly ChatReactionLike[]): boolean {
+  return reactions.length > 0 && reactions.every((r) => Array.isArray(r.people))
+}
+
+/** Total reactions on a message (every emoji). */
+export function reactionTotal(reactions: readonly ChatReactionLike[]): number {
+  return reactions.reduce((n, r) => n + Math.max(0, r.count), 0)
 }
 
 export function isMyReaction(message: ChatMessageLike, emoji: string): boolean {

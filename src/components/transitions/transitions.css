@@ -1,0 +1,104 @@
+/* The sign-out farewell (owner 2026-11-25): a character steps out of the door of a small home, the door shuts behind
+   them with a little settle, the window light goes out, and they walk away along the path. Timings come in as custom
+   properties (AuthTransitionOverlay.tsx). Nothing here runs under reduced motion: the overlay then draws the shut door. */
+
+.so-walker {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  opacity: 0;
+  animation: so-walk var(--so-walk-dur, 1.7s) linear var(--so-walk-delay, 0.33s) both;
+}
+@keyframes so-walk {
+  0% {
+    transform: translate(114px, 216px) scale(0.8);
+    opacity: 0;
+  }
+  12% {
+    transform: translate(122px, 220px) scale(0.88);
+    opacity: 1;
+  }
+  48% {
+    transform: translate(196px, 224px) scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(268px, 226px) scale(0.94);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(332px, 224px) scale(0.84);
+    opacity: 0;
+  }
+}
+
+.so-door {
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+  transform: scaleX(0.16);
+  animation: so-door 0.6s ease-in var(--so-door-delay, 1s) both;
+}
+@keyframes so-door {
+  0% {
+    transform: scaleX(0.16);
+  }
+  70% {
+    transform: scaleX(1.04);
+  }
+  85% {
+    transform: scaleX(0.98);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.so-light {
+  animation: so-light 0.5s ease-out var(--so-light-delay, 1.5s) both;
+}
+@keyframes so-light {
+  from {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+
+/* legs and arms swing about the hip / shoulder; the body bobs */
+.so-limb {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: so-swing 0.36s ease-in-out infinite alternate;
+}
+.so-limb--back {
+  animation-direction: alternate-reverse;
+}
+@keyframes so-swing {
+  from {
+    transform: rotate(24deg);
+  }
+  to {
+    transform: rotate(-24deg);
+  }
+}
+.so-bob {
+  animation: so-bob 0.18s ease-in-out infinite alternate;
+}
+@keyframes so-bob {
+  to {
+    transform: translateY(-1.6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .so-walker,
+  .so-door,
+  .so-light,
+  .so-limb,
+  .so-bob {
+    animation: none !important;
+  }
+  .so-door {
+    transform: none;
+  }
+}

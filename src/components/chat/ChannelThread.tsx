@@ -5,28 +5,55 @@ import { ArrowDown, History, Loader2, MessageCircle, WifiOff } from 'lucide-reac
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState, SkeletonList, popIn, useReducedMotion } from '@/components/kit'
-import { chatThreadApi, type ChatMsg } from '@/api/home-chat'
+import { chatThreadApi, type ChatMsg, type OutgoingMedia } from '@/api/home-chat'
 import { ApiError } from '@/api/client'
 import { usePageVisible } from '@/hooks/useHomeSources'
+import { adoptChatMedia, downloadChatMedia } from '@/hooks/useChatMedia'
+import type { Recording } from '@/hooks/useVoiceRecorder'
+import { copyText } from '@/lib/clipboard'
 import {
-  CHAT_PAGE_SIZE, arrivalAnnouncement, buildChatRows, countUnseen, isMyReaction, isNearLatest, mergeMessages, newestId,
-  oldestId, pageMayHaveMore, replaceMessage, slidOutOfPage, toggleReactionLocal, unseenLabel,
+  CHAT_PAGE_SIZE, arrivalAnnouncement, buildChatRows, countUnseen, isMyReaction, isNearLatest, mergeLatestPage, mergeMessages,
+  newestId, oldestId, pageMayHaveMore, replaceMessage, slidOutOfPage, toggleReactionLocal, unseenLabel,
 } from '@/lib/chat-thread'
+import { GIF_TEXT, VOICE_TEXT, mediaSaveName, messageKind, uploadErrorMessage, voiceFileName, waveformForUpload } from '@/lib/chat-media'
+import { cn } from '@/lib/utils'
+import { WALLPAPER } from './chat-style'
 import { Composer } from './Composer'
-import { MessageBubble, PendingBubble, type PendingSend } from './MessageBubble'
+import { GifSendDialog, GifViewer, ReactionsDialog } from './ChatDialogs'
+import { MessageBubble, PendingBubble, type BubbleActions, type PendingSend } from './MessageBubble'
+import { stopVoice } from './voice-playback'
+import './chat.css'
 
 const POLL_MS = 4000
 
 /**
- * One channel's conversation. The newest 50 messages are polled every 4 s, but only while this tab is visible; older
- * pages are loaded on request ("Show earlier messages", `before=`), and the reader keeps their place while they load.
- * Reading older messages while new ones arrive shows a "N new messages" pill instead of jumping. Messages pushed out of
- * the polled newest page by new ones stay on screen. A message being sent shows "Sending…" at once; a failed one can be
- * retried. Errors and an empty channel look different. Screen readers hear only other people's NEW messages (one
- * polite announcement per poll), never older pages being loaded or their own sent messages.
- * The parent keys this component by channel id, so no state carries over from one channel to another.
+ * One channel's conversation, WhatsApp-style (owner 2026-11-25). The newest 50 messages are polled every 4 s, but only
+ * while this tab is visible; older pages are loaded on request ("Show earlier messages", `before=`), and the reader
+ * keeps their place while they load. Reading older messages while new ones arrive shows a "N new messages" pill instead
+ * of jumping. Messages pushed out of the polled newest page by new ones stay on screen; a message the server no longer
+ * sends inside the stretch the newest page covers (HR deleted it) goes (lib/chat-thread.ts mergeLatestPage).
+ *
+ * Text, GIFs (picked or pasted, at most 8 MB) and voice messages (recorded here, at most 2 minutes) are sent; one being
+ * sent shows "Sending…" at once and a failed one can be retried. GIFs and voice messages are fetched with the sign-in
+ * and expire ("GIF expired"). The message menu reacts, replies, copies and saves; reaction chips show who reacted.
+ * Screen readers hear only other people's NEW messages (one polite announcement per poll), never older pages being
+ * loaded or their own sent messages. The parent keys this component by channel id, so no state carries over from one
+ * channel to another.
  */
-export function ChannelThread({ channelId, channelName, myId }: { channelId: string; channelName: string; myId: string | number | null }) {
+export function ChannelThread({
+  channelId,
+  channelName,
+  myId,
+  myName,
+  expiryDays,
+}: {
+  channelId: string
+  channelName: string
+  myId: string | number | null
+  myName: string
+  /** How many days GIFs and voice messages stay (the server's setting), when known. */
+  expiryDays: number | null
+}) {
   const qc = useQueryClient()
   const visible = usePageVisible()
   const reduced = useReducedMotion()
@@ -47,6 +74,13 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
   const [replyTo, setReplyTo] = React.useState<ChatMsg | null>(null)
   const [atBottom, setAtBottom] = React.useState(true)
   const [lastSeen, setLastSeen] = React.useState<number | null>(null)
+  // "Now" for expiry, refreshed each minute.
+  const [now, setNow] = React.useState(() => new Date())
+  const [highlight, setHighlight] = React.useState<string | null>(null)
+  const [savingId, setSavingId] = React.useState<string | null>(null)
+  const [reactionsFor, setReactionsFor] = React.useState<{ id: string; emoji: string | null } | null>(null)
+  const [gifView, setGifView] = React.useState<{ id: string; url: string } | null>(null)
+  const [gifToSend, setGifToSend] = React.useState<File | null>(null)
 
   const scroller = React.useRef<HTMLDivElement>(null)
   const composer = React.useRef<HTMLTextAreaElement>(null)
@@ -54,6 +88,13 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
   const firstScroll = React.useRef(true)
   const announcedUpTo = React.useRef<number | null>(null)
   const [announcement, setAnnouncement] = React.useState({ text: '', n: 0 })
+
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(t)
+  }, [])
+  // Leaving the chat stops a voice message that is playing.
+  React.useEffect(() => () => stopVoice(), [])
 
   // Each poll returns only the newest page, so new messages push the oldest out of it. Those were on screen: move them
   // into `older` during render (before anything is drawn), so they never vanish and the reader's place never moves.
@@ -95,9 +136,11 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
     }
   }, [gapAfter, channelId])
 
-  const messages = React.useMemo(() => mergeMessages(older, latest.data), [older, latest.data])
+  // The newest page is the truth for the stretch it covers: a message HR deleted there goes from the screen too.
+  const messages = React.useMemo(() => mergeLatestPage(older, latest.data), [older, latest.data])
   const rows = React.useMemo(() => buildChatRows(messages, myId, new Date()), [messages, myId])
   const newest = newestId(messages)
+  const byId = React.useMemo(() => new Map(messages.map((m) => [String(m.id), m])), [messages])
 
   // Whether "Show earlier" is offered: decided by the first page, then by each older page.
   React.useEffect(() => {
@@ -179,25 +222,32 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
   // ── sending ─────────────────────────────────────────────────────────────────
   async function deliver(p: PendingSend, replyId: string | number | null) {
     try {
-      const sent = await chatThreadApi.send(channelId, p.text, replyId)
+      const sent = p.media ? await chatThreadApi.sendMedia(channelId, p.media, replyId) : await chatThreadApi.send(channelId, p.text, replyId)
+      // the file is already here: it becomes that message's copy, so my own bubble needs no download
+      if (p.media && sent?.id != null) adoptChatMedia(sent.id, p.media.blob)
       qc.setQueryData<ChatMsg[]>(key, (prev) => mergeMessages(prev, [sent]))
       setPending((list) => list.filter((x) => x.tempId !== p.tempId))
       setLastSeen(Number(sent.id))
       void qc.invalidateQueries({ queryKey: key })
     } catch (err) {
-      const error = err instanceof ApiError ? err.message : 'No connection. Check your internet and try again.'
+      const error = p.media
+        ? uploadErrorMessage(err, p.media.kind)
+        : err instanceof ApiError
+          ? err.message
+          : 'No connection. Check your internet and try again.'
       setPending((list) => list.map((x) => (x.tempId === p.tempId ? { ...x, status: 'failed', error } : x)))
     }
   }
 
   const replyIds = React.useRef(new Map<string, string | number | null>())
 
-  function send(text: string) {
+  function queue(text: string, media?: OutgoingMedia) {
     const p: PendingSend = {
       tempId: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       text,
-      replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName, text: replyTo.text } : null,
+      replyTo: replyTo ? { id: replyTo.id, senderName: replyTo.senderName, text: replyTo.text, kind: replyTo.kind } : null,
       status: 'sending',
+      media,
     }
     const replyId = replyTo?.id ?? null
     replyIds.current.set(p.tempId, replyId)
@@ -205,6 +255,23 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
     setReplyTo(null)
     setAtBottom(true)
     void deliver(p, replyId)
+  }
+
+  const send = (text: string) => queue(text)
+
+  const sendVoice = (rec: Recording) =>
+    queue(VOICE_TEXT, {
+      kind: 'voice',
+      blob: rec.blob,
+      mime: rec.mime,
+      fileName: voiceFileName(rec.mime),
+      durationMs: rec.durationMs,
+      waveform: waveformForUpload(rec.levels),
+    })
+
+  const sendGif = (file: File) => {
+    setGifToSend(null)
+    queue(GIF_TEXT, { kind: 'gif', blob: file, mime: 'image/gif', fileName: file.name || 'animation.gif' })
   }
 
   function retry(p: PendingSend) {
@@ -216,7 +283,7 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
   // ── reactions (flip at once; the server's answer replaces the guess) ────────
   async function react(m: ChatMsg, emoji: string) {
     const remove = isMyReaction(m, emoji)
-    const guess = toggleReactionLocal(m, emoji, remove)
+    const guess = toggleReactionLocal(m, emoji, remove, { id: myId, name: myName })
     const apply = (next: ChatMsg) => {
       qc.setQueryData<ChatMsg[]>(key, (prev) => replaceMessage(prev, next))
       setOlder((prev) => replaceMessage(prev, next))
@@ -225,6 +292,7 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
     try {
       const server = remove ? await chatThreadApi.unreact(m.id, emoji) : await chatThreadApi.react(m.id, emoji)
       if (server && typeof server === 'object' && 'id' in server) apply(server)
+      void qc.invalidateQueries({ queryKey: ['chat-reactions', String(m.id)] })
     } catch (err) {
       apply(m)
       toast.error(err instanceof ApiError ? err.message : 'Could not update the reaction')
@@ -234,6 +302,44 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
   function startReply(m: ChatMsg) {
     setReplyTo(m)
     requestAnimationFrame(() => composer.current?.focus())
+  }
+
+  /** A quote was clicked: bring the quoted message into view and flash it. */
+  function jumpTo(id: number | string) {
+    const el = scroller.current?.querySelector(`[data-msg-id="${CSS.escape(String(id))}"]`)
+    if (!el) {
+      toast.info(hasMore ? 'That message is further up. Use “Show earlier messages” to find it.' : 'That message is no longer in the chat.')
+      return
+    }
+    el.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
+    setHighlight(String(id))
+    window.setTimeout(() => setHighlight((h) => (h === String(id) ? null : h)), 1600)
+  }
+
+  async function save(m: ChatMsg) {
+    const kind = messageKind(m)
+    setSavingId(String(m.id))
+    try {
+      await downloadChatMedia(m.id, mediaSaveName(m.id, kind, m.media?.mime))
+      toast.success(kind === 'gif' ? 'GIF saved to your downloads' : 'Voice message saved to your downloads')
+    } catch {
+      toast.error('It could not be saved. It may have expired.')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const actions: BubbleActions = {
+    onReply: startReply,
+    onReact: (m, e) => void react(m, e),
+    onCopy: async (m) => {
+      if (await copyText(m.text)) toast.success('Message copied')
+      else toast.error('Could not copy the message')
+    },
+    onSave: (m) => void save(m),
+    onOpenReactions: (m, emoji) => setReactionsFor({ id: String(m.id), emoji }),
+    onOpenGif: (m, url) => setGifView({ id: String(m.id), url }),
+    onQuote: jumpTo,
   }
 
   // ── render ──────────────────────────────────────────────────────────────────
@@ -254,7 +360,7 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
     )
   } else {
     body = (
-      <div className="flex min-h-full flex-col justify-end px-3 pt-3 pb-4 sm:px-4">
+      <div className="flex min-h-full flex-col justify-end px-3 pt-3 pb-4 sm:px-5">
         {hasMore && (
           <div className="mb-2 flex justify-center">
             <Button
@@ -275,7 +381,7 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
           {rows.map((r) =>
             r.kind === 'day' ? (
               <div key={r.key} className="sticky top-1 z-10 my-3 flex justify-center">
-                <span className="glass-raised font-label rounded-full px-3 py-0.5 text-[11.5px] font-bold text-muted-foreground max-md:border-0! max-md:bg-none! max-md:bg-secondary! max-md:py-1 max-md:text-[11px] max-md:font-semibold max-md:text-secondary-foreground max-md:shadow-none!">
+                <span className="font-label rounded-md border border-border/70 bg-card px-3 py-1 text-[11.5px] font-semibold tracking-wide text-muted-foreground shadow-[0_1px_2px_rgb(15_23_42/0.06)] dark:bg-[#1b2640]">
                   {r.label}
                 </span>
               </div>
@@ -287,8 +393,11 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
                 isHr={r.isHr}
                 startsGroup={r.startsGroup}
                 endsGroup={r.endsGroup}
-                onReply={startReply}
-                onReact={react}
+                highlighted={highlight === String(r.message.id)}
+                now={now}
+                reduced={reduced}
+                saving={savingId === String(r.message.id)}
+                actions={actions}
               />
             ),
           )}
@@ -300,21 +409,24 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
     )
   }
 
+  const reactionsMessage = reactionsFor ? (byId.get(reactionsFor.id) ?? null) : null
+  const gifMessage = gifView ? (byId.get(gifView.id) ?? null) : null
+
   return (
-    // Phones: no framed box - the conversation runs edge to edge on the page colour, filling the height the page gives it.
+    // Phones: no framed box - the conversation runs edge to edge, filling the height the page gives it.
     <div className="glass-raised relative flex h-[min(72dvh,760px)] min-h-[440px] flex-col overflow-hidden rounded-2xl max-md:-mx-4 max-md:h-auto max-md:min-h-0 max-md:flex-1 max-md:rounded-none max-md:border-0! max-md:bg-none! max-md:bg-transparent! max-md:shadow-none!">
       {latest.isError && latest.data && (
         <p role="status" className="flex items-center justify-center gap-1.5 border-b border-waiting-border bg-waiting-bg px-3 py-1.5 text-[12px] font-semibold text-waiting">
           <WifiOff className="size-3.5" aria-hidden="true" /> Can't refresh right now. Trying again…
         </p>
       )}
-      <div ref={scroller} onScroll={onScroll} className="scrollbar-thin relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div ref={scroller} onScroll={onScroll} className={cn('scrollbar-thin relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto', WALLPAPER)}>
         {body}
       </div>
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {/* The toggling no-break space makes a repeated identical announcement still count as a change. */}
         {announcement.text}
-        {announcement.n % 2 ? ' ' : ''}
+        {announcement.n % 2 ? ' ' : ''}
       </div>
 
       <AnimatePresence>
@@ -341,7 +453,30 @@ export function ChannelThread({ channelId, channelName, myId }: { channelId: str
         )}
       </AnimatePresence>
 
-      <Composer ref={composer} channelName={channelName} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} onSend={send} />
+      <Composer
+        ref={composer}
+        channelName={channelName}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
+        onSend={send}
+        onPickGif={setGifToSend}
+        onVoiceRecorded={sendVoice}
+      />
+
+      <ReactionsDialog
+        message={reactionsMessage}
+        initialEmoji={reactionsFor?.emoji ?? null}
+        onClose={() => setReactionsFor(null)}
+        onToggle={(m, e) => void react(m, e)}
+      />
+      <GifViewer message={gifMessage} url={gifView?.url ?? null} now={now} onClose={() => setGifView(null)} />
+      <GifSendDialog
+        file={gifToSend}
+        expiryDays={expiryDays}
+        replyingTo={replyTo?.senderName ?? null}
+        onCancel={() => setGifToSend(null)}
+        onSend={sendGif}
+      />
     </div>
   )
 }

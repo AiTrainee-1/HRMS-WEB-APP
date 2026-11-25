@@ -14,6 +14,11 @@ import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 import { Toaster } from '@/components/ui/sonner'
 import { ConnectivityNotice } from '@/components/support/ConnectivityNotice'
 import { PageLoader } from '@/components/ui/loader'
+import { AuthTransitionOverlay } from '@/components/transitions/AuthTransitionOverlay'
+import { UpdateAvailable } from '@/components/system/UpdateAvailable'
+import { WelcomeTour } from '@/components/system/WelcomeTour'
+import { SilentBoundary } from '@/components/system/SilentBoundary'
+import { authTransitions } from '@/components/transitions/auth-transitions'
 
 const Login = lazy(() => import('@/pages/auth/Login'))
 const SetPassword = lazy(() => import('@/pages/auth/SetPassword'))
@@ -149,6 +154,17 @@ function App() {
             <AuthProvider>
               <AppRoutes />
               <ConnectivityNotice />
+              {/* owner 2026-11-25: the dashboard's welcome tour, "a new version is here", and the sign-in / sign-out
+                  transitions (on top of everything, so they outlive the page that started them) */}
+              <SilentBoundary>
+                <WelcomeTour />
+              </SilentBoundary>
+              <SilentBoundary>
+                <UpdateAvailable />
+              </SilentBoundary>
+              <SilentBoundary onError={authTransitions.close}>
+                <AuthTransitionOverlay />
+              </SilentBoundary>
               <Toaster position="top-right" richColors />
             </AuthProvider>
           </ThemeProvider>

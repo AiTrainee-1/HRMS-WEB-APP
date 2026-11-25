@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/context/AuthContext'
 import { employeeApi } from '@/api/resources'
+import { useMyPhoto } from '@/hooks/useMyProfile'
 
 /** The avatar at the top right: photo (or initials) with a live dot, name + code on wider screens, and a small menu. */
 export function UserMenu() {
@@ -23,6 +24,8 @@ export function UserMenu() {
     enabled: !!user,
     staleTime: 5 * 60_000,
   })
+  // The real photo (a server path resolved against the API's origin), initials while it loads or when there is none.
+  const { photoUrl } = useMyPhoto()
 
   const initials = (user?.name ?? '')
     .split(' ')
@@ -41,7 +44,7 @@ export function UserMenu() {
         <span className="relative">
           <span className="bg-silk absolute -inset-[2px] rounded-full opacity-70 transition-opacity group-hover:opacity-100" aria-hidden="true" />
           <Avatar className="relative size-9 ring-2 ring-background">
-            {profileQuery.data?.photoUrl && <AvatarImage src={profileQuery.data.photoUrl} alt="" />}
+            {photoUrl && <AvatarImage src={photoUrl} alt="" className="object-cover" />}
             <AvatarFallback className="bg-primary/15 text-[12px] font-bold text-brand-blue">{initials || 'EM'}</AvatarFallback>
           </Avatar>
           <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-success ring-2 ring-background" aria-hidden="true" />
