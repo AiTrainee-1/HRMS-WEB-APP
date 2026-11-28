@@ -40,7 +40,9 @@ import {
   type TimelineItem,
 } from '@/components/kit'
 import { WithdrawButton } from '@/components/requests/WithdrawButton'
+import { AmountStorySection } from '@/components/pay/AdvanceStory'
 import { useMyAdvance } from '@/hooks/useAdvances'
+import { storyCardNote, storyExplainsLimit, storyMentions } from '@/lib/advance-story'
 import { formatINR } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import {
@@ -410,7 +412,8 @@ function AdvanceState({ a, className }: { a: MyAdvance; className?: string }) {
 export function AdvanceCard({ advance: a, onOpen }: { advance: MyAdvance; onOpen: (id: number) => void }) {
   const Icon = TYPE_ICON[a.advanceType]
   const decided = a.status === 'approved' || a.status === 'closed'
-  const remark = remarkLine(a)
+  // Why less / why rejected from the amount story (2026-11-28) when it says more than the decision's remark.
+  const remark = storyCardNote(a) ?? remarkLine(a)
   return (
     <GlassCard className="flex h-full flex-col gap-3 max-md:relative max-md:p-3.5! max-md:active:opacity-85">
       <div className="flex items-start gap-3 max-md:hidden">
@@ -533,8 +536,8 @@ function PhoneRecordBody({ a }: { a: MyAdvance }) {
   const applied = appliedOn(a.createdAt)
   const meta = [applied && `${a.appliedBy === 'hr' ? 'Recorded' : 'Applied'} ${applied}`, a.purpose].filter(Boolean).join(' · ')
   // The decision's remark (`decisionRemark`, else `notes`): the reason of a rejection in the footer, an approval's remark
-  // as its own line above the figures.
-  const remark = remarkLine(a)
+  // as its own line above the figures. The amount story's "Why less" / reason first when it has one (2026-11-28).
+  const remark = storyCardNote(a) ?? remarkLine(a)
   const footer =
     a.status === 'rejected'
       ? (remark ?? 'Nothing will be deducted from your salary.')
@@ -694,8 +697,11 @@ export function AdvanceDetailDialog({ id, onOpenChange }: { id: number | null; o
   const [refusal, setRefusal] = React.useState<{ id: number; text: string } | null>(null)
   const refusalText = a && refusal?.id === a.id ? refusal.text : null
   const deleteText = a ? deleteRowText(a) : null
-  const remark = a ? decisionRemarkOf(a) : null
-  const limitText = a ? limitWhenAppliedText(a) : ''
+  const story = a?.amountStory ?? null
+  // The amount story (2026-11-28) says the limit and the remarks itself: the older lines only when it does not.
+  const decisionRemark = a ? decisionRemarkOf(a) : null
+  const remark = decisionRemark && !storyMentions(story, decisionRemark) ? decisionRemark : null
+  const limitText = a && !storyExplainsLimit(story) ? limitWhenAppliedText(a) : ''
   return (
     <Dialog open={id != null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -772,6 +778,8 @@ export function AdvanceDetailDialog({ id, onOpenChange }: { id: number | null; o
             </div>
 
             {limitText && <p className="text-[12.5px] text-muted-foreground">{limitText}</p>}
+
+            {story && <AmountStorySection story={story} />}
 
             {/* The decision's remark: the reason of a rejection, or why a different amount was approved. */}
             {remark && (

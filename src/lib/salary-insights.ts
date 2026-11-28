@@ -10,6 +10,7 @@
 //   * a malformed reply as a whole is null, which the hook turns into an error state with Try again.
 
 import { formatINR } from './money.ts'
+import { readSlipCasualLeave, type SlipCasualLeave } from './slip-casual-leave.ts'
 
 // ---- small readers ----------------------------------------------------------------------------------------------
 
@@ -119,6 +120,9 @@ export interface SalaryPeriod {
   steps: SalaryStep[]
   reconciles: boolean
   payroll: PayrollAfterSlip | null
+  /** The month's Casual Leave on the slip (2026-11-28, the breakdown only; lib/slip-casual-leave.ts); null / absent on
+   *  the year's periods and on an older server. */
+  casualLeave?: SlipCasualLeave | null
 }
 
 export interface YearSummary {
@@ -230,6 +234,7 @@ export function normalizePeriod(raw: unknown): SalaryPeriod | null {
     steps: (Array.isArray(raw.steps) ? raw.steps : []).map(readStep).filter((s): s is SalaryStep => s !== null),
     reconciles: raw.reconciles !== false,
     payroll: readPayroll(raw.payroll),
+    casualLeave: readSlipCasualLeave(raw.casualLeave),
   }
 }
 

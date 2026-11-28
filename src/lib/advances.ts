@@ -15,6 +15,7 @@
 // defensively, words them, and gives the forms a LIVE preview that matches what the server will store.
 
 import type { ApprovalProgress } from '../types/index.ts'
+import { normalizeAmountStory, type AmountStory } from './advance-story.ts'
 import { formatINR } from './money.ts'
 
 export type AdvanceType = 'general' | 'term'
@@ -185,6 +186,8 @@ export interface MyAdvance {
   salaryAtRequest: number | null
   notes: string | null
   approval: ApprovalProgress | null
+  /** How the amount was decided (2026-11-28, lib/advance-story.ts); null / absent on an older server. */
+  amountStory?: AmountStory | null
 }
 
 const STATES: ScheduleState[] = ['planned', 'due', 'upcoming', 'deducted']
@@ -301,6 +304,7 @@ export function normalizeAdvance(raw: unknown): MyAdvance | null {
     salaryAtRequest: num(raw.salaryAtRequest),
     notes: strOrNull(raw.notes),
     approval: isObject(raw.approval) ? (raw.approval as unknown as ApprovalProgress) : null,
+    amountStory: normalizeAmountStory(raw.amountStory),
   }
 }
 

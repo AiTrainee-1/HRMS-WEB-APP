@@ -14,6 +14,7 @@ import {
   SlipWaterfall,
 } from '@/components/pay/SlipParts'
 import { PhoneCardTitle } from '@/components/pay/PhoneParts'
+import { SlipCasualLeaveCard } from '@/components/pay/SlipCasualLeave'
 import { paySalaryApi } from '@/api/pay-salary'
 import { ApiError } from '@/api/client'
 import { useAuth } from '@/context/AuthContext'
@@ -199,6 +200,7 @@ export default function SalaryDetail() {
           <div className="flex min-w-0 flex-col gap-4 max-md:gap-3">
             <ChangedByHrCard period={p} />
             <AttendanceCard period={p} />
+            <SlipCasualLeaveCard period={p} />
             <PhoneEarningsCard period={p} />
             <PhoneDeductionsCard period={p} />
             <PhoneVerifyNote />

@@ -30,6 +30,7 @@ import {
   type CLStatus,
   type ShiftHalves,
 } from '@/lib/casual-leave'
+import { readClSummary, type CLSummary } from '@/lib/cl-summary'
 import type { ReasonCategory, HalfSlot } from '@/lib/leave-form'
 import type { OutpassPassType } from '@/lib/outpass-open'
 import type { ApprovalProgress, LeaveRequest, OutpassRequest } from '@/types'
@@ -96,6 +97,8 @@ export interface CLEligibilityFull {
   rule: CLRule | null
   /** 2026-11-02: the year month by month as the server counts it (incl. Casual Leave HR proposed that still waits). */
   monthsUsage: CLMonthUsage[] | null
+  /** 2026-11-28: the balance in detail (lib/cl-summary.ts); null / absent on an older server. */
+  summary?: CLSummary | null
 }
 
 type Raw = Record<string, unknown>
@@ -185,13 +188,17 @@ export const casualLeaveRequestsApi = {
       balance: readBalance(d.balance),
       rule: asRule(d.rule),
       monthsUsage: readMonthsUsage(d.monthsUsage),
+      summary: readClSummary(d.summary),
     }
   },
   /** GET /casual-leaves/history?year= (self-scoped): the year's balance as a running story. null on an older server (no
    *  such endpoint), so the page simply leaves the section out. */
   history: async (year: number): Promise<CLHistory | null> => {
     try {
-      return readHistory(await apiRequest<unknown>({ method: 'GET', url: '/casual-leaves/history', params: { year } }))
+      const raw = await apiRequest<unknown>({ method: 'GET', url: '/casual-leaves/history', params: { year } })
+      const history = readHistory(raw)
+      // 2026-11-28: the same balance in detail as my-eligibility, for this year.
+      return history && { ...history, summary: readClSummary((raw as Raw | null)?.summary) }
     } catch (err) {
       if (err instanceof ApiError && (err.status === 404 || err.status === 405)) return null
       throw err

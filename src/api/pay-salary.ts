@@ -17,6 +17,9 @@ export interface PaySlipListItem {
   netSalary?: number | string | null
   grossSalary?: number | string | null
   emailedAt?: string | null
+  /** 2026-11-28: the month's Casual Leave in short ({applicable, used, daysUsed, paidDays, amountPaid, fromStoredSlip});
+   *  read with lib/slip-casual-leave.ts readSlipCasualLeaveShort. Absent on an older server. */
+  casualLeave?: unknown
 }
 
 export const paySalaryApi = {

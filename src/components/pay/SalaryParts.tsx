@@ -34,6 +34,7 @@ import {
   type SalaryPeriod,
   type YearSummary,
 } from '@/lib/salary-insights'
+import { readSlipCasualLeaveShort, slipClChip, type SlipCasualLeaveShort } from '@/lib/slip-casual-leave'
 import type { PaySlipListItem } from '@/api/pay-salary'
 import { formatINRShort } from './phone'
 
@@ -161,6 +162,12 @@ function PeriodBadge({ top, bottom }: { top: string; bottom: string }) {
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+/** The Casual Leave of a slip row (2026-11-28): "CL 1.5 days · ₹1,500 paid", only when Casual Leave was used. */
+function ClChip({ text }: { text: string | null }) {
+  if (!text) return null
+  return <span className="chip chip-violet">{text}</span>
+}
+
 /** The phone body of a slip card (the mobile app's SalarySlipCard): period + cycle chip, net pay big, one loss line. */
 function PhoneSlipBody({
   label,
@@ -168,12 +175,15 @@ function PhoneSlipBody({
   net,
   loss,
   badge,
+  clChip,
 }: {
   label: string
   cycle: string | null
   net: number | string | null
   loss?: React.ReactNode
   badge?: React.ReactNode
+  /** The month's Casual Leave (slipClChip), when any. */
+  clChip?: string | null
 }) {
   return (
     <span className="hidden max-md:flex max-md:min-w-0 max-md:flex-1 max-md:items-center max-md:justify-between max-md:gap-2">
@@ -182,6 +192,9 @@ function PhoneSlipBody({
           <span className="max-md:text-[13px] max-md:text-secondary-foreground max-md:break-words">{label}</span>
           {cycle && (
             <span className="max-md:rounded-full max-md:bg-info-bg max-md:px-2 max-md:py-0.5 max-md:text-[10.5px] max-md:leading-4 max-md:font-bold max-md:text-info">{cycle}</span>
+          )}
+          {clChip && (
+            <span className="max-md:rounded-full max-md:bg-violet-bg max-md:px-2 max-md:py-0.5 max-md:text-[10.5px] max-md:leading-4 max-md:font-bold max-md:text-violet">{clChip}</span>
           )}
         </span>
         <MoneyText value={net} className="max-md:font-[family-name:var(--font-display)] max-md:text-[22px] max-md:leading-7 max-md:font-bold max-md:text-primary" />
@@ -195,9 +208,11 @@ function PhoneSlipBody({
   )
 }
 
-/** One slip of the year: period (production periods with their dates and "Weekly pay"), payable, and what attendance cost. */
-export function SlipRow({ period: p }: { period: SalaryPeriod }) {
+/** One slip of the year: period (production periods with their dates and "Weekly pay"), payable, and what attendance cost;
+ *  the month's Casual Leave when any was used (`casualLeave`: the slip list's short form, 2026-11-28). */
+export function SlipRow({ period: p, casualLeave }: { period: SalaryPeriod; casualLeave?: SlipCasualLeaveShort | null }) {
   const loss = periodLoss(p)
+  const clChip = slipClChip(casualLeave)
   const cycle = cycleText(p)
   const lossIsLate = p.attendanceLoss == null
   const label = p.period.label || `Slip ${p.slipNumber}`
@@ -213,6 +228,7 @@ export function SlipRow({ period: p }: { period: SalaryPeriod }) {
                 {cycle}
               </StatusPill>
             )}
+            <ClChip text={clChip} />
           </span>
           <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
             {loss == null ? (
@@ -234,6 +250,7 @@ export function SlipRow({ period: p }: { period: SalaryPeriod }) {
         <PhoneSlipBody
           label={label}
           cycle={cycle}
+          clChip={clChip}
           net={p.netPayable}
           loss={
             loss == null ? (
@@ -258,6 +275,7 @@ export function SlipRow({ period: p }: { period: SalaryPeriod }) {
 /** A slip from GET /my/salary-slips (shown when the year's figures cannot load). */
 export function FallbackSlipRow({ slip }: { slip: PaySlipListItem }) {
   const cycle = slipCycleLabel(slip)
+  const clChip = slipClChip(readSlipCasualLeaveShort(slip.casualLeave))
   return (
     <GlassCard variant="interactive" asChild padding="sm" className="group max-md:p-4">
       <Link href={`/employee/salary/${slip.id}`} className="flex items-center gap-3 sm:gap-4">
@@ -270,6 +288,11 @@ export function FallbackSlipRow({ slip }: { slip: PaySlipListItem }) {
         <span className="min-w-0 flex-1 max-md:hidden">
           <span className="block font-semibold break-words">{slipPeriodLabel(slip)}</span>
           {cycle && <span className="block text-[12.5px] text-muted-foreground">{cycle}</span>}
+          {clChip && (
+            <span className="mt-1 flex">
+              <ClChip text={clChip} />
+            </span>
+          )}
         </span>
         <span className="flex shrink-0 flex-col items-end max-md:hidden">
           <span className="label-caps text-muted-foreground">Net pay</span>
@@ -279,6 +302,7 @@ export function FallbackSlipRow({ slip }: { slip: PaySlipListItem }) {
         <PhoneSlipBody
           label={slipPeriodLabel(slip)}
           cycle={cycle}
+          clChip={clChip}
           net={slip.netSalary ?? null}
           badge={
             <StatusPill tone={slip.emailedAt ? 'approved' : 'neutral'} size="sm" icon={false}>

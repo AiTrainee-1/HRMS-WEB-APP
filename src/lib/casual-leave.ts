@@ -14,6 +14,7 @@
 // per month, `rule` / `remaining` / `usedFullDates`; an older server sends none of them and the old wording stays.
 
 import type { CasualLeaveBalance, CasualLeaveEligibility } from '../types/index.ts'
+import type { CLSummary } from './cl-summary.ts'
 
 /**
  * Whether the employee can apply for casual leave right now. With per-month verdicts (the previous month while the
@@ -608,7 +609,14 @@ export type CLHistoryEntry = {
   text: string
 }
 
-export type CLHistory = { year: number; total: number; balance: CLBalance | null; entries: CLHistoryEntry[] }
+export type CLHistory = {
+  year: number
+  total: number
+  balance: CLBalance | null
+  entries: CLHistoryEntry[]
+  /** 2026-11-28: the balance in detail for this year (lib/cl-summary.ts, read by the API layer); absent on an older server. */
+  summary?: CLSummary | null
+}
 
 /** GET /casual-leaves/history, checked. */
 export function readHistory(raw: unknown): CLHistory | null {

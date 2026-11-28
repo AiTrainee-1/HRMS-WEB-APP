@@ -30,6 +30,7 @@ import { PhoneLabel } from '@/components/pay/PhoneParts'
 import { usePaySlips, useSalaryInsights } from '@/hooks/usePaySalary'
 import { formatINR } from '@/lib/money'
 import { isProductionInsights, latestPeriod, lossSentence, periodsNewestFirst, sortSlipsNewestFirst } from '@/lib/salary-insights'
+import { clShortBySlip } from '@/lib/slip-casual-leave'
 import { cn } from '@/lib/utils'
 
 const rupees = (n: number) => formatINR(Math.round(n))
@@ -38,8 +39,10 @@ export default function Salary() {
   const [year, setYear] = React.useState<number | null>(null)
   const q = useSalaryInsights(year)
   const data = q.data
-  // The year's figures could not load: still list every slip (GET /my/salary-slips), so nothing is out of reach.
-  const fallback = usePaySlips(q.isError && !data)
+  // Every slip (GET /my/salary-slips): the list shown when the year's figures cannot load, so nothing is out of reach,
+  // and each slip's Casual Leave in short for the rows (2026-11-28; an older server sends none: no chip).
+  const fallback = usePaySlips()
+  const clBySlip = React.useMemo(() => clShortBySlip(fallback.data), [fallback.data])
   const production = data ? isProductionInsights(data) : false
   const latest = data ? latestPeriod(data.periods) : null
   const switching = q.isFetching && q.isPlaceholderData
@@ -259,7 +262,7 @@ export default function Salary() {
               <AnimatePresence initial={false}>
                 {periodsNewestFirst(data.periods).map((p, i) => (
                   <motion.li key={p.slipId} {...listItem(i)}>
-                    <SlipRow period={p} />
+                    <SlipRow period={p} casualLeave={clBySlip.get(String(p.slipId))} />
                   </motion.li>
                 ))}
               </AnimatePresence>

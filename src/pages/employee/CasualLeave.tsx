@@ -18,6 +18,7 @@ import {
   type ViewOptions,
 } from '@/components/kit'
 import { ClApplyDialog } from '@/components/requests/ClApplyDialog'
+import { ClBalanceDetail } from '@/components/requests/ClBalanceDetail'
 import { ClBalanceHistory } from '@/components/requests/ClBalanceHistory'
 import { FocusMissNote } from '@/components/requests/FocusMissNote'
 import { CL_STATE } from '@/components/requests/cl-state'
@@ -31,10 +32,11 @@ import { showView } from '@/components/requests/show-view'
 import type { CasualLeaveRow } from '@/api/requests-api'
 import { useApplyPrefill } from '@/hooks/useApplyPrefill'
 import { useApprovalWorkflow } from '@/hooks/useApprovalSummary'
-import { useCasualLeaveEligibility, useCasualLeaveRequests } from '@/hooks/useCasualLeave'
+import { useCasualLeaveEligibility, useCasualLeaveHistory, useCasualLeaveRequests } from '@/hooks/useCasualLeave'
 import { useFocusItem } from '@/hooks/useFocusItem'
 import { useSelectedMonth } from '@/hooks/useSelectedMonth'
 import { pipelineSentence } from '@/lib/approval'
+import { pickClSummary } from '@/lib/cl-summary'
 import { currentMonth, inMonthText, laterMonth, latestMonthOf, monthOf } from '@/lib/month-switch'
 import {
   PORTION_DAYS,
@@ -126,6 +128,12 @@ export default function CasualLeave() {
     if (next === thisYear) setMonth(currentMonth())
     else setMonth({ year: next, month: yearMonths(rows, next).find((m) => m.shape !== 'none')?.month ?? selectedMonth })
   }
+
+  // The balance in detail (2026-11-28) for the year on screen: my-eligibility's is this year's; another year's comes with
+  // its balance history (the same query as "Balance history" below, so one request). Null on an older server.
+  const currentSummary = elig.data?.summary
+  const historyForDetail = useCasualLeaveHistory(year, !!currentSummary?.applicable && currentSummary.year !== year)
+  const detail = pickClSummary(year, historyForDetail.data?.summary, currentSummary)
 
   const state = elig.data ? clCardState(elig.data, new Date()) : null
   const canApply = !!state && (state.tone === 'open' || state.tone === 'half' || (elig.data?.months ?? []).some((m) => m.eligible && m.left !== 'nothing'))
@@ -296,6 +304,9 @@ export default function CasualLeave() {
             </div>
           </>
         )}
+
+        {/* The balance in detail (2026-11-28): the server's summary for the year on screen; left out on an older server. */}
+        {detail && <ClBalanceDetail summary={detail} />}
 
         {/* The year */}
         <section aria-labelledby="cl-year-title" className="flex flex-col gap-4">
