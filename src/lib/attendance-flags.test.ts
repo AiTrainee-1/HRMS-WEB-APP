@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import {
   COMPENSATION_KIND_MARKERS,
+  DAY_STATUS_LABEL,
   compensationKindOf,
   compensationLegend,
   compensationLine,
@@ -13,6 +14,7 @@ import {
   getDayFlags,
   getDayMarkers,
   hasCompensationKeys,
+  isPunchlessBirthdayComp,
   isPunchlessRelaxation,
   legendMarkers,
 } from './attendance-flags.ts'
@@ -71,7 +73,7 @@ describe('the compensation marker', () => {
 
   test('every kind has its own colour, symbol, ring, chip and label', () => {
     const markers = compensationLegend()
-    assert.deepEqual(markers.map((m) => m.key), ['ot_allowance', 'window_late_in', 'window_early_out', 'birthday', 'relaxation'])
+    assert.deepEqual(markers.map((m) => m.key), ['ot_allowance', 'window_late_in', 'window_early_out', 'birthday', 'birthday_comp', 'relaxation'])
     for (const m of markers) {
       assert.ok(m.symbol && m.text && m.ring && m.dot && m.fill && m.chip && m.label, m.key)
     }
@@ -169,5 +171,67 @@ describe('a relaxation day has no punches and is not drawn as a half day only', 
 
   test('a relaxation day with a stray total of punches counts as worked', () => {
     assert.equal(isPunchlessRelaxation({ status: 'half_shift', firstPunch: null, totalPunches: 2, compensationKind: 'relaxation' }), false)
+  })
+})
+
+describe('a day Birthday Compensation paid (compensation_kind "birthday_comp", 2026-11-25)', () => {
+  const note = 'Birthday compensation (birthday 5 Mar): the whole day paid, no leave balance used'
+
+  test('shows as Birthday compensation: rose cake slice, the server\'s note as its sentence', () => {
+    const [m] = getDayMarkers(day({ compensationKind: 'birthday_comp', compensationNote: note }))
+    assert.equal(m.key, 'birthday_comp')
+    assert.equal(m.label, 'Birthday compensation')
+    assert.equal(m.symbol, 'cakeSlice')
+    assert.equal(m.chip, 'chip-rose')
+    assert.equal(m.detail, note)
+    // It is not the birthday leave marker.
+    assert.notEqual(m.dot, COMPENSATION_KIND_MARKERS.birthday.dot)
+  })
+
+  test('with no note, a fixed sentence explains it', () => {
+    assert.match(compensationLine({ compensationKind: 'birthday_comp' })!, /^Birthday compensation: you worked on your birthday/)
+    assert.match(compensationLine({ compensationKind: 'birthday_comp' })!, /No leave balance is used/)
+  })
+
+  test('a day with no punches reads as Birthday compensation, whatever its status', () => {
+    const paid = { status: 'on_leave', firstPunch: null, totalPunches: 0, compensationKind: 'birthday_comp' } as Day
+    assert.equal(isPunchlessBirthdayComp(paid), true)
+    assert.equal(dayHeadline(paid), 'Birthday compensation (Leave)')
+    // A half placed and the other half not worked: Half Day, still not "a punch in only one half".
+    assert.equal(dayHeadline({ ...paid, status: 'half_shift' }), 'Birthday compensation (Half Day)')
+    // The marker shows on any status (a paid day with no punch reads on_leave in the daily list).
+    assert.deepEqual(getDayMarkers(paid).map((x) => x.key), ['birthday_comp'])
+  })
+
+  test('a day that was also worked reads as the day it is', () => {
+    const worked = day({ compensationKind: 'birthday_comp', firstPunch: '14:00', totalPunches: 2 })
+    assert.equal(isPunchlessBirthdayComp(worked), false)
+    assert.equal(dayHeadline(worked), 'Present')
+    assert.equal(isPunchlessBirthdayComp({ status: 'present', compensationKind: 'birthday' }), false)
+  })
+})
+
+describe("today's day still in progress (2026-11-26)", () => {
+  const open = (extra: Partial<Day> = {}) => day({ date: '2026-11-26', inProgress: true, ...extra } as Partial<Day>)
+
+  test('reads "In progress", never Present or Half Day', () => {
+    assert.equal(dayHeadline(open()), 'In progress')
+    assert.equal(dayHeadline(open({ status: 'half_shift' })), 'In progress')
+    assert.equal(dayHeadline(day()), 'Present')
+    assert.equal(DAY_STATUS_LABEL.in_progress, 'In progress')
+  })
+
+  test('no Half Day and no Early Out verdict yet; a Late-In decided by the morning punch still shows', () => {
+    const f = getDayFlags(open({ status: 'half_shift', isEarlyOut: true, isLate: true }))
+    assert.equal(f.halfDay, false)
+    assert.equal(f.earlyOut, false)
+    assert.equal(f.late, true)
+    assert.deepEqual(getDayMarkers(open({ isLate: true, isEarlyOut: true })).map((m) => m.key), ['late'])
+  })
+
+  test('a finished day is unchanged', () => {
+    const f = getDayFlags(day({ status: 'half_shift', isEarlyOut: true, inProgress: false } as Partial<Day>))
+    assert.equal(f.halfDay, true)
+    assert.equal(f.earlyOut, true)
   })
 })

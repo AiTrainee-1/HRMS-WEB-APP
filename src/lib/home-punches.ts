@@ -1,6 +1,8 @@
 // Today's punches as a story, labelled by WHAT each punch is ("Arrived", "Stepped out", "Came back", "Left for the day"),
 // never by its position ("Punch 3"). Pure, tested in home-punches.test.ts.
 
+import type { DayProgressLike } from './day-progress.ts'
+
 export interface PunchLike {
   time: string
   type: 'IN' | 'OUT' | string
@@ -254,8 +256,9 @@ export function shiftStatusText(progress: number, opts: { start?: string | null;
   return grace > 0 ? `${text} · ${grace} min grace` : text
 }
 
-/** The part of a day record the phone panel reads (raw server fields; the month endpoint sends them all). */
-export interface DayRecordLike {
+/** The part of a day record the phone panel reads (raw server fields; the month endpoint sends them all), plus the
+ * keys that say the day is still in progress (lib/day-progress.ts). */
+export interface DayRecordLike extends DayProgressLike {
   date: string
   status?: string | null
   dayKind?: string | null

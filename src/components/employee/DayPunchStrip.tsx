@@ -17,16 +17,20 @@ const KIND_LOOK: Record<PunchKind, { icon: LucideIcon; ink: string; border: stri
  * Every punch of the day side by side (owner 2026-11-24), in time order: "#n", In / Out / OT, the time, where it came
  * from (Biometric, Geo Punch, On-Duty, OT Punch n, Missing Punch, HR entry, Auto) and anything special about it
  * (waiting for HR, rejected, not counted, the previous night's shift, the next day). A punch that does not count toward
- * the day has a dashed border. Scrolls sideways when there are more than fit.
+ * the day has a dashed border. Scrolls sideways when there are more than fit. `inProgress` (today, its shift still
+ * running: lib/day-progress.ts) says the day is still open, so its last punch is not yet the day's exit.
  */
-export function DayPunchStrip({ punches }: { punches: readonly DayPunchView[] }) {
+export function DayPunchStrip({ punches, inProgress = false }: { punches: readonly DayPunchView[]; inProgress?: boolean }) {
   return (
     <section aria-labelledby="day-punches-title" className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
         <h3 id="day-punches-title" className="label-caps text-foreground/80">
           Punches
         </h3>
-        <p className="text-[12px] text-muted-foreground tabular-nums">{punchCountText(punches)}</p>
+        <p className="text-[12px] text-muted-foreground tabular-nums">
+          {punchCountText(punches)}
+          {inProgress && ' · day still open'}
+        </p>
       </div>
       {punches.length === 0 ? (
         <p className="text-sm text-muted-foreground">No punches were recorded on this day.</p>

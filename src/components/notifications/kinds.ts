@@ -3,6 +3,7 @@ import {
   Bell,
   BellRing,
   Briefcase,
+  CakeSlice,
   CalendarCheck,
   CalendarClock,
   DoorOpen,
@@ -40,6 +41,8 @@ const ICONS: Record<string, { icon: LucideIcon; tone: Tone }> = {
   employee_request: { icon: FileText, tone: 'sapphire' },
   compensation: { icon: HandCoins, tone: 'violet' },
   holiday_work: { icon: PartyPopper, tone: 'amber' },
+  // Birthday Compensation (2026-11-25): the employee's placement moving on, and the head being asked to decide one.
+  birthday_compensation: { icon: CakeSlice, tone: 'violet' },
   approval: { icon: BadgeCheck, tone: 'sapphire' },
   approval_reminder: { icon: BellRing, tone: 'amber' },
   advance: { icon: Wallet, tone: 'sapphire' },

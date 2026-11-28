@@ -9,6 +9,7 @@ import {
 } from '@/lib/attendance-flags'
 import { HR_EDIT_CELL, countHrEdits, hrEditAria, hrEditMonthText, hrEditOf, hrEditStatusWord, isHrEditApplied } from '@/lib/hr-edit'
 import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
+import { IN_PROGRESS_LABEL, IN_PROGRESS_STATUS, displayStatus, isDayInProgress } from '@/lib/day-progress'
 import { HrEditBang, HrEditDetails } from '@/components/employee/HrEditDetails'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ const statusStyles: Record<string, string> = {
   holiday: 'bg-violet-bg text-violet border-violet-border',
   future: 'bg-transparent text-muted-foreground border-dashed border-foreground/15',
   no_record: 'bg-transparent text-muted-foreground border-transparent',
+  // Today while the shift is still running (lib/day-progress.ts): neutral, with a small live dot, no verdict colour.
+  [IN_PROGRESS_STATUS]: 'bg-neutral-bg text-neutral border-neutral-border',
 }
 
 // Phones (< 768px): the mobile app's calendar colours (src/lib/attendanceVisual.ts DAY_TONES - a soft fill and a deeper
@@ -39,6 +42,7 @@ const phoneStatusStyles: Record<string, string> = {
   holiday: 'max-md:border-transparent max-md:bg-[#FCE7F3] max-md:text-[#BE185D] max-md:dark:bg-[#DB277738] max-md:dark:text-[#F9A8D4]',
   future: 'max-md:border-solid max-md:border-input max-md:bg-muted max-md:text-muted-foreground',
   no_record: '',
+  [IN_PROGRESS_STATUS]: 'max-md:border-transparent max-md:bg-neutral-bg max-md:text-neutral',
 }
 
 const PHONE_SYMBOL: Record<string, LucideIcon> = {
@@ -126,6 +130,7 @@ export function AttendanceCalendarGrid({
   }
   // HR attendance edits (owner 2026-11-02): a "!" on every edited day, the "Edited by HR" colour once applied.
   const hrEditLine = hrEditMonthText(countHrEdits(days))
+  const anyInProgress = days.some((d) => isDayInProgress(d))
 
   return (
     <div>
@@ -146,7 +151,10 @@ export function AttendanceCalendarGrid({
           const markers = getDayMarkers(cell, policy)
           const dots = markers.filter((m) => !m.symbol)
           const compensation = markers.find((m) => m.symbol)
-          const StatusSymbol = PHONE_SYMBOL[cell.status]
+          // Today, its shift still running: "In progress" - neutral, a live dot instead of the Present / Half Day symbol.
+          const status = displayStatus(cell)
+          const live = status === IN_PROGRESS_STATUS
+          const StatusSymbol = PHONE_SYMBOL[status]
           const edit = hrEditOf(cell)
           // The cell and its "!" are siblings (never a button inside a button); the wrapper carries the entry animation
           // and the hover lift, so the "!" rises with its day.
@@ -173,8 +181,8 @@ export function AttendanceCalendarGrid({
                 ].filter(Boolean).join(', ')}
                 className={cn(
                   'focus-ring relative flex aspect-square w-full min-h-10 flex-col items-center justify-center rounded-lg border text-[13px] font-semibold tabular-nums transition-[transform,box-shadow] duration-200 group-hover:shadow-clay max-md:rounded-sm max-md:text-[11px] max-md:leading-none max-md:font-[800]',
-                  statusStyles[cell.status] ?? statusStyles.no_record,
-                  phoneStatusStyles[cell.status],
+                  statusStyles[status] ?? statusStyles.no_record,
+                  phoneStatusStyles[status],
                   // Owner 2026-11-02: a day whose HR edit was APPLIED takes the "Edited by HR" colour (after the status
                   // colours, so it wins on desktop and phones); the status stays in its name, its symbol and the dialog.
                   isHrEditApplied(edit) && HR_EDIT_CELL,
@@ -183,6 +191,12 @@ export function AttendanceCalendarGrid({
                 )}
               >
                 {StatusSymbol && <StatusSymbol className="hidden max-md:mb-px max-md:block max-md:size-3" strokeWidth={2.75} aria-hidden="true" />}
+                {live && (
+                  <span
+                    className="pulse-ring absolute top-1.5 left-1/2 size-1.5 -translate-x-1/2 rounded-full bg-current max-md:static max-md:mb-[3px] max-md:translate-x-0"
+                    aria-hidden="true"
+                  />
+                )}
                 <span>{dayNum}</span>
                 {compensation && (
                   <MarkerSymbol name={compensation.symbol} className={cn('absolute top-0.5 right-0.5 size-3 sm:top-1 sm:right-1 sm:size-4', compensation.text)} />
@@ -220,6 +234,14 @@ export function AttendanceCalendarGrid({
             <span className="text-muted-foreground">{DAY_STATUS_LABEL[s]}</span>
           </div>
         ))}
+        {anyInProgress && (
+          <div className="flex items-center gap-1.5" data-testid="in-progress-legend">
+            <span className={cn('grid size-3 place-items-center rounded-[4px] border max-md:size-3.5', statusStyles[IN_PROGRESS_STATUS], phoneStatusStyles[IN_PROGRESS_STATUS])} aria-hidden="true">
+              <span className="size-1 rounded-full bg-current" />
+            </span>
+            <span className="text-muted-foreground">{IN_PROGRESS_LABEL} (counted after your shift ends)</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5" data-testid="hr-edit-legend">
           <span className={cn('size-3 rounded-[4px] max-md:size-3.5', HR_EDIT_CELL)} aria-hidden="true" />
           <span className="text-muted-foreground">Edited by HR</span>

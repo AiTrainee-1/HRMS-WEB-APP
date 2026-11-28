@@ -9,6 +9,7 @@ import { fmtDay, type ApprovalCategory, type ApprovalItem, type ApprovalStatus }
 import { approvalPath, type PathStep } from './decider.ts'
 import { claimBadge, claimRaisedBy, describeClaim } from './holiday-work.ts'
 import { formatMinutes, formatShifts } from './compensation.ts'
+import { daysText, parseUse, placementFacts, placementNote, placementTypeLabel, type BdcUse } from './birthday-compensation.ts'
 import type { ApprovalProgress, PendingHolidayWorkClaim } from '../types/index.ts'
 
 const PUNCH_SLOT_LABEL: Record<string, string> = {
@@ -89,6 +90,8 @@ export function itemTypeLabel(category: ApprovalCategory, item: Item): string {
       return s(item.destination) ? `On-Duty · ${s(item.destination)}` : 'On-Duty'
     case 'holiday_work':
       return claimBadge(item as unknown as PendingHolidayWorkClaim)
+    case 'birthday_compensation':
+      return placementTypeLabel(birthdayUse(item))
     case 'resignation':
       return 'Resignation'
   }
@@ -127,6 +130,9 @@ export function itemDateLabel(category: ApprovalCategory, item: Item): string {
       const day = claim.workDate ? fmtDay(claim.workDate) : claim.workDateText || '—'
       return claim.dateWord ? `${claim.dateWord} ${day}` : day
     }
+    case 'birthday_compensation':
+      // the day the Birthday Compensation is placed on (its part is on the type chip)
+      return fmtDay(item.useDate ?? item.date)
     case 'resignation':
       return `Sent ${fmtDay(item.createdAt)}${s(item.lastWorkingDate) ? ` · Last day ${fmtDay(item.lastWorkingDate)}` : ''}`
   }
@@ -142,6 +148,7 @@ export function itemReason(category: ApprovalCategory, item: Item): string | nul
 export function itemNote(category: ApprovalCategory, item: Item): string | null {
   if (category === 'on_duty') return 'Rejecting voids the punches recorded under it.'
   if (category === 'holiday_work') return describeClaim(item as unknown as PendingHolidayWorkClaim).note || null
+  if (category === 'birthday_compensation') return placementNote(birthdayUse(item))
   if (category === 'permission' && s(item.capStatus)) {
     const limit = typeof item.monthlyLimit === 'number' ? item.monthlyLimit : 3
     return `Only the first ${limit} approved permissions each month are Allowed; any after that are Overdue / Excess.`
@@ -256,9 +263,12 @@ export function itemApproval(item: Item | null | undefined): ApprovalProgress | 
 export function headSteps(category: ApprovalCategory, item: Item, when?: (iso: string) => string | null): PathStep[] {
   const steps = approvalPath(itemApproval(item), s(item.createdAt) || null, when)
   if (!steps.length) return steps
-  // A compensation claim may be raised by HR or (since 2026-11-19) by the employee; an older backend: always HR.
+  // A compensation claim may be raised by HR or (since 2026-11-19) by the employee; an older backend: always HR. Birthday
+  // Compensation is placed by the employee or by HR (2026-11-25).
   const raisedByHr =
-    category === 'attendance' || (category === 'holiday_work' && claimRaisedBy(item as unknown as PendingHolidayWorkClaim) === 'hr')
+    category === 'attendance' ||
+    (category === 'holiday_work' && claimRaisedBy(item as unknown as PendingHolidayWorkClaim) === 'hr') ||
+    (category === 'birthday_compensation' && s(item.raisedByRole) === 'hr')
   const first = empName(item).split(/\s+/)[0]
   steps[0] = { ...steps[0], label: raisedByHr ? 'HR' : first && first !== 'Employee' ? first : 'Employee' }
   return steps
@@ -292,6 +302,31 @@ export function claimFacts(item: Item): [string, string][] {
     ['Shifts', v.kind !== 'ot_allowance' && shifts > 0 ? formatShifts(shifts) : null],
   ]
   return rows.filter((r): r is [string, string] => !!r[1])
+}
+
+// ---- Birthday Compensation (2026-11-25) --------------------------------------------------------------------------------
+
+/** The row read as a Birthday Compensation placement (every field defensively; the id always comes through). */
+export function birthdayUse(item: Item): BdcUse {
+  // parseUse only refuses a row without an id, which the lists never send; a stand-in id keeps such a card drawable
+  return parseUse(item) ?? (parseUse({ ...item, id: '?' }) as BdcUse)
+}
+
+/** The facts a head needs on a Birthday Compensation placement (the decision dialog's rows). */
+export function birthdayFacts(item: Item): [string, string][] {
+  return placementFacts(birthdayUse(item))
+}
+
+/** One line for its card: "Birthday 05 Mar 2026 · 0.50 day"; null without a birthday. */
+export function birthdayLine(item: Item): string | null {
+  const use = birthdayUse(item)
+  if (!use.birthday) return null
+  return `Birthday ${fmtDay(use.birthday)}${use.days ? ` · ${daysText(use.days)}` : ''}`
+}
+
+/** Who placed it: the employee themselves, or HR on their behalf; null when the row does not say. */
+export function birthdayRaisedBy(item: Item): 'employee' | 'hr' | null {
+  return birthdayUse(item).raisedByRole
 }
 
 /** One line for a claim's card: "Shift end 6:00 PM · Last punch 9:30 PM · 3 h 30 min extra"; null without overtime. */

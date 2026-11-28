@@ -24,6 +24,9 @@ const OWN_PAGE: Record<string, NotificationTarget> = {
   // Sent to the employee when their Department Head decides one of their compensation claims (any kind, raised by them
   // or by HR for them).
   compensation: { href: '/employee/compensation', label: 'View compensation' },
+  // A Birthday Compensation placement moved on (2026-11-25): the Birthday view of the Compensation page. (A head's
+  // "waiting for your approval" of the same type goes to Approvals by its wording, see notificationTarget below.)
+  birthday_compensation: { href: '/employee/compensation?tab=birthday', label: 'View birthday compensation' },
   leave: { href: '/employee/leave', label: 'View your leave' },
   permission: { href: '/employee/permissions', label: 'View your permissions' },
   casual_leave: { href: '/employee/casual-leave', label: 'View casual leave' },

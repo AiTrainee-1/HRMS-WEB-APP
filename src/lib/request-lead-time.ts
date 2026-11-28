@@ -10,6 +10,7 @@
 //   missing_punch date + punchTime              on_duty        date (the On-Duty day; else started / created)
 //   outpass       the day it was asked for (a gate pass is for going out now; `expectedReturnAt` = back by)
 //   holiday_work  workDate (a use-balance claim: useDate, the day off)
+//   birthday_compensation  useDate (the day the Birthday Compensation is placed on)
 //   resignation   lastWorkingDate
 // Days are counted in factory time (IST, UTC+5:30, no daylight saving), as the server counts them, whatever the
 // browser's own time zone.
@@ -96,6 +97,8 @@ export function requestedDay(category: ApprovalCategory, item: Item | null | und
       return factoryDay(item.createdAt)
     case 'holiday_work':
       return plain(item.kind === 'use_balance' ? (item.useDate ?? item.workDate) : (item.workDate ?? item.date))
+    case 'birthday_compensation':
+      return plain(item.useDate ?? item.date)
     case 'resignation':
       return plain(item.lastWorkingDate)
     default:

@@ -1,8 +1,8 @@
 import { apiRequest, ApiError } from './client'
 import { buildPunchForm, type PunchBody } from '@/lib/onduty-photos'
 import type { ClaimBody } from '@/lib/compensation-claims'
+import type { PlaceBody } from '@/lib/birthday-compensation'
 import type {
-  Advance,
   AttendanceMonthResponse,
   CasualLeaveEligibility,
   CasualLeaveRequest,
@@ -304,12 +304,8 @@ export const holidayApi = {
   list: (year: number) => apiRequest<Holiday[]>({ method: 'GET', url: '/holidays', params: { year } }),
 }
 
-// ---- Settlement / Advances ----
-// There is no dedicated "/settlement" endpoint — advances are the actual
-// settlement/loan mechanism, self-scoped automatically for an employee token.
-export const settlementApi = {
-  list: (employeeId: string) => apiRequest<Advance[]>({ method: 'GET', url: '/advances', params: { employeeId } }),
-}
+// ---- Loan & Advance ----
+// The employee's own Salary Advance / Term Loan applications live in api/pay-advances.ts (GET /my/advances ...).
 
 // ---- Resignation ----
 export const resignationApi = {
@@ -367,13 +363,19 @@ export const managerApi = {
   updateOutpassStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/outpass-requests/${id}/status`, data: { status, comment } }),
   // The Department Head's decision on a compensation claim of any kind (Sunday / holiday work, late-in allowance, extra
-  // hours, birthday credit, a day off from the balance), raised by HR or by the employee (holiday_work_views.py +
+  // hours, an older birthday credit, a day off from the balance), raised by HR or by the employee (holiday_work_views.py +
   // compensation_claims.py): approving credits the balance once / applies the allowance / takes the day off from the
   // balance; rejecting changes nothing else and is final. The reply says `credited` and (newer backend) an `effect`
   // sentence. A refusal (403 APPROVE_COMPENSATION_DISABLED, 403 not in your approval scope, 400 already decided, 409 the
   // day cannot take it any more, e.g. payroll locked) comes back with a user-ready `error`, surfaced as ApiError.message.
   updateHolidayWorkStatus: (id: string, status: RequestStatus, comment?: string) =>
     apiRequest({ method: 'PATCH', url: `/manager/holiday-work/${id}/status`, data: { status, comment } }),
+  // The Department Head's step on a Birthday Compensation placement (2026-11-25, birthday_compensation_views.py): the
+  // head decides first, then HR; an approval answers the use still `pending` with `statusKey` "pending_hr" and
+  // `approval.waitingFor` ["hr"]. A rejection needs its reason (400 remark_required). Refusals: 403
+  // APPROVE_COMPENSATION_DISABLED / outside the head's scope, 409 withdrawn, 409 use_refused (the day cannot take it).
+  updateBirthdayCompensationStatus: (id: string, status: RequestStatus, comment?: string) =>
+    apiRequest({ method: 'PATCH', url: `/manager/birthday-compensation/${id}/status`, data: { status, comment } }),
 }
 
 // ---- Compensation (staff only) ----
@@ -395,6 +397,24 @@ export const compensationApi = {
   /** Ask to use the balance as a day off: {date, shifts (0.25 .. 1.00), reason}. 201 = the new claim (kind use_balance). */
   useBalance: (body: { date: string; shifts: number; reason: string }) =>
     apiRequest<unknown>({ method: 'POST', url: '/employee/compensation/use', data: body }),
+}
+
+// ---- Birthday Compensation on a chosen date (staff only, 2026-11-25) ----
+// Returned unvalidated: hooks/useBirthdayCompensation.ts parses them with lib/birthday-compensation.ts (an older backend
+// has none of these routes: 404). A refusal comes back {error, code} (not_eligible, not_yet, lapsed, nothing_left,
+// date_not_allowed, locked, already_placed, switched_off, no_hod, not_pending ...) with a sentence for people, surfaced
+// as ApiError.message.
+export const birthdayCompensationApi = {
+  /** The signed-in employee's Birthday Compensation for the birthday of `year` (default: this year's). */
+  entitlement: (year?: number) =>
+    apiRequest<unknown>({ method: 'GET', url: '/employee/compensation/birthday', params: year ? { year } : undefined }),
+  /** Every placement, newest first: {items, total, isStaff}. */
+  uses: (status?: 'all' | 'pending' | 'approved' | 'rejected' | 'withdrawn') =>
+    apiRequest<unknown>({ method: 'GET', url: '/employee/compensation/birthday/uses', params: status ? { status } : undefined }),
+  /** Place it: {useDate, portion: full | first_half | second_half, reason?}. 201 = the new use. */
+  place: (body: PlaceBody) => apiRequest<unknown>({ method: 'POST', url: '/employee/compensation/birthday/uses', data: body }),
+  /** Withdraw a waiting placement the employee made: 200 = the use, withdrawn. */
+  withdraw: (id: number | string) => apiRequest<unknown>({ method: 'DELETE', url: `/employee/compensation/birthday/uses/${id}` }),
 }
 
 // ---- Department Head assignment (every employee) ----

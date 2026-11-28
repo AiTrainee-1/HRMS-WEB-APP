@@ -16,7 +16,7 @@ import { employeeApi } from '@/api/resources'
 import { useTodayAttendance } from '@/hooks/useTodayAttendance'
 import { useMyShiftSummary } from '@/hooks/useMyShiftSummary'
 import { useManagerStatus } from '@/hooks/useManagerStatus'
-import { useCalendarNow } from '@/hooks/useHomeSources'
+import { useAdvanceEligibilityLite, useCalendarNow } from '@/hooks/useHomeSources'
 import { lateInShown } from '@/lib/attendance-flags'
 import { dateKey, dayCountText, monthSnapshot } from '@/lib/home-attention'
 
@@ -53,6 +53,10 @@ export default function Dashboard() {
 
   const employee = profile.data
   const isStaff = employee?.employmentType === 'staff'
+  // Loan & Advance applying is for staff on a monthly salary (owner 2026-11-28): no apply quick action for a production
+  // employee (the server's `applyAvailable`; the same query as the attention card, so no extra request).
+  const advanceLite = useAdvanceEligibilityLite()
+  const loanApplyHidden = employee?.employmentType === 'production' || advanceLite.data?.applyAvailable === false
   const records = attendance.data?.records ?? []
   const snapshot = monthSnapshot(records, dateKey(now))
   const loadingMonth = attendance.isPending
@@ -148,6 +152,7 @@ export default function Dashboard() {
               punches={attendance.punches}
               shift={shiftQuery.data?.assignedShift}
               markers={attendance.markers}
+              dayProgress={attendance.dayProgress}
               loading={attendance.isPending || shiftQuery.isPending}
             />
           )}
@@ -179,14 +184,14 @@ export default function Dashboard() {
             <MonthCard snapshot={snapshot} records={records} policy={policy} now={now} loading={loadingMonth} />
           )}
         </div>
-        <QuickActionsPhone isStaff={isStaff} isProduction={employee?.employmentType === 'production'} />
+        <QuickActionsPhone isStaff={isStaff} isProduction={employee?.employmentType === 'production'} applyHidden={loanApplyHidden} />
         <div className="flex min-w-0 flex-col gap-6 max-md:gap-0">
           <LastSalaryCard />
           <NextHolidayCard now={now} />
         </div>
       </div>
 
-      <QuickActions isStaff={isStaff} isManager={isManager} pendingApprovals={flags?.pendingApprovalsCount ?? 0} />
+      <QuickActions isStaff={isStaff} isManager={isManager} pendingApprovals={flags?.pendingApprovalsCount ?? 0} applyHidden={loanApplyHidden} />
 
       {/* My Insights (owner 2026-11-25): after Quick Actions and Last salary, on the desktop and on phones alike. */}
       <InsightsSection />

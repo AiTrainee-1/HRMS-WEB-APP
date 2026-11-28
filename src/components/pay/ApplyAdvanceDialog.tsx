@@ -8,26 +8,39 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { EASE_OUT, RingMeter, SegmentedControl, SuccessCheck, staggerDelay } from '@/components/kit'
 import { ApiError } from '@/api/client'
+import { EarnedBasisPanel, TermLoanBlockNote } from '@/components/pay/AdvanceParts'
 import { useApplyAdvance } from '@/hooks/useAdvances'
 import { formatINR, formatINRCompact } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import {
+  ABSOLUTE_MAX_MONTHS,
   MAX_PURPOSE,
   TYPE_LABEL,
   amountOf,
+  applyForms,
+  applyRefusal,
+  approvalNoteText,
+  defaultTermMonths,
   formatAmountInput,
   limitMeter,
   monthLabel,
   planSummary,
+  ordinal,
   purposeProblem,
+  reviewSentence,
+  salaryAdvanceDaysOf,
   salaryAdvanceProblem,
+  salaryAdvanceThroughDay,
   salaryAdvanceWindow,
   termAmountProblem,
+  termLoanLimitText,
   termLoanWindow,
+  termMonthChoices,
   termPlan,
   windowChip,
   type AdvanceEligibility,
   type AdvanceType,
+  type ApplyField,
   type MyAdvance,
   type PlanItem,
 } from '@/lib/advances'
@@ -76,9 +89,29 @@ function PlanBars({ plan }: { plan: readonly PlanItem[] }) {
   )
 }
 
+/** The months grid's columns: one per choice up to 6 (a phone row holds 6), then 6 on phones and one per choice from
+ *  640px. Whole class names, so Tailwind sees them. */
+const MONTH_COLS: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+  6: 'grid-cols-6',
+  7: 'grid-cols-6 sm:grid-cols-7',
+  8: 'grid-cols-6 sm:grid-cols-8',
+  9: 'grid-cols-6 sm:grid-cols-9',
+  10: 'grid-cols-6 sm:grid-cols-10',
+  11: 'grid-cols-6 sm:grid-cols-11',
+  12: 'grid-cols-6 sm:grid-cols-12',
+}
+
 /**
- * Salary Advance / Term Loan application: the form (live ₹ formatting, the 60% ring, the months and EMI preview), a
- * confirmation in plain words, then the success state. The server decides; its refusal is shown in its own words.
+ * Salary Advance / Term Loan application: the form (live ₹ formatting, the limit ring with what the limit is taken from -
+ * a % of the salary earned 1st-20th - the Term Loan's limit, months and EMI preview), a confirmation in plain words, then
+ * the success state. The server decides; a refusal is shown in its own words, next to the field it names (`field`), and
+ * any answer from the server takes the employee back to the form with the eligibility asked again (409 duplicate /
+ * active / yearly, 400 window_closed / over_limit, 403 service ...).
  */
 export function ApplyAdvanceDialog({
   open,
@@ -101,52 +134,73 @@ export function ApplyAdvanceDialog({
   const [step, setStep] = React.useState<Step>('form')
   const [showErrors, setShowErrors] = React.useState(false)
   const [serverError, setServerError] = React.useState<string | null>(null)
+  // A refusal about one input (`field` of the server's answer): shown next to that input until it is changed.
+  const [serverField, setServerField] = React.useState<{ field: ApplyField; text: string } | null>(null)
   const [created, setCreated] = React.useState<MyAdvance | null>(null)
   const ids = React.useId()
 
-  // Each form's window (owner 2026-11-25): a Salary Advance only from the 20th to the 22nd ("Opens 20 Dec · in 25 days"
-  // outside it), a Term Loan on any day ("Any day"). A form outside its window cannot be chosen while the other one is
-  // open (an older server's one shared window closes both: then both stay choosable, to work out the amount).
+  // The forms this employee may use: a Term Loan is for staff only (the dialog is never opened when applying is not
+  // available at all).
+  const forms = applyForms(eligibility)
+  const termOffered = forms.includes('term')
+  // Each form's window: a Salary Advance only on its days ("Opens 21 Dec · in 25 days" outside them), a Term Loan on
+  // any day ("Any day"). A form outside its window cannot be chosen while the other one is open (an older server's one
+  // shared window closes both: then both stay choosable, to work out the amount).
   const chips = { general: windowChip(salaryAdvanceWindow(eligibility)), term: windowChip(termLoanWindow(eligibility)) }
-  const tabClosed = (k: AdvanceType) => !chips[k].open && chips[k === 'general' ? 'term' : 'general'].open
+  const tabClosed = (k: AdvanceType) => !chips[k].open && termOffered && chips[k === 'general' ? 'term' : 'general'].open
 
   // A fresh form every time the dialog opens (on the form that is open now when the asked one is closed).
   const [wasOpen, setWasOpen] = React.useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
     if (open) {
-      setKind(tabClosed(initialType) ? (initialType === 'general' ? 'term' : 'general') : initialType)
+      const asked = termOffered ? initialType : 'general'
+      setKind(tabClosed(asked) ? (asked === 'general' ? 'term' : 'general') : asked)
       setAmountText('')
-      setMonths(Math.min(6, eligibility.termLoan.maxMonths))
+      setMonths(defaultTermMonths(eligibility.termLoan))
       setPurpose('')
       setStep('form')
       setShowErrors(false)
       setServerError(null)
+      setServerField(null)
       setCreated(null)
     }
   }
 
   const g = eligibility.salaryAdvance
   const t = eligibility.termLoan
+  const earned = g.earned ?? null
+  // The server's over_limit sentence names the earned figures' own last day; the rules' day otherwise.
+  const throughDay = earned?.throughDay ?? salaryAdvanceThroughDay(eligibility)
   const section = kind === 'general' ? g : t
   const amount = amountOf(amountText)
   const amountError =
     kind === 'general'
-      ? salaryAdvanceProblem(amountText, g.limit, eligibility.monthlySalary, g.percent)
-      : termAmountProblem(amountText, t.minAmount, t.maxAmount)
+      ? salaryAdvanceProblem(amountText, g.limit, earned?.earnedAmount ?? null, earned?.percent ?? g.percent, throughDay)
+      : termAmountProblem(amountText, t.minAmount, t.limit, t.limitPercent, t.monthlySalary)
   const purposeError = purposeProblem(purpose)
   const meter = limitMeter(amount, g.limit)
-  const plan = kind === 'term' && Number.isFinite(amount) && amount >= t.minAmount ? termPlan(amount, months, t.firstDeductionMonth, t.firstDeductionYear) : []
-  const monthOptions = Array.from({ length: Math.max(0, t.maxMonths - t.minMonths + 1) }, (_, i) => t.minMonths + i)
+  const plan =
+    kind === 'term' && Number.isFinite(amount) && amount > 0 && amount >= t.minAmount
+      ? termPlan(amount, months, t.firstDeductionMonth, t.firstDeductionYear)
+      : []
+  const monthOptions = termMonthChoices(t)
+  const termLimit = termLoanLimitText(t)
+  const fieldError = (field: ApplyField) => (serverField?.field === field ? serverField.text : null)
+  const amountShown = fieldError('amount') ?? (showErrors ? amountError : null)
+  const purposeShown = fieldError('purpose') ?? (showErrors ? purposeError : null)
+  const monthsShown = fieldError('repaymentMonths')
 
   const what =
     kind === 'general'
       ? `${formatINR(amount)} Salary Advance, deducted in full from your ${g.deductionLabel} salary.`
       : `${formatINR(amount)} Term Loan over ${months} ${months === 1 ? 'month' : 'months'}: ${planSummary(plan)}.`
+  const note = approvalNoteText(eligibility.method, kind)
 
   function switchKind(k: AdvanceType) {
     setKind(k)
     setServerError(null)
+    setServerField(null)
     setShowErrors(false)
   }
 
@@ -154,12 +208,14 @@ export function ApplyAdvanceDialog({
     e.preventDefault()
     setShowErrors(true)
     setServerError(null)
+    setServerField(null)
     if (!section.canApply || amountError || purposeError) return
     setStep('confirm')
   }
 
   async function send() {
     setServerError(null)
+    setServerField(null)
     try {
       const row = await apply.mutateAsync({
         advanceType: kind,
@@ -170,17 +226,22 @@ export function ApplyAdvanceDialog({
       setCreated(row)
       setStep('done')
     } catch (err) {
-      // The server's own sentence ("You already have a Salary Advance for October 2026..."), or a plain fallback.
-      setServerError(
-        err instanceof ApiError && err.status !== undefined && err.message
-          ? err.message
-          : 'Could not send your application. Check your connection and try again.',
-      )
+      // The server's own sentence ("You already have a Salary Advance for October 2026..."), next to the field it names.
+      // Any answer from the server goes back to the form: the eligibility is asked again (useApplyAdvance), so a form that
+      // can no longer be sent shows why. Nothing answered: stay here, so Send can be tried again.
+      const refusal = applyRefusal(err instanceof ApiError ? err : null)
+      if (refusal.toForm) {
+        setStep('form')
+        setShowErrors(true)
+      }
+      if (refusal.field && refusal.field !== 'advanceType') setServerField({ field: refusal.field, text: refusal.text })
+      else setServerError(refusal.text)
     }
   }
 
   const amountErrId = `${ids}-amount-err`
   const purposeErrId = `${ids}-purpose-err`
+  const monthsErrId = `${ids}-months-err`
   const blocked = !section.canApply
 
   return (
@@ -191,9 +252,7 @@ export function ApplyAdvanceDialog({
             <SuccessCheck size={64} label="Application sent" />
             <DialogTitle>Your application was sent to HR</DialogTitle>
             <DialogDescription className="max-w-sm">{what}</DialogDescription>
-            <p className="max-w-sm text-[13px] text-muted-foreground">
-              HR may approve a smaller amount or change the month deductions start. You can follow it under Your applications.
-            </p>
+            <p className="max-w-sm text-[13px] text-muted-foreground">{note} You can follow it under Your applications.</p>
             <div className="mt-2 flex flex-wrap justify-center gap-2 max-md:w-full max-md:flex-col-reverse">
               {created && (
                 <Button
@@ -216,7 +275,7 @@ export function ApplyAdvanceDialog({
           <>
             <DialogHeader>
               <DialogTitle>Send to HR?</DialogTitle>
-              <DialogDescription>Check the details. Nothing is deducted until HR approves.</DialogDescription>
+              <DialogDescription>Check the details. Nothing is deducted until it is approved.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 rounded-xl border border-primary/25 bg-primary/[0.04] p-4">
               <div className="flex items-center gap-3">
@@ -235,8 +294,7 @@ export function ApplyAdvanceDialog({
               {eligibility.approvalPath && <p className="text-[12.5px] text-muted-foreground">Who approves: {eligibility.approvalPath}</p>}
             </div>
             <p className="flex items-start gap-2 text-[12.5px] text-muted-foreground">
-              <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> HR may approve a smaller amount or change the month deductions
-              start.
+              <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> {note}
             </p>
             {serverError && <ServerError text={serverError} />}
             <DialogFooter>
@@ -252,40 +310,42 @@ export function ApplyAdvanceDialog({
         ) : (
           <form onSubmit={review} noValidate className="flex flex-col gap-5">
             <DialogHeader>
-              <DialogTitle>Apply for an advance or loan</DialogTitle>
+              <DialogTitle>{termOffered ? 'Apply for a Salary Advance or a Term Loan' : 'Apply for a Salary Advance'}</DialogTitle>
               <DialogDescription>
-                HR approves every application. A Salary Advance can be applied for from the 20th to the 22nd of each month, a Term Loan on any
-                day.
+                {reviewSentence(eligibility.method)} A Salary Advance can be applied for on {salaryAdvanceDaysOf(eligibility)} of each month
+                {termOffered ? ', a Term Loan on any day.' : '.'}
               </DialogDescription>
             </DialogHeader>
 
-            <SegmentedControl
-              ariaLabel="What to apply for"
-              fullWidth
-              value={kind}
-              onChange={switchKind}
-              options={(['general', 'term'] as const).map((k) => ({
-                value: k,
-                icon: k === 'general' ? Wallet : Landmark,
-                disabled: tabClosed(k),
-                ariaLabel: `${TYPE_LABEL[k]}, ${chips[k].text}`,
-                label: (
-                  <span className="flex flex-col items-start leading-tight">
-                    <span>{TYPE_LABEL[k]}</span>
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1 text-[10.5px] font-bold',
-                        kind === k ? 'text-white/85' : chips[k].open ? 'text-approved' : 'text-waiting',
-                      )}
-                      data-testid={`settlement-tab-${k}-window`}
-                    >
-                      {tabClosed(k) && <LockKeyhole className="size-2.5" aria-hidden="true" />}
-                      {chips[k].text}
+            {forms.length > 1 && (
+              <SegmentedControl
+                ariaLabel="What to apply for"
+                fullWidth
+                value={kind}
+                onChange={switchKind}
+                options={forms.map((k) => ({
+                  value: k,
+                  icon: k === 'general' ? Wallet : Landmark,
+                  disabled: tabClosed(k),
+                  ariaLabel: `${TYPE_LABEL[k]}, ${chips[k].text}`,
+                  label: (
+                    <span className="flex flex-col items-start leading-tight">
+                      <span>{TYPE_LABEL[k]}</span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 text-[10.5px] font-bold',
+                          kind === k ? 'text-white/85' : chips[k].open ? 'text-approved' : 'text-waiting',
+                        )}
+                        data-testid={`settlement-tab-${k}-window`}
+                      >
+                        {tabClosed(k) && <LockKeyhole className="size-2.5" aria-hidden="true" />}
+                        {chips[k].text}
+                      </span>
                     </span>
-                  </span>
-                ),
-              }))}
-            />
+                  ),
+                }))}
+              />
+            )}
 
             {blocked && section.reason && (
               <div
@@ -297,6 +357,18 @@ export function ApplyAdvanceDialog({
                 <div>
                   <p className="hidden max-md:block max-md:text-[13px] max-md:font-semibold">You cannot send this application right now</p>
                   <p className="max-md:text-[12px] max-md:leading-[17px]">{section.reason}</p>
+                  {/* Term Loan: the next step by its code - the service bar (service only), the date it can be asked for
+                      again, or the request still waiting / the loan being repaid (its details open instead of this form). */}
+                  {kind === 'term' && (
+                    <TermLoanBlockNote
+                      eligibility={eligibility}
+                      showReason={false}
+                      onOpen={(id) => {
+                        onOpenChange(false)
+                        onSeeRecord(id)
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -327,7 +399,9 @@ export function ApplyAdvanceDialog({
                   </span>
                   <div className="max-md:min-w-0 max-md:flex-1">
                     <p className="max-md:text-[10.5px] max-md:font-bold max-md:tracking-[0.03em] max-md:text-muted-foreground max-md:uppercase">Loan amount</p>
-                    <p className="max-md:mt-0.5 max-md:text-[12px] max-md:text-muted-foreground">From {formatINR(t.minAmount)}. Whole rupees only.</p>
+                    <p className="max-md:mt-0.5 max-md:text-[12px] max-md:text-muted-foreground">
+                      {termLimit ? `${termLimit}, from ${formatINR(t.minAmount)}.` : `From ${formatINR(t.minAmount)}.`} Whole rupees only.
+                    </p>
                   </div>
                 </div>
               )}
@@ -346,15 +420,24 @@ export function ApplyAdvanceDialog({
                     autoComplete="off"
                     placeholder={kind === 'general' ? (g.limit ? formatAmountInput(String(g.limit)) : '0') : formatAmountInput(String(t.minAmount))}
                     value={amountText}
-                    onChange={(e) => setAmountText(formatAmountInput(e.target.value))}
-                    aria-invalid={showErrors && !!amountError}
-                    aria-describedby={showErrors && amountError ? amountErrId : undefined}
+                    onChange={(e) => {
+                      setAmountText(formatAmountInput(e.target.value))
+                      if (serverField?.field === 'amount') setServerField(null)
+                    }}
+                    aria-invalid={!!amountShown}
+                    aria-describedby={amountShown ? amountErrId : undefined}
                     className="h-12 pl-8 text-[18px] font-semibold tabular-nums max-md:h-[60px] max-md:rounded-xl max-md:border-[1.5px] max-md:pl-10 max-md:font-[family-name:var(--font-display)] max-md:text-[28px] max-md:font-bold"
                   />
                 </div>
-                {showErrors && amountError && (
+                {amountShown && (
                   <p id={amountErrId} className="text-[12.5px] font-semibold text-rejected">
-                    {amountError}
+                    {amountShown}
+                  </p>
+                )}
+                {/* The Term Loan's limit (a % of the monthly salary, 2026-11-27) and minimum; phones say it in the header above. */}
+                {kind === 'term' && !amountShown && (
+                  <p className="text-[12.5px] text-muted-foreground max-md:hidden" data-testid="term-loan-limit">
+                    {termLimit ? `${termLimit}, from ${formatINR(t.minAmount)}.` : `From ${formatINR(t.minAmount)}.`}
                   </p>
                 )}
               </div>
@@ -381,7 +464,10 @@ export function ApplyAdvanceDialog({
                       <>
                         <p>
                           Up to <span className="font-bold">{formatINR(g.limit)}</span>
-                          {eligibility.monthlySalary ? ` (${g.percent}% of your monthly salary of ${formatINR(eligibility.monthlySalary)})` : ''}.
+                          {earned
+                            ? ` (${g.percent}% of the ${formatINR(earned.earnedAmount)} you earned ${earned.final ? '' : 'so far '}from the 1st to the ${ordinal(throughDay)})`
+                            : ''}
+                          .
                         </p>
                         <p className={cn('mt-1 font-semibold', meter.state === 'over' ? 'text-rejected' : meter.state === 'near' ? 'text-waiting' : 'text-muted-foreground')}>
                           {meter.state === 'over'
@@ -403,7 +489,13 @@ export function ApplyAdvanceDialog({
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
                     <Label id={`${ids}-months`}>Repay in</Label>
-                    <div role="group" aria-labelledby={`${ids}-months`} className="grid grid-cols-6 gap-1.5 sm:grid-cols-12">
+                    {/* As many columns as months to choose from (1 to Settings' most, 6 by default), so the row is full. */}
+                    <div
+                      role="group"
+                      aria-labelledby={`${ids}-months`}
+                      aria-describedby={monthsShown ? monthsErrId : undefined}
+                      className={cn('grid gap-1.5', MONTH_COLS[Math.min(ABSOLUTE_MAX_MONTHS, Math.max(1, monthOptions.length))])}
+                    >
                       {monthOptions.map((m) => {
                         const on = m === months
                         return (
@@ -412,7 +504,10 @@ export function ApplyAdvanceDialog({
                             type="button"
                             aria-pressed={on}
                             aria-label={`${m} ${m === 1 ? 'month' : 'months'}`}
-                            onClick={() => setMonths(m)}
+                            onClick={() => {
+                              setMonths(m)
+                              if (serverField?.field === 'repaymentMonths') setServerField(null)
+                            }}
                             className={cn(
                               'font-label focus-ring grid min-h-11 place-items-center rounded-lg border text-[14px] font-bold tabular-nums transition-colors max-md:content-center max-md:py-1.5 max-md:font-[family-name:var(--font-display)] max-md:text-[15px] sm:min-h-10',
                               on ? 'border-transparent bg-brand-gradient text-white shadow-clay-sm' : 'border-foreground/15 hover:border-primary/50 hover:bg-primary/10',
@@ -427,6 +522,11 @@ export function ApplyAdvanceDialog({
                         )
                       })}
                     </div>
+                    {monthsShown && (
+                      <p id={monthsErrId} className="text-[12.5px] font-semibold text-rejected">
+                        {monthsShown}
+                      </p>
+                    )}
                     <p className="text-[12.5px] text-muted-foreground">
                       {months} {months === 1 ? 'month' : 'months'}, starting from your {t.firstDeductionLabel} salary.
                     </p>
@@ -454,12 +554,17 @@ export function ApplyAdvanceDialog({
                       </>
                     ) : (
                       <p className="text-[13px] text-muted-foreground">
-                        Type an amount from {formatINR(t.minAmount)} to see the monthly EMI and when each one is deducted.
+                        Type an amount from {formatINR(t.minAmount)}
+                        {t.limit != null && t.limit >= t.minAmount ? ` up to ${formatINR(t.limit)}` : ''} to see the monthly EMI and when each
+                        one is deducted.
                       </p>
                     )}
                   </div>
                 </div>
               )}
+
+              {/* 2026-11-26: what the limit is taken from (earned 1st-20th, working days, monthly salary, the limit). */}
+              {kind === 'general' && <EarnedBasisPanel earned={earned} monthlySalary={eligibility.monthlySalary} />}
 
               <div className="flex flex-col gap-2">
                 <div className="flex items-baseline justify-between gap-3">
@@ -471,24 +576,29 @@ export function ApplyAdvanceDialog({
                 <Textarea
                   id={`${ids}-purpose`}
                   value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
+                  onChange={(e) => {
+                    setPurpose(e.target.value)
+                    if (serverField?.field === 'purpose') setServerField(null)
+                  }}
                   placeholder="For example: school fees, medical bills"
                   rows={3}
-                  aria-invalid={showErrors && !!purposeError}
-                  aria-describedby={showErrors && purposeError ? purposeErrId : undefined}
+                  aria-invalid={!!purposeShown}
+                  aria-describedby={purposeShown ? purposeErrId : undefined}
                 />
-                {showErrors && purposeError && (
+                {purposeShown && (
                   <p id={purposeErrId} className="text-[12.5px] font-semibold text-rejected">
-                    {purposeError}
+                    {purposeShown}
                   </p>
                 )}
               </div>
               <div className="hidden max-md:flex max-md:flex-col max-md:gap-1.5 max-md:rounded-xl max-md:bg-muted max-md:p-3">
                 <p className="max-md:text-[13px] max-md:font-semibold">What happens next</p>
                 {[
-                  'HR reviews your application.',
-                  'HR may approve a smaller amount or change the month deductions start. You will see both amounts.',
-                  'You get a notification when HR decides. Follow it any time under Your applications.',
+                  eligibility.method === 'automation'
+                    ? 'HR reviews your application first; then it is under review for approval.'
+                    : 'HR reviews your application.',
+                  `${note} You will see both amounts.`,
+                  'You get a notification when it is decided. Follow it any time under Your applications.',
                 ].map((line) => (
                   <p key={line} className="max-md:flex max-md:items-start max-md:gap-2 max-md:text-[12px] max-md:leading-[17px] max-md:text-secondary-foreground">
                     <CheckCircle2 className="max-md:mt-px max-md:size-3.5 max-md:shrink-0 max-md:text-ring" aria-hidden="true" />
@@ -509,7 +619,7 @@ export function ApplyAdvanceDialog({
                 {blocked ? (
                   <>
                     <span className="max-md:hidden">Review</span>
-                    <span className="hidden max-md:inline">Not open right now</span>
+                    <span className="hidden max-md:inline">{chips[kind].open ? 'Not available now' : 'Not open right now'}</span>
                   </>
                 ) : (
                   'Review'

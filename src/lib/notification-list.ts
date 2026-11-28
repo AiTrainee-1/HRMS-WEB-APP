@@ -155,7 +155,10 @@ const KIND_TITLE: Record<string, string> = {
   compensation: 'Compensation update',
   // to the Department Head: a compensation claim waits for their decision
   holiday_work: 'Compensation approval',
-  advance: 'Advance update',
+  // both ways (2026-11-25): the employee's placement moved on / was decided, or it waits for the head's decision
+  birthday_compensation: 'Birthday compensation',
+  // a Salary Advance / Term Loan was decided (owner 2026-11-28: the feature is "Loan & Advance" everywhere)
+  advance: 'Loan & Advance update',
   approval: 'Request update',
   approval_reminder: 'Reminder',
   outpass: 'Outpass',

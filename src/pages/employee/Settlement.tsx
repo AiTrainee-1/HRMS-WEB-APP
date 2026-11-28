@@ -19,7 +19,7 @@ import {
   useRequestViews,
   type ViewOptions,
 } from '@/components/kit'
-import { AdvanceCard, AdvanceDetailDialog, RulesCard, WindowBanner } from '@/components/pay/AdvanceParts'
+import { AdvanceCard, AdvanceDetailDialog, RulesCard, TermLoanBlockNote, WindowBanner } from '@/components/pay/AdvanceParts'
 import { ApplyAdvanceDialog } from '@/components/pay/ApplyAdvanceDialog'
 import { phoneChipClass, phoneCountClass } from '@/components/pay/phone'
 import { FocusMissNote } from '@/components/requests/FocusMissNote'
@@ -29,10 +29,19 @@ import { focusKey } from '@/lib/focus-item'
 import { formatINR } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import {
+  applyForms,
   filterByType,
   opensOnText,
+  ordinal,
   recordTotals,
+  reviewSentence,
+  salaryAdvanceBasisText,
+  salaryAdvanceDaysOf,
+  salaryAdvancePercent,
+  salaryAdvanceThroughDay,
   salaryAdvanceWindow,
+  termLoanLimitText,
+  termLoanServiceMonths,
   termLoanWindow,
   typeCounts,
   windowChip,
@@ -46,17 +55,19 @@ import {
 const rupees = (n: number) => formatINR(Math.round(n))
 
 /**
- * Each form's window as its card and tab show it (owner 2026-11-25): a Salary Advance only from the 20th to the 22nd
- * ("Opens 20 Dec · in 25 days" outside it), a Term Loan on any day ("Any day"). An older server's one window holds both.
+ * Each form's window as its card and tab show it (owner 2026-11-26): a Salary Advance only on the 21st and 22nd
+ * ("Opens 21 Dec · in 25 days" outside it), a Term Loan on any day ("Any day"). An older server's one window holds both.
  */
 function formWindow(e: AdvanceEligibility, type: AdvanceType) {
   const w = type === 'general' ? salaryAdvanceWindow(e) : termLoanWindow(e)
   return { chip: windowChip(w), opens: opensOnText(w) }
 }
 
-/** Advances & Loans: apply for a Salary Advance (the 20th to the 22nd of each month) or a Term Loan (any day; owner
- *  2026-11-25) and follow every application, repayment and deduction. The server decides every rule
- *  (mobile_settlement_views.py, 400 window_closed outside the window); this page words it. */
+/** Loan & Advance (owner 2026-11-28: the one name everywhere): apply for a Salary Advance (on the days Settings names, the
+ *  21st and 22nd by default, up to a % of the salary earned from the 1st to the 20th) or a Term Loan (staff, any day,
+ *  after the months of service, up to a % of the monthly salary) and follow every application, repayment and deduction.
+ *  The server decides every rule (mobile_settlement_views.py); this page words it, with the server's numbers. A
+ *  production employee (`applyAvailable` false) sees the history only, with the server's reason. */
 export default function Settlement() {
   const records = useMyAdvances()
   const eligibility = useAdvanceEligibility()
@@ -88,11 +99,21 @@ export default function Settlement() {
     },
   })
 
-  const canApplyAny = !!e && (e.salaryAdvance.canApply || e.termLoan.canApply)
+  // The forms this employee may use: none for a production employee (`applyAvailable` false), no Term Loan when it is
+  // for staff only.
+  const forms = e ? applyForms(e) : []
+  const termOffered = forms.includes('term')
+  const canApplyAny = !!e && ((forms.includes('general') && e.salaryAdvance.canApply) || (termOffered && e.termLoan.canApply))
+  // "the 21st and 22nd" and "50% of the salary you earned from the 1st to the 20th" from Settings (the defaults when the
+  // server does not say).
+  const saDays = salaryAdvanceDaysOf(e)
   const startApply = (type?: AdvanceType) => {
-    if (!e) return
+    if (!e || forms.length === 0) return
     // The header's Apply: the form that can be sent now (a Salary Advance outside its window cannot).
-    setApplyType(type ?? (e.salaryAdvance.canApply ? 'general' : e.termLoan.canApply || formWindow(e, 'general').chip.open ? 'term' : 'general'))
+    setApplyType(
+      type ??
+        (e.salaryAdvance.canApply || !termOffered ? 'general' : e.termLoan.canApply || formWindow(e, 'general').chip.open ? 'term' : 'general'),
+    )
   }
 
   return (
@@ -100,22 +121,19 @@ export default function Settlement() {
       <PageShell>
         <PageHero
           icon={<FileStack />}
-          title={
-            <>
-              <span className="max-md:hidden">Advances & Settlement</span>
-              <span className="hidden max-md:inline">Advances & Loans</span>
-            </>
-          }
+          title="Loan & Advance"
           subtitle={
             <>
               <span className="max-md:hidden">
-                Ask HR for a Salary Advance (20th to 22nd of each month) or a Term Loan (any day), and see what is left to repay.
+                {!e || forms.length > 0
+                  ? `Ask HR for a Salary Advance (${saDays} of each month)${termOffered || !e ? ' or a Term Loan (any day),' : ''} and see what is left to repay.`
+                  : 'Your Salary Advance and Term Loan requests, and what is left to repay.'}
               </span>
               <span className="hidden max-md:inline">Salary Advance · Term Loan</span>
             </>
           }
           actions={
-            e ? (
+            e && forms.length > 0 ? (
               <Button className="min-h-11 max-md:h-9 max-md:min-h-9 max-md:px-3.5 max-md:text-[13px] sm:min-h-9" onClick={() => startApply()} disabled={!canApplyAny}>
                 <Plus aria-hidden="true" /> Apply
               </Button>
@@ -125,18 +143,32 @@ export default function Settlement() {
             rows ? (
               <>
                 <div className="hidden max-md:col-span-2 max-md:flex max-md:flex-col max-md:gap-1.5">
-                  <p className="max-md:font-[family-name:var(--font-display)] max-md:text-[20px] max-md:leading-7 max-md:font-bold">Need money before payday?</p>
-                  <p className="max-md:text-[13px] max-md:leading-[19px] max-md:text-secondary-foreground">
-                    A <span className="max-md:font-semibold max-md:text-foreground">Salary Advance</span> is up to {e?.salaryAdvance.percent ?? 60}% of
-                    your monthly salary, taken back in full from one month&apos;s salary. You can apply for it from the 20th to the 22nd of each
-                    month. A <span className="max-md:font-semibold max-md:text-foreground">Term Loan</span> is a larger amount you repay in monthly
-                    EMIs ({e ? `${e.termLoan.minMonths} to ${e.termLoan.maxMonths}` : '1 to 12'} months), and you can apply for it on any day. HR
-                    approves every application.
-                  </p>
+                  {e && forms.length === 0 ? (
+                    <p className="max-md:text-[13px] max-md:leading-[19px] max-md:text-secondary-foreground">
+                      {e.applyUnavailableReason ?? 'You cannot apply for a Salary Advance or a Term Loan. Your earlier requests stay here.'}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="max-md:font-[family-name:var(--font-display)] max-md:text-[20px] max-md:leading-7 max-md:font-bold">Need money before payday?</p>
+                      <p className="max-md:text-[13px] max-md:leading-[19px] max-md:text-secondary-foreground">
+                        A <span className="max-md:font-semibold max-md:text-foreground">Salary Advance</span> is up to {salaryAdvanceBasisText(e)},
+                        taken back in full from that month&apos;s salary. You can apply for it on {saDays} of each month.
+                        {termOffered || !e ? (
+                          <>
+                            {' '}
+                            A <span className="max-md:font-semibold max-md:text-foreground">Term Loan</span> is a larger amount you repay in monthly
+                            EMIs ({e ? `${e.termLoan.minMonths} to ${e.termLoan.maxMonths}` : '1 to 6'} months), and you can apply for it on any
+                            day once you have {termLoanServiceMonths(e)} months of service.
+                          </>
+                        ) : null}{' '}
+                        {reviewSentence(e?.method ?? 'normal')}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <KpiTile className="max-md:hidden" label="Still owed" value={totals.owed} format={rupees} icon={TrendingDown} tone="rose" hint={totals.active ? `on ${totals.active} being repaid` : 'nothing to repay'} />
                 <KpiTile className="max-md:hidden" label="Repaid so far" value={totals.repaid} format={rupees} icon={Wallet} tone="emerald" hint="taken from your salary" />
-                <KpiTile className="max-md:hidden" label="Waiting for HR" value={totals.waiting} icon={Clock} tone="amber" hint={totals.waiting === 1 ? 'application' : 'applications'} />
+                <KpiTile className="max-md:hidden" label="Waiting" value={totals.waiting} icon={Clock} tone="amber" hint={totals.waiting === 1 ? 'application not decided yet' : 'applications not decided yet'} />
                 <KpiTile
                   className="max-md:hidden"
                   label="Advance limit"
@@ -145,11 +177,13 @@ export default function Settlement() {
                   icon={HandCoins}
                   tone="sapphire"
                   hint={
-                    e?.salaryAdvance.limit != null
-                      ? `${e.salaryAdvance.percent}% of your monthly salary`
-                      : e
-                        ? 'not available: see Apply below'
-                        : undefined
+                    e && forms.length === 0
+                      ? 'for staff on a monthly salary'
+                      : e?.salaryAdvance.limit != null
+                        ? `${salaryAdvancePercent(e)}% of the salary earned 1st–${ordinal(salaryAdvanceThroughDay(e))}`
+                        : e
+                          ? 'not available: see Apply below'
+                          : undefined
                   }
                 />
               </>
@@ -176,25 +210,38 @@ export default function Settlement() {
               <SkeletonBlock className="h-2 w-full rounded-full" />
             </div>
           </GlassCard>
+        ) : forms.length === 0 ? (
+          // A production employee (owner 2026-11-28): no applying here, only the history below - and the server's reason.
+          <GlassCard className="flex items-start gap-3 max-md:p-3.5!" data-testid="settlement-apply-unavailable">
+            <Info className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <p className="text-[13.5px] text-muted-foreground">
+              {e.applyUnavailableReason ?? 'You cannot apply for a Salary Advance or a Term Loan. Your earlier requests stay here.'}
+            </p>
+          </GlassCard>
         ) : (
           <WindowBanner eligibility={e} />
         )}
 
-        {e && (
+        {e && forms.length > 0 && (
           <section aria-labelledby="apply-title" className="flex flex-col gap-4 max-md:gap-2.5">
             <SectionHeader
               className="max-md:hidden"
               id="apply-title"
               icon={Plus}
               title="Apply"
-              description="Pick what you need. A Salary Advance opens from the 20th to the 22nd; a Term Loan any day. HR decides every application."
+              description={
+                termOffered
+                  ? `Pick what you need. A Salary Advance opens on ${saDays}; a Term Loan any day, after ${termLoanServiceMonths(e)} months of service. ${reviewSentence(e.method)}`
+                  : `A Salary Advance opens on ${saDays}. ${reviewSentence(e.method)}`
+              }
             />
             <h2 className="sr-only hidden max-md:block">Apply</h2>
             <div className="grid gap-4 max-md:grid-cols-2 max-md:gap-3 md:grid-cols-2">
-              <ApplyOption type="general" eligibility={e} onApply={() => startApply('general')} />
-              <ApplyOption type="term" eligibility={e} onApply={() => startApply('term')} />
+              {forms.map((type) => (
+                <ApplyOption key={type} type={type} eligibility={e} onApply={() => startApply(type)} onOpen={setOpenId} />
+              ))}
             </div>
-            <PhoneApplyReasons eligibility={e} />
+            <PhoneApplyReasons eligibility={e} forms={forms} />
             <RulesCard eligibility={e} />
           </section>
         )}
@@ -206,7 +253,7 @@ export default function Settlement() {
             icon={FileStack}
             title="Your applications"
             count={rows?.length}
-            description="Advances and loans you applied for, and those HR recorded for you."
+            description="Salary Advances and Term Loans you applied for, and those HR recorded for you."
             action={
               rows && rows.length > 0 ? (
                 <SegmentedControl
@@ -233,7 +280,7 @@ export default function Settlement() {
               <span aria-hidden="true" className="max-md:w-px max-md:bg-input" />
               <PhoneTotal label="Repaid so far" value={rupees(totals.repaid)} />
               <span aria-hidden="true" className="max-md:w-px max-md:bg-input" />
-              <PhoneTotal label="Waiting for HR" value={String(totals.waiting)} className={totals.waiting ? 'max-md:text-waiting' : undefined} />
+              <PhoneTotal label="Waiting" value={String(totals.waiting)} className={totals.waiting ? 'max-md:text-waiting' : undefined} />
             </div>
           )}
           {rows && rows.length > 0 && (
@@ -275,7 +322,11 @@ export default function Settlement() {
               <EmptyState
                 icon={FileStack}
                 title="No advances or loans yet"
-                description="When you apply, or HR records an advance for you, it shows here with every repayment."
+                description={
+                  e && forms.length === 0
+                    ? 'When HR records an advance for you, it shows here with every repayment.'
+                    : 'When you apply, or HR records an advance for you, it shows here with every repayment.'
+                }
                 action={
                   canApplyAny ? (
                     <Button onClick={() => startApply()}>
@@ -333,20 +384,34 @@ function WindowChip({ chip, className }: { chip: { open: boolean; text: string }
 }
 
 /** One of the two things to apply for: what it is, its window ("Any day", "Opens 20 Dec · in 25 days"), the server's
- *  figures, and either the Apply button or the server's plain reason why not (production employees get the Salary
- *  Advance reason, never a number). Outside its window the card is closed: nothing to open until the window opens. */
-function ApplyOption({ type, eligibility: e, onApply }: { type: AdvanceType; eligibility: AdvanceEligibility; onApply: () => void }) {
+ *  figures (a Term Loan's limit: "Up to ₹26,000 (100% of your monthly salary)"), and either the Apply button or the
+ *  server's plain reason why not - for a Term Loan with the next step by its code (the date it can be asked for again, or
+ *  the request still waiting / the loan being repaid, `onOpen`). Outside its window the card is closed. */
+function ApplyOption({
+  type,
+  eligibility: e,
+  onApply,
+  onOpen,
+}: {
+  type: AdvanceType
+  eligibility: AdvanceEligibility
+  onApply: () => void
+  onOpen: (id: number) => void
+}) {
   const Icon = type === 'term' ? Landmark : Wallet
   const s = type === 'general' ? e.salaryAdvance : e.termLoan
   const title = type === 'general' ? 'Salary Advance' : 'Term Loan'
   const { chip, opens } = formWindow(e, type)
   const closed = !chip.open
+  const termLimit = termLoanLimitText(e.termLoan)
   const line =
     type === 'general'
       ? e.salaryAdvance.limit != null
         ? `Up to ${formatINR(e.salaryAdvance.limit)}`
-        : `Up to ${e.salaryAdvance.percent}% of salary`
-      : `${e.termLoan.minMonths} to ${e.termLoan.maxMonths} months EMI`
+        : `Up to ${salaryAdvancePercent(e)}% of earned salary`
+      : e.termLoan.limit != null
+        ? `Up to ${formatINR(e.termLoan.limit)}`
+        : `${e.termLoan.minMonths} to ${e.termLoan.maxMonths} months EMI`
   const sub = type === 'general' ? `Deducted from ${e.salaryAdvance.deductionLabel} salary` : `EMIs start ${e.termLoan.firstDeductionLabel}`
   return (
     <GlassCard className="flex h-full flex-col gap-3 max-md:p-0!">
@@ -407,7 +472,7 @@ function ApplyOption({ type, eligibility: e, onApply }: { type: AdvanceType; eli
               ? e.salaryAdvance.limit != null
                 ? `Up to ${formatINR(e.salaryAdvance.limit)}, deducted in full from your ${e.salaryAdvance.deductionLabel} salary.`
                 : `Deducted in full from that month's salary.`
-              : `From ${formatINR(e.termLoan.minAmount)}, repaid in ${e.termLoan.minMonths} to ${e.termLoan.maxMonths} monthly EMIs from your ${e.termLoan.firstDeductionLabel} salary.`}
+              : `${termLimit ? `${termLimit}. From` : 'From'} ${formatINR(e.termLoan.minAmount)}, repaid in ${e.termLoan.minMonths} to ${e.termLoan.maxMonths} monthly EMIs from your ${e.termLoan.firstDeductionLabel} salary.`}
           </p>
         </div>
       </div>
@@ -421,24 +486,27 @@ function ApplyOption({ type, eligibility: e, onApply }: { type: AdvanceType; eli
           <LockKeyhole aria-hidden="true" /> {opens || 'Closed now'}
         </Button>
       ) : (
-        <p role="status" className="mt-auto rounded-lg border border-waiting-border bg-waiting-bg px-3 py-2 text-[13px] text-waiting max-md:hidden">
-          {s.reason ?? 'You cannot apply for this right now.'}
-        </p>
+        <div role="status" className="mt-auto rounded-lg border border-waiting-border bg-waiting-bg px-3 py-2 text-[13px] text-waiting max-md:hidden">
+          <p>{s.reason ?? 'You cannot apply for this right now.'}</p>
+          {/* Term Loan: the next step by its code - the service bar (service only), the date it can be asked for again, or
+              the request still waiting / the loan being repaid. */}
+          {type === 'term' && <TermLoanBlockNote eligibility={e} onOpen={onOpen} showReason={false} />}
+        </div>
       )}
     </GlassCard>
   )
 }
 
 /** Phones only: why a card cannot be used, under the two half-width cards (one line when both share the reason). */
-function PhoneApplyReasons({ eligibility: e }: { eligibility: AdvanceEligibility }) {
+function PhoneApplyReasons({ eligibility: e, forms }: { eligibility: AdvanceEligibility; forms: readonly AdvanceType[] }) {
   // A switched-off workflow is already said by the window banner above (as in the app), and a closed window is said on
   // the card itself ("Opens on 20 Dec") and in the banner: only a card's OWN reason (no salary on record, one already this
-  // month, a loan still waiting) is spelled out here.
+  // month, a loan still waiting) is spelled out here - for the forms this employee is offered.
   if (e.workflowMessage) return null
   const blocked = [
     { key: 'general' as const, title: 'Salary Advance', s: e.salaryAdvance },
     { key: 'term' as const, title: 'Term Loan', s: e.termLoan },
-  ].filter((c) => !c.s.canApply && formWindow(e, c.key).chip.open)
+  ].filter((c) => forms.includes(c.key) && !c.s.canApply && formWindow(e, c.key).chip.open)
   if (blocked.length === 0) return null
   const lines =
     blocked.length === 2 && (blocked[0].s.reason ?? '') === (blocked[1].s.reason ?? '')

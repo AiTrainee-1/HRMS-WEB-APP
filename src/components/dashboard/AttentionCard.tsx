@@ -34,7 +34,7 @@ function iconFor(item: AttentionItem): LucideIcon {
 /**
  * "Needs your attention": the few things waiting on the employee or running right now, each one click from its page
  * (most urgent first): an open gate pass with a live timer, an On-Duty day in progress, requests waiting for an answer,
- * advance & loan applications open, and unused Casual Leave (staff, last week of the month: this month's under the old
+ * Loan & Advance applications open, and unused Casual Leave (staff, last week of the month: this month's under the old
  * one-per-month rule; under the yearly balance only in the last week of December, when unused days lapse).
  *
  * Quiet by design: nothing shows until every source has answered once (so it appears in one go), a failed source gives

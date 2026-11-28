@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Check, ChevronRight, Clock, Hourglass, MapPinned, ShieldAlert, UserCog, UserRound, X } from 'lucide-react'
+import { CakeSlice, Check, ChevronRight, Clock, Hourglass, MapPinned, ShieldAlert, UserCog, UserRound, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ApprovalState, DecisionBadge, GlassCard, StatusPill, Stepper, TONE_SOFT } from '@/components/kit'
 import { hodCanAct, hodCanReject } from '@/lib/approval'
@@ -13,6 +13,8 @@ import {
   type ApprovalStatus,
 } from '@/lib/approvals-history'
 import {
+  birthdayLine,
+  birthdayRaisedBy,
   claimLine,
   empCode,
   empDepartment,
@@ -83,7 +85,15 @@ export function ApprovalRequestCard({
   const steps = headSteps(category, item)
   // A compensation claim: the overtime it is about, and who raised it (the employee themselves, or HR on their behalf).
   const overtimeLine = category === 'holiday_work' ? claimLine(item) : null
-  const raisedBy = category === 'holiday_work' ? claimRaisedBy(item as unknown as PendingHolidayWorkClaim) : null
+  // Birthday Compensation (2026-11-25): whose birthday it is for, and who placed it (the employee, or HR for them).
+  const bdayLine = category === 'birthday_compensation' ? birthdayLine(item) : null
+  const raisedBy =
+    category === 'holiday_work'
+      ? claimRaisedBy(item as unknown as PendingHolidayWorkClaim)
+      : category === 'birthday_compensation'
+        ? birthdayRaisedBy(item)
+        : null
+  const raisedWord = category === 'birthday_compensation' ? 'Placed' : 'Raised'
 
   return (
     <GlassCard
@@ -151,10 +161,15 @@ export function ApprovalRequestCard({
               <Clock className="size-3.5 shrink-0" aria-hidden="true" /> {overtimeLine}
             </p>
           )}
+          {bdayLine && (
+            <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground tabular-nums" data-testid="birthday-line">
+              <CakeSlice className="size-3.5 shrink-0" aria-hidden="true" /> {bdayLine}
+            </p>
+          )}
           {raisedBy && (
             <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-muted-foreground" data-testid="claim-raised-by">
               {raisedBy === 'employee' ? <UserRound className="size-3.5 shrink-0" aria-hidden="true" /> : <UserCog className="size-3.5 shrink-0" aria-hidden="true" />}
-              {raisedBy === 'employee' ? 'Raised by the employee' : 'Raised by HR'}
+              {raisedBy === 'employee' ? `${raisedWord} by the employee` : `${raisedWord} by HR`}
             </p>
           )}
         </div>

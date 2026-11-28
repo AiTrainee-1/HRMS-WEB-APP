@@ -71,8 +71,9 @@ function item(href: string, label: string, icon: LucideIcon, extra: Partial<Phon
 /**
  * The drawer, in the app's groups and order, with every web route the app also has. Labels: the app's word where the
  * page is the same page; the web's own label where the web page differs or was renamed for the web on 2026-10-31
- * (Geo Punch / On-Duty is one page here, two in the app; Outpass & Tea Break, My Department Head, Advances &
- * Settlement, About UKTextiles). Manager Approvals is not in the app's drawer: heads reach it from the tab bar.
+ * (Geo Punch / On-Duty is one page here, two in the app; Outpass & Tea Break, My Department Head, About UKTextiles).
+ * Loan & Advance is the one name in both apps (owner 2026-11-28). Manager Approvals is not in the app's drawer: heads
+ * reach it from the tab bar.
  */
 export const PHONE_DRAWER: PhoneNavGroup[] = [
   {
@@ -102,7 +103,7 @@ export const PHONE_DRAWER: PhoneNavGroup[] = [
     heading: 'Payroll & Salary',
     items: [
       item('/employee/salary', 'Salary Slips', Banknote, { color: '#27AE60' }),
-      item('/employee/settlement', 'Advances & Settlement', Landmark, { color: '#7F8C8D' }),
+      item('/employee/settlement', 'Loan & Advance', Landmark, { color: '#7F8C8D' }),
     ],
   },
   {

@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { attendanceApi } from '@/api/resources'
 import { useAuth } from '@/context/AuthContext'
 import { getDayMarkers } from '@/lib/attendance-flags'
+import { inProgressView } from '@/lib/day-progress'
 import type { ShiftPolicy } from '@/types'
 
 /**
@@ -31,5 +32,7 @@ export function useTodayAttendance(policy?: ShiftPolicy | null) {
   // Today's Late-In / Early Out / Permission states (lib/attendance-flags.ts),
   // so the dashboard can say why today is flagged without a second request.
   const markers = today ? getDayMarkers(today, policy) : []
-  return { ...query, today, punches, last, isIn: last?.type === 'IN', markers }
+  // Today while the shift is still running (owner 2026-11-26): "In progress", not a final Present / 1 shift.
+  const dayProgress = inProgressView(today, now)
+  return { ...query, today, punches, last, isIn: last?.type === 'IN', markers, dayProgress }
 }

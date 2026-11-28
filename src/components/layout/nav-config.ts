@@ -81,7 +81,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: 'Salary Slips', href: '/employee/salary', icon: Wallet, description: 'Your payslips, month by month' },
       { label: 'Compensation', href: '/employee/compensation', icon: HandCoins, description: 'Overtime and extra pay', staffOnly: true },
-      { label: 'Advances & Settlement', href: '/employee/settlement', icon: FileStack, description: 'Salary advances and what is left to repay' },
+      { label: 'Loan & Advance', href: '/employee/settlement', icon: FileStack, description: 'Salary Advance, Term Loan and what is left to repay' },
     ],
   },
   {

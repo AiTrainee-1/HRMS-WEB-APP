@@ -136,12 +136,20 @@ describe('claimDraft: what the Claim dialog offers', () => {
     assert.deepEqual(claimBody(d, 0.5, 'Stock count'), { kind: 'ot_allowance', date: '2026-11-09', overtimeRecordId: 57, reason: 'Stock count' })
   })
 
-  test('a worked birthday: one full shift, nothing to pick, no shifts sent', () => {
-    const d = claimDraft(item({ key: 'bd-2026-11-05', kind: 'birthday_credit', date: '2026-11-05', claimable: true }))!
-    assert.equal(d.kind, 'birthday')
-    assert.equal(d.fixedShifts, 1)
-    assert.deepEqual(d.choices, [])
-    assert.deepEqual(claimBody(d, null, 'Worked my birthday'), { kind: 'birthday', date: '2026-11-05', reason: 'Worked my birthday' })
+  test('a worked birthday is never claimed any more (2026-11-25: Birthday Compensation is placed instead)', () => {
+    // Even a server that still says "claimable" (an older build) gets no Claim button and no claim body.
+    const credit = item({ key: 'bd-2026-11-05', kind: 'birthday_credit', date: '2026-11-05', claimable: true })
+    assert.equal(credit.claimable, false)
+    assert.equal(credit.claimKind, null)
+    assert.equal(claimDraft(credit), null)
+    assert.equal(canClaimItem(credit, true), false)
+    const explicit = item({ key: 'bd-2026-11-06', kind: 'birthday_credit', date: '2026-11-06', claimable: true, claimKind: 'birthday' })
+    assert.equal(explicit.claimKind, null)
+    assert.equal(claimDraft(explicit), null)
+    // The new item: a worked birthday to place, never claimable.
+    const bdc = item({ key: 'bdc-2026-11-05', kind: 'birthday_compensation', date: '2026-11-05', claimable: false, canPlace: true })
+    assert.equal(canClaimItem(bdc, true), false)
+    assert.deepEqual(claimableItems(parseCompensation({ isStaff: true, canClaim: true, items: [{ key: 'bdc-2026-11-05', kind: 'birthday_compensation', date: '2026-11-05', canPlace: true }] })), [])
   })
 
   test('a rejected claim can be claimed again, and says so', () => {

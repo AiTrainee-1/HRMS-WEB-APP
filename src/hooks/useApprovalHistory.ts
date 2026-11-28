@@ -136,6 +136,7 @@ const ACTIONS: Record<ApprovalCategory, Action> = {
   on_duty: managerApi.updateOnDutyStatus,
   outpass: managerApi.updateOutpassStatus,
   holiday_work: managerApi.updateHolidayWorkStatus,
+  birthday_compensation: managerApi.updateBirthdayCompensationStatus,
   resignation: managerApi.updateResignationAction,
 }
 

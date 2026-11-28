@@ -1,5 +1,6 @@
 // Relative (not '@/types'): `npm test` and tsconfig.node.json load this file without the app's path alias.
 import type { DayLateFlags, EmployeeShiftStats, ShiftPolicy } from '../types/index.ts'
+import { IN_PROGRESS_LABEL, IN_PROGRESS_STATUS, isDayInProgress } from './day-progress.ts'
 
 // The one place a per-day attendance object (attendance history records[] and
 // shift-stats dailyLogs[]) is turned into Late / Early Out / Half Day /
@@ -16,6 +17,8 @@ export const DAY_STATUS_LABEL: Record<string, string> = {
   holiday: 'Holiday',
   future: 'Upcoming',
   no_record: 'No record',
+  // Not a server status: today's day while the shift is still running (lib/day-progress.ts displayStatus).
+  [IN_PROGRESS_STATUS]: IN_PROGRESS_LABEL,
 }
 
 export function dayStatusLabel(status: string): string {
@@ -51,10 +54,12 @@ export function getDayFlags(day: DayLike): DayFlags {
   // Lateness only means something on a day the employee actually worked.
   const worked = day.status === 'present' || day.status === 'half_shift'
   const legacy = day.morningPermissionApplied === undefined && day.eveningPermissionApplied === undefined
+  // A day still in progress has no verdict yet: no Half Day, and its evening edge is not judged (lib/day-progress.ts).
+  const open = isDayInProgress(day)
   return {
     late: worked && !!day.isLate,
-    earlyOut: worked && !!day.isEarlyOut,
-    halfDay: day.status === 'half_shift',
+    earlyOut: worked && !open && !!day.isEarlyOut,
+    halfDay: day.status === 'half_shift' && !open,
     morningApplied: !!(day.morningPermissionApplied ?? day.permissionMorning),
     eveningApplied: !!(day.eveningPermissionApplied ?? day.permissionDeparture),
     morningExcess: !!day.morningPermissionExcess,
@@ -75,12 +80,23 @@ export type CompensationMarkerKey =
   | 'window_late_in'
   | 'window_early_out'
   | 'birthday'
+  | 'birthday_comp'
   | 'relaxation'
   | 'compensation'
 
 /** Icons a marker or a compensation kind can carry; drawn by components/employee/MarkerSymbol.tsx. Colour is never the
  * only cue: every compensation marker also has a symbol. */
-export type MarkerSymbolName = 'timer' | 'sunrise' | 'sunset' | 'cake' | 'bed' | 'hourglass' | 'handCoins' | 'party' | 'gift'
+export type MarkerSymbolName =
+  | 'timer'
+  | 'sunrise'
+  | 'sunset'
+  | 'cake'
+  | 'cakeSlice'
+  | 'bed'
+  | 'hourglass'
+  | 'handCoins'
+  | 'party'
+  | 'gift'
 
 export interface DayMarker {
   key: FlagMarkerKey | CompensationMarkerKey
@@ -111,10 +127,11 @@ export const DAY_MARKERS: Record<FlagMarkerKey, DayMarker> = {
 export const COMPENSATION_MARKER = { label: 'Compensation day', dot: 'bg-violet-500', fill: '#8b5cf6' }
 
 // ── Compensation (day record keys compensationKind / compensationMinutes / compensationNote) ──
-// Five colours, each with its own symbol, none of them the Present / Half Day / Late / Early Out / Permission colours:
+// Six colours, each with its own symbol, none of them the Present / Half Day / Late / Early Out / Permission colours:
 // teal + timer (a next-day late-in allowance was used), sky + sunrise (the company's announced late-in time applied),
-// indigo + sunset (the announced early-out time applied), pink + cake (birthday leave), fuchsia + bed (a compensation day
-// taken). A kind this app has never seen is drawn as a violet gift ("Compensation"), never dropped.
+// indigo + sunset (the announced early-out time applied), pink + cake (birthday leave), rose + cake slice (Birthday
+// Compensation placed on this day, 2026-11-25: "birthday_comp"), fuchsia + bed (a compensation day taken). A kind this
+// app has never seen is drawn as a violet gift ("Compensation"), never dropped.
 
 export const COMPENSATION_KIND_MARKERS: Record<Exclude<CompensationMarkerKey, 'compensation'>, DayMarker> = {
   ot_allowance: {
@@ -133,6 +150,10 @@ export const COMPENSATION_KIND_MARKERS: Record<Exclude<CompensationMarkerKey, 'c
     key: 'birthday', label: 'Birthday leave', dot: 'bg-pink-500', fill: '#ec4899', chip: 'chip-pink',
     symbol: 'cake', text: 'text-pink-600 dark:text-pink-300', ring: 'ring-pink-500/70',
   },
+  birthday_comp: {
+    key: 'birthday_comp', label: 'Birthday compensation', dot: 'bg-rose-500', fill: '#f43f5e', chip: 'chip-rose',
+    symbol: 'cakeSlice', text: 'text-rose-600 dark:text-rose-300', ring: 'ring-rose-500/70',
+  },
   relaxation: {
     key: 'relaxation', label: 'Relaxation day', dot: 'bg-fuchsia-500', fill: '#d946ef', chip: 'chip-fuchsia',
     symbol: 'bed', text: 'text-fuchsia-600 dark:text-fuchsia-300', ring: 'ring-fuchsia-500/70',
@@ -144,7 +165,7 @@ const GENERIC_COMPENSATION_MARKER: DayMarker = {
   symbol: 'gift', text: 'text-violet-600 dark:text-violet-300', ring: 'ring-violet-500/70',
 }
 
-/** The compensation markers a calendar legend lists (the five kinds the server sends today). */
+/** The compensation markers a calendar legend lists (the six kinds the server sends today). */
 export function compensationLegend(): DayMarker[] {
   return Object.values(COMPENSATION_KIND_MARKERS)
 }
@@ -180,6 +201,8 @@ export function compensationLine(day: CompensationFields): string | null {
       return 'The company announced an early-out time for this day: your own shift end and grace did not apply, and you were not marked as leaving early.'
     case 'birthday':
       return 'Paid birthday leave: no attendance rule applies on your birthday, whether you came to work or not.'
+    case 'birthday_comp':
+      return 'Birthday compensation: you worked on your birthday, and this day (or half of it) is paid for it, approved by your Department Head and HR. No leave balance is used.'
     case 'relaxation':
       return 'HR gave you a compensation day (relaxation) for this date.'
     default:
@@ -199,7 +222,14 @@ export function getCompensationMarker(day: CompensationFields): DayMarkerHit | n
   return { ...marker, detail: compensationLine(day) ?? undefined }
 }
 
-type PunchFields = { status: string; firstPunch?: string | null; totalPunches?: number }
+type PunchFields = {
+  status: string
+  date?: string | null
+  firstPunch?: string | null
+  totalPunches?: number
+  inProgress?: boolean | null
+  provisionalUntil?: string | null
+}
 
 /** A compensation day taken (relaxation) that has no punches: HR topped the date up, the employee did not work it. Its
  * status reads Half Day or Present, but neither the half-day rule nor "no attendance record" describes it. */
@@ -207,9 +237,19 @@ export function isPunchlessRelaxation(day: CompensationFields & PunchFields): bo
   return compensationKindOf(day) === 'relaxation' && !day.firstPunch && !((day.totalPunches ?? 0) > 0)
 }
 
-/** The day's headline status: its status label, except a punchless relaxation day, which is not "Half Day" only. */
-export function dayHeadline(day: CompensationFields & PunchFields): string {
-  return isPunchlessRelaxation(day) ? 'Compensation day (relaxation)' : dayStatusLabel(day.status)
+/** A day Birthday Compensation paid (2026-11-25) that has no punches: the employee did not come, the placement paid it
+ * (the whole day: Present / Leave; one half: Half Day). "Only one half has a punch" would not be true of it. */
+export function isPunchlessBirthdayComp(day: CompensationFields & PunchFields): boolean {
+  return compensationKindOf(day) === 'birthday_comp' && !day.firstPunch && !((day.totalPunches ?? 0) > 0)
+}
+
+/** The day's headline status: its status label, except a day still in progress ("In progress", no verdict yet) and a
+ * punchless relaxation / Birthday Compensation day, which is not "Half Day" / "Present" only. */
+export function dayHeadline(day: CompensationFields & PunchFields, now: Date = new Date()): string {
+  if (isDayInProgress(day, now)) return IN_PROGRESS_LABEL
+  if (isPunchlessRelaxation(day)) return 'Compensation day (relaxation)'
+  if (isPunchlessBirthdayComp(day)) return `Birthday compensation (${dayStatusLabel(day.status)})`
+  return dayStatusLabel(day.status)
 }
 
 /** A marker on one particular day, with the extra explanation (if any) for a tooltip. */

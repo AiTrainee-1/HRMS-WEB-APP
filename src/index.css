@@ -764,6 +764,12 @@
     border-color: rgb(139 92 246 / 0.32);
     color: #5b21b6;
   }
+  /* Birthday Compensation (2026-11-25): rose, apart from birthday leave's pink */
+  .chip-rose {
+    background: rgb(244 63 94 / 0.12);
+    border-color: rgb(244 63 94 / 0.32);
+    color: #9f1239;
+  }
   .dark .chip-teal {
     color: #5eead4;
   }
@@ -781,6 +787,9 @@
   }
   .dark .chip-violet {
     color: #c4b5fd;
+  }
+  .dark .chip-rose {
+    color: #fda4af;
   }
   .pip {
     display: inline-block;

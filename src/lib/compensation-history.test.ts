@@ -56,6 +56,28 @@ test('sourceCounts and groupByMonth (newest month first, OT pay months with the 
   assert.equal(company[0].items[0].time, '09:30')
 })
 
+test('a worked birthday\'s Birthday Compensation is never "Given by HR" (2026-11-25), and carries its block', () => {
+  const block = { state: 'available', label: 'To place', total: 1, held: 0, used: 0, available: 1, lapsed: 0, lapsesOn: '2026-03-31' }
+  const h = normalizeHistory({
+    year: 2026,
+    items: [
+      // the server's timeline does not know the kind yet: it tags it "hr"
+      { key: 'bdc-2026-03-05', kind: 'birthday_compensation', group: 'birthday', date: '2026-03-05', status: 'available', source: 'hr', givenByHr: true, shifts: 1, canPlace: true, birthdayCompensation: block },
+      { key: 'x', kind: 'holiday_work', date: '2026-03-01', source: 'hr', givenByHr: true },
+    ],
+  })!
+  const [bdc, hw] = h.items
+  assert.equal(bdc.source, 'automatic')
+  assert.equal(bdc.givenByHr, false)
+  assert.equal(bdc.canPlace, true)
+  assert.deepEqual(bdc.birthdayComp, block)
+  assert.equal(hw.source, 'hr')
+  assert.equal(hw.givenByHr, true)
+  assert.equal(hw.canPlace, false)
+  assert.equal(hw.birthdayComp, null)
+  assert.deepEqual(sourceCounts(h.items), { all: 2, hr: 1, automatic: 1, company: 0 })
+})
+
 test('wording', () => {
   assert.equal(monthLabel('2026-03'), 'March 2026')
   assert.equal(monthLabel('2026-13'), '')

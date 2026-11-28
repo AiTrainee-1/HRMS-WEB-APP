@@ -11,10 +11,12 @@ import { getRequestWindow } from '@/lib/request-window'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
 import { HrEditDetails } from '@/components/employee/HrEditDetails'
 import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
+import { InProgressNote, InProgressPill } from '@/components/employee/InProgressNote'
+import { inProgressView } from '@/lib/day-progress'
 import { hrEditOf } from '@/lib/hr-edit'
 import {
-  dayHeadline, earlyOutShown, getCompensationMarker, getDayFlags, getDayMarkers, halfDayRule, isPunchlessRelaxation,
-  lateInShown,
+  dayHeadline, earlyOutShown, getCompensationMarker, getDayFlags, getDayMarkers, halfDayRule, isPunchlessBirthdayComp,
+  isPunchlessRelaxation, lateInShown,
 } from '@/lib/attendance-flags'
 import { cn } from '@/lib/utils'
 import type { AttendanceDay, ShiftPolicy } from '@/types'
@@ -38,9 +40,10 @@ function dayNotes(day: AttendanceDay, policy?: ShiftPolicy | null): string[] {
   if (f.earlyOut && earlyOutShown(policy) && !f.lateReason) {
     notes.push('Early Out: your last punch was before shift end minus grace.')
   }
-  // A compensation day taken (relaxation) with no punches is a Half Day / Present only because HR topped the date up:
-  // "you have a punch in only one half" would be untrue, and the compensation line above says what happened.
-  if (f.halfDay && !f.legacy && !isPunchlessRelaxation(day)) {
+  // A compensation day taken (relaxation) with no punches is a Half Day / Present only because HR topped the date up, and
+  // a Birthday Compensation half with no punches is a Half Day because the placement paid that half: "you have a punch
+  // in only one half" would be untrue, and the compensation line above says what happened.
+  if (f.halfDay && !f.legacy && !isPunchlessRelaxation(day) && !isPunchlessBirthdayComp(day)) {
     // The company's real windows when the backend states them; never a guessed time.
     const rule = halfDayRule(policy)
     notes.push(
@@ -106,12 +109,15 @@ export function DayDetailPanel({
   const earned = earnedShiftText(extra?.shiftsEarned)
   const earnedHint = earnedShiftHint(extra?.shiftsEarned)
   const flags = day ? getDayFlags(day) : null
+  // Today while the shift is still running (owner 2026-11-26): "In progress", shifts "—", no verdict, when it is counted.
+  const progress = day ? inProgressView(day) : null
   const actions =
     day && flags
       ? dayActions(
           {
             date: day.date,
-            status: day.status,
+            // No Half Day / Absent remedy for a day that has no verdict yet.
+            status: progress ? 'present' : day.status,
             compensationKind: day.compensationKind,
             late: flags.late && lateInShown(policy),
             earlyOut: flags.earlyOut && earlyOutShown(policy),
@@ -129,7 +135,7 @@ export function DayDetailPanel({
             <DialogHeader>
               <DialogTitle>{format(parseISO(day.date), 'EEEE, MMMM d, yyyy')}</DialogTitle>
               <DialogDescription className="flex items-center gap-2 flex-wrap">
-                <span>{dayHeadline(day)}</span>
+                {progress ? <InProgressPill label={progress.label} /> : <span>{dayHeadline(day)}</span>}
                 <DayMarkerChips markers={getDayMarkers(day, policy)} />
                 {day.isCompensationDay && (
                   <span className="rounded-full border border-violet-border bg-violet-bg px-2 py-0.5 text-xs font-semibold text-violet">
@@ -170,7 +176,9 @@ export function DayDetailPanel({
               </p>
             )}
             {hrEdit && <HrEditDetails edit={hrEdit} headingId={`day-hr-edit-${day.date}`} />}
-            {earned && !noRecord && (
+            {progress ? (
+              <InProgressNote view={progress} pill={false} />
+            ) : earned && !noRecord && (
               <div
                 className="flex items-center justify-between gap-3 rounded-lg border hairline bg-foreground/[0.03] px-3 py-2.5 text-sm max-md:border-0 max-md:bg-muted"
                 data-testid="day-earned-shift"
@@ -183,8 +191,8 @@ export function DayDetailPanel({
               </div>
             )}
             {noRecord || (!day.firstPunch && punchViews.length === 0) ? (
-              // A real record without any punch: a compensation day (birthday leave, a relaxation day), or a day HR set
-              // through an attendance edit (Casual Leave, On-Duty, a status change).
+              // A real record without any punch: a compensation day (birthday leave, Birthday Compensation, a relaxation
+              // day), or a day HR set through an attendance edit (Casual Leave, On-Duty, a status change).
               <p className="text-sm text-muted-foreground">
                 {day.status !== 'no_record' && day.status !== 'future'
                   ? 'No punches on this day.'
@@ -192,7 +200,7 @@ export function DayDetailPanel({
               </p>
             ) : (
               <div className="flex flex-col gap-4 text-sm">
-                <DayPunchStrip punches={punchViews} />
+                <DayPunchStrip punches={punchViews} inProgress={!!progress} />
                 {steps.length > 0 && (
                   <Timeline
                     ariaLabel="Punches on this day"

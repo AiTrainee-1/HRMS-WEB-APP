@@ -6,10 +6,12 @@
 //   gate pass open     GET /outpass-requests                 -> Outpass & Tea Break (/employee/outpass)
 //   On-Duty running    GET /attendance/geo-punch/status      -> Geo Punch / On-Duty (/employee/attendance-request)
 //   pending requests   GET /my/pending-requests              -> My Department Head, requests tab
-//   advances open      GET /my/advances/eligibility          -> Advances & Settlement (/employee/settlement)
+//   advances open      GET /my/advances/eligibility          -> Loan & Advance (/employee/settlement)
 //   Casual Leave left  GET /casual-leaves/my-eligibility     -> Casual Leave (staff only, last week of the month)
 //   last salary        GET /my/salary-insights               -> Salary Slips
 // A source that failed or is still loading simply gives no row: the Dashboard never shows an error for these extras.
+
+import { isDayInProgress, type DayProgressLike } from './day-progress.ts'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -342,10 +344,13 @@ export function pendingRequestsAttention(items: readonly PendingRequestLite[] | 
 export interface AdvanceEligibilityLite {
   /** The Salary Advance window (`windows.general`), else (an older server) the one window both forms shared. */
   window: { isOpen: boolean; closesOn: string; daysLeft: number }
-  /** Each form has its own window (2026-11-25): a Salary Advance the 20th to the 22nd, a Term Loan any day. */
+  /** Each form has its own window (2026-11-25): a Salary Advance on the days Settings names (the 21st and 22nd by
+   *  default), a Term Loan any day. */
   separate: boolean
   workflowEnabled: boolean
   employeeActive: boolean
+  /** False for an employee who cannot apply at all (a production employee, 2026-11-28); true on an older server. */
+  applyAvailable: boolean
   salaryAdvance: boolean
   termLoan: boolean
 }
@@ -359,6 +364,7 @@ export function readAdvanceEligibility(raw: unknown): AdvanceEligibilityLite | n
     separate: general !== null,
     workflowEnabled: raw.workflowEnabled !== false,
     employeeActive: raw.employeeActive !== false,
+    applyAvailable: raw.applyAvailable !== false,
     salaryAdvance: isObject(raw.salaryAdvance) && raw.salaryAdvance.canApply === true,
     termLoan: isObject(raw.termLoan) && raw.termLoan.canApply === true,
   }
@@ -374,17 +380,18 @@ export function dayMonth(iso: string | null | undefined): string {
 }
 
 /**
- * "Salary Advance applications are open" while its window is open AND this employee can apply; else null. Owner
- * 2026-11-25: a Salary Advance only from the 20th to the 22nd, a Term Loan on any day - so the Term Loan, always open, is
- * never news on the Dashboard and only the Salary Advance's 3 days are ("Open until 22 Nov"). An older server (no
- * `windows`) had one window, the 20th to the month end, for both forms: "Advance & loan applications are open".
+ * "Salary Advance applications are open" while its window is open AND this employee can apply; else null. A Salary
+ * Advance only on its days (the 21st and 22nd by default, from Settings), a Term Loan on any day - so the Term Loan,
+ * always open, is never news on the Dashboard and only the Salary Advance's days are ("Open until 22 Nov"). Nothing for
+ * an employee who cannot apply at all (`applyAvailable` false, 2026-11-28). An older server (no `windows`) had one
+ * window, the 20th to the month end, for both forms: "Loan & Advance applications are open".
  */
 export function advanceAttention(e: AdvanceEligibilityLite | null | undefined): AttentionItem | null {
   if (!e?.window.isOpen) return null
-  if (!e.workflowEnabled || !e.employeeActive) return null
+  if (!e.workflowEnabled || !e.employeeActive || !e.applyAvailable) return null
   const loan = e.termLoan && !e.separate
   if (!e.salaryAdvance && !loan) return null
-  const what = e.salaryAdvance && loan ? 'Advance & loan applications' : e.salaryAdvance ? 'Salary Advance applications' : 'Term Loan applications'
+  const what = e.salaryAdvance && loan ? 'Loan & Advance applications' : e.salaryAdvance ? 'Salary Advance applications' : 'Term Loan applications'
   const until = dayMonth(e.window.closesOn)
   const detail = e.window.daysLeft <= 1 ? 'Open today only: last day' : until ? `Open until ${until}` : `Open for ${e.window.daysLeft} more days`
   return item({ key: 'advance', tone: 'money', title: `${what} are open`, detail })
@@ -553,7 +560,7 @@ export function lastSalary(periods: readonly SalaryPeriodLite[] | null | undefin
 
 // ── the month snapshot ───────────────────────────────────────────────────────
 
-export interface DayLite {
+export interface DayLite extends DayProgressLike {
   date: string
   status: string
 }
@@ -570,8 +577,9 @@ export interface MonthSnapshot {
   attendancePercent: number | null
 }
 
-/** This month so far, from the month's attendance records (one per day) and today's "yyyy-MM-dd". */
-export function monthSnapshot(records: readonly DayLite[] | null | undefined, todayKey: string): MonthSnapshot {
+/** This month so far, from the month's attendance records (one per day) and today's "yyyy-MM-dd". A day still in
+ * progress (today, its shift running: lib/day-progress.ts) is not counted at all until it is final. */
+export function monthSnapshot(records: readonly DayLite[] | null | undefined, todayKey: string, now: Date = new Date()): MonthSnapshot {
   let workingDays = 0
   let present = 0
   let half = 0
@@ -579,6 +587,7 @@ export function monthSnapshot(records: readonly DayLite[] | null | undefined, to
   let leave = 0
   for (const r of records ?? []) {
     if (r.date > todayKey || r.status === 'future' || r.status === 'holiday' || r.status === 'no_record') continue
+    if (isDayInProgress(r, now)) continue
     workingDays += 1
     if (r.status === 'present') present += 1
     else if (r.status === 'half_shift') half += 1

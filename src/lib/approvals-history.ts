@@ -26,6 +26,7 @@ export type ApprovalCategory =
   | 'on_duty'
   | 'outpass'
   | 'holiday_work'
+  | 'birthday_compensation'
   | 'resignation'
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
@@ -42,11 +43,13 @@ export const CATEGORY_ORDER: readonly ApprovalCategory[] = [
   'on_duty',
   'outpass',
   'holiday_work',
+  'birthday_compensation',
   'resignation',
 ]
 
 /** What a category is called on screen ("Compensation" = every compensation claim: Sunday / holiday work, late-in
- *  allowance, extra hours, birthday credit, a day off from the balance; raised by the employee or by HR). */
+ *  allowance, extra hours, birthday credit, a day off from the balance; raised by the employee or by HR. "Birthday
+ *  compensation" = a worked birthday's day placed on a chosen date, 2026-11-25: the head decides first, then HR). */
 export const CATEGORY_LABEL: Record<ApprovalCategory, string> = {
   leave: 'Leave',
   permission: 'Permission',
@@ -56,6 +59,7 @@ export const CATEGORY_LABEL: Record<ApprovalCategory, string> = {
   on_duty: 'On-Duty',
   outpass: 'Outpass',
   holiday_work: 'Compensation',
+  birthday_compensation: 'Birthday compensation',
   resignation: 'Resignations',
 }
 
@@ -69,6 +73,7 @@ export const CATEGORY_WORKFLOW: Record<ApprovalCategory, ApprovalWorkflowKey> = 
   on_duty: 'on_duty',
   outpass: 'outpass',
   holiday_work: 'holiday_work',
+  birthday_compensation: 'birthday_compensation',
   resignation: 'resignation',
 }
 
@@ -83,6 +88,8 @@ export const CATEGORY_FLAG: Record<ApprovalCategory, string> = {
   on_duty: 'canApproveOnDuty',
   outpass: 'canApprovePermissions',
   holiday_work: 'canApproveCompensation',
+  // the same switch as every compensation claim (backend mobile_approvals_views.py)
+  birthday_compensation: 'canApproveCompensation',
   resignation: 'canApproveResignations',
 }
 
@@ -96,6 +103,7 @@ export const LEGACY_LIST_KEY: Record<ApprovalCategory, string> = {
   on_duty: 'onDutySessions',
   outpass: 'outpassRequests',
   holiday_work: 'holidayWorkClaims',
+  birthday_compensation: 'birthdayCompensationUses',
   resignation: 'resignations',
 }
 
@@ -112,6 +120,8 @@ export function categoryFromWire(raw: unknown): ApprovalCategory | null {
   if (!flat) return null
   if (flat === 'attendancecorrection') return 'attendance'
   if (flat === 'compensation') return 'holiday_work'
+  // the server's alias for Birthday Compensation (mobile_approvals_views.py: "birthdaycompensation", "birthday")
+  if (flat === 'birthday') return 'birthday_compensation'
   if (flat === 'resignations') return 'resignation'
   return CATEGORY_ORDER.find((c) => c.replace(/_/g, '') === flat) ?? null
 }

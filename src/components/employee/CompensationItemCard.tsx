@@ -1,11 +1,12 @@
 import { format, parseISO } from 'date-fns'
-import { CalendarDays, Hand, History, Megaphone, Sparkles, UserCheck, type LucideIcon } from 'lucide-react'
+import { CalendarCheck, CalendarDays, Hand, History, Megaphone, Sparkles, UserCheck, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MarkerSymbol } from '@/components/employee/MarkerSymbol'
 import { GlassCard } from '@/components/kit'
 import { cn } from '@/lib/utils'
-import { formatMinutes, formatShifts, kindInfo, statusInfo, type CompensationItem } from '@/lib/compensation'
+import { formatMinutes, formatShifts, kindInfo, statusInfo, type BirthdayCompBlock, type CompensationItem } from '@/lib/compensation'
 import { canClaimItem, claimStateOf, type ClaimState } from '@/lib/compensation-claims'
+import { daysText, shortDay } from '@/lib/birthday-compensation'
 
 const OVERTIME_KINDS = new Set(['ot_shift', 'ot_shift_relaxation', 'ot_shift_pay'])
 
@@ -54,6 +55,7 @@ const PHONE_ACCENT: Record<string, string> = {
   window_late_in: 'max-md:border-l-[#0369a1]!',
   window_early_out: 'max-md:border-l-[#a21caf]!',
   birthday: 'max-md:border-l-[#e11d48]!',
+  birthday_compensation: 'max-md:border-l-[#be123c]!',
   compensation_day: 'max-md:border-l-[#0f766e]!',
   balance_credit: 'max-md:border-l-[#4338ca]!',
   alternative_day: 'max-md:border-l-[#57534e]!',
@@ -75,21 +77,27 @@ const PHONE_SOURCE: Record<CompensationSource, string> = {
  * with the date, the explanation, then the figures as grey pills.
  * Self-claims (2026-11-19): `onClaim` given (the server said `canClaim`) and the item claimable = a Claim button; an item
  * with a claim says where it stands. Without `onClaim` the card is read-only, as before.
+ * Birthday Compensation (2026-11-25): a worked birthday shows its 1.00 day in days (to place / waiting / approved /
+ * lapsed) and, with `onPlace` and the server's `canPlace`, a "Use my birthday day" button.
  */
 export function CompensationItemCard({
   item,
   source,
   className,
   onClaim,
+  onPlace,
 }: {
   item: CompensationItem
   source?: CompensationSource
   className?: string
   onClaim?: (item: CompensationItem) => void
+  onPlace?: (item: CompensationItem) => void
 }) {
   const kind = kindInfo(item.kind)
   const status = statusInfo(item)
-  const shifts = formatShifts(item.shifts)
+  const bdc = item.kind === 'birthday_compensation' ? item.birthdayComp : null
+  // A worked birthday counts in days of Birthday Compensation, not in shifts of the balance.
+  const shifts = item.kind === 'birthday_compensation' ? '' : formatShifts(item.shifts)
   // `minutes` is what the late-in allowance grants, but for a shift compensation it is the extra time worked past the
   // shift end; `minutesUsed` is what the arrival actually used of an allowance.
   const minutes = formatMinutes(item.minutes)
@@ -106,12 +114,16 @@ export function CompensationItemCard({
     minutesLabel && { label: minutesLabel, key: 'minutes' },
     minutesUsed && { label: `Used ${minutesUsed}`, key: 'used' },
     item.time && { label: `At ${item.time}`, key: 'time' },
+    ...birthdayFacts(bdc),
   ].filter((f): f is { label: string; key: string } => !!f)
   const workedOn = item.workDate && item.workDate !== item.date ? item.workDate : null
   const claimState = onClaim ? claimStateOf(item) : null
   const claimable = !!onClaim && canClaimItem(item, true)
   // A claimable item whose last claim was rejected says so next to the button.
   const claimNote = claimState === 'claimable' && item.claim?.status === 'rejected' ? CLAIM_NOTE.rejected : claimState ? CLAIM_NOTE[claimState] : null
+  // A worked birthday: where its placements stand (the server's words) and the way to place what is left.
+  const placeable = !!onPlace && item.kind === 'birthday_compensation' && item.canPlace
+  const placeNote = item.kind === 'birthday_compensation' ? birthdayNote(bdc, item.canPlace) : null
 
   return (
     <GlassCard
@@ -186,7 +198,44 @@ export function CompensationItemCard({
             )}
           </div>
         )}
+        {(placeNote || placeable) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t hairline pt-3 max-md:mt-0 max-md:pt-2.5" data-testid="compensation-item-place">
+            {placeNote && <p className={cn('min-w-0 flex-1 text-[12.5px] font-semibold max-md:text-[12px]', placeNote.cls)}>{placeNote.text}</p>}
+            {placeable && (
+              <Button
+                size="sm"
+                onClick={() => onPlace?.(item)}
+                className="min-h-11 sm:min-h-8 max-md:h-10 max-md:min-h-10 max-md:w-full max-md:rounded-xl max-md:font-bold"
+                aria-label={`Use my birthday day: ${item.title}`}
+              >
+                <CalendarCheck aria-hidden="true" /> Use my birthday day
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </GlassCard>
   )
+}
+
+/** A worked birthday's figures as pills: the 1.00 day, then what is to place / waiting / approved / lapsed. */
+function birthdayFacts(b: BirthdayCompBlock | null): { label: string; key: string }[] {
+  if (!b) return []
+  return [
+    b.total > 0 && { label: daysText(b.total), key: 'bdc-total' },
+    b.available > 0 && { label: `${daysText(b.available)} to place`, key: 'bdc-available' },
+    b.held > 0 && { label: `${daysText(b.held)} waiting`, key: 'bdc-held' },
+    b.used > 0 && { label: `${daysText(b.used)} approved`, key: 'bdc-used' },
+    b.lapsed > 0 && { label: `${daysText(b.lapsed)} lapsed`, key: 'bdc-lapsed' },
+  ].filter((f): f is { label: string; key: string } => !!f)
+}
+
+/** The line under a worked birthday: what can be done now, or where its placements stand (the server's words). */
+function birthdayNote(b: BirthdayCompBlock | null, canPlace: boolean): { text: string; cls: string } | null {
+  if (canPlace) {
+    const by = shortDay(b?.lapsesOn)
+    return { text: `Choose the day${by ? ` by ${by}` : ''}: your Department Head, then HR, approve it.`, cls: 'text-brand-blue' }
+  }
+  if (b?.label) return { text: b.label, cls: b.state === 'lapsed' ? 'text-muted-foreground' : 'text-foreground/80' }
+  return null
 }

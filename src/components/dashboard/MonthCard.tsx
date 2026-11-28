@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { BarList, GlassCard, RingMeter, SectionHeader, SkeletonBlock, TONE_COLOR, staggerDelay, type Tone } from '@/components/kit'
 import { DAY_STATUS_LABEL, getDayMarkers } from '@/lib/attendance-flags'
 import { dayCountText, type MonthSnapshot } from '@/lib/home-attention'
+import { IN_PROGRESS_STATUS, displayStatus } from '@/lib/day-progress'
 import { useLastSevenDays } from '@/hooks/useLastSevenDays'
 import type { AttendanceDay, ShiftPolicy } from '@/types'
 import { cn } from '@/lib/utils'
@@ -15,6 +16,8 @@ const STATUS_TONE: Record<string, Tone> = {
   absent: 'rose',
   on_leave: 'sapphire',
   holiday: 'violet',
+  // Today while the shift is still running (lib/day-progress.ts): neutral with a live dot, no verdict yet.
+  [IN_PROGRESS_STATUS]: 'slate',
 }
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -90,7 +93,8 @@ export function MonthCard({
         <p className="label-caps mb-2 text-muted-foreground">Last 7 days</p>
         <ol className="grid grid-cols-7 gap-1.5" aria-label="Your last seven days">
           {last7.map(({ date: d, key, rec, isToday, state }, i) => {
-            const status = rec?.status ?? 'no_record'
+            const status = rec ? displayStatus(rec) : 'no_record'
+            const live = status === IN_PROGRESS_STATUS
             const tone = STATUS_TONE[status]
             // A last-month day whose month is still loading or could not be loaded: neutral, never "No record".
             const pending = state === 'loading' || state === 'unavailable'
@@ -131,6 +135,7 @@ export function MonthCard({
                       'size-3 rounded-full',
                       pending ? 'bg-foreground/15' : !tone && 'border border-dashed border-foreground/30',
                       flagged.length > 0 && 'ring-2 ring-warning ring-offset-1 ring-offset-card',
+                      live && 'pulse-ring text-muted-foreground',
                     )}
                     style={tone ? { backgroundColor: TONE_COLOR[tone] } : undefined}
                   />

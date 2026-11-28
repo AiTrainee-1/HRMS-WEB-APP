@@ -422,7 +422,7 @@ export default function Leave() {
 ## 10. Gotchas
 
 - `PageHero` reads the nav group for its eyebrow from the URL (`layout/nav-config.ts`). New nav labels (2026-10-31):
-  *My Department Head* (/employee/hod), *Outpass & Tea Break*, *Advances & Settlement*, *About UKTextiles*; groups
+  *My Department Head* (/employee/hod), *Outpass & Tea Break*, *Loan & Advance* (renamed 2026-11-28), *About UKTextiles*; groups
   *My day / Requests / Team / Pay / Me & company*. Breadcrumb and eyebrow follow automatically.
 - `useRequestViews` picks the opening view once; switching views keeps the user's choice across refetches.
 - `ui/tabs` `Tabs` is now a thin wrapper that tracks the value (for the sliding pill). API unchanged; `TabsTrigger` wraps

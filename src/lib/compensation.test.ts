@@ -432,8 +432,9 @@ describe('parseCompensation: self-claims', () => {
     assert.equal(extra.claimable, false)
     assert.equal(extra.suggestedShifts, 0.75)
     assert.deepEqual(extra.claim, { id: 77, kind: 'ot_shift', status: 'pending', statusLabel: 'Waiting', shifts: 0.5, minutes: null, raisedByRole: 'employee' })
-    assert.equal(birthday.claimKind, 'birthday')
-    assert.equal(birthday.claimable, true)
+    // A birthday credit is never claimable since 2026-11-25 (Birthday Compensation is placed on chosen dates instead).
+    assert.equal(birthday.claimKind, null)
+    assert.equal(birthday.claimable, false)
     assert.equal(birthday.overtimeRecordId, null)
   })
 
@@ -507,6 +508,48 @@ describe('parseCompensation: self-claims', () => {
     const p = parseCompensation({ isStaff: false, canClaim: true, useBalance: { allowed: true } })!
     assert.equal(p.canClaim, false)
     assert.equal(p.useBalance, null)
+  })
+
+  test('a worked birthday (2026-11-25): Birthday Compensation to place, never claimable, its block read', () => {
+    const p = parseCompensation({
+      isStaff: true,
+      canClaim: true,
+      items: [
+        {
+          key: 'bdc-2026-11-05',
+          kind: 'birthday_compensation',
+          group: 'birthday',
+          date: '2026-11-05',
+          title: 'Birthday Compensation: 1.00 day to place',
+          status: 'available',
+          statusLabel: '',
+          shifts: 1,
+          claimable: false,
+          claimKind: null,
+          canPlace: true,
+          birthdayCompensation: { state: 'available', label: 'To place', total: 1, held: '0.50', used: 0, available: 0.5, lapsed: -1, lapsesOn: '2026-11-30', windowOpen: true, uses: [] },
+        },
+        { key: 'bd-2026-10-20', kind: 'birthday', group: 'birthday', date: '2026-10-20', canPlace: true, birthdayCompensation: { state: 'x' } },
+      ],
+    })!
+    const [bdc, leave] = p.items
+    assert.equal(bdc.canPlace, true)
+    assert.equal(bdc.claimable, false)
+    assert.deepEqual(bdc.birthdayComp, { state: 'available', label: 'To place', total: 1, held: 0.5, used: 0, available: 0.5, lapsed: 0, lapsesOn: '2026-11-30' })
+    // Only the birthday_compensation kind carries these.
+    assert.equal(leave.canPlace, false)
+    assert.equal(leave.birthdayComp, null)
+    assert.deepEqual(kindInfo('birthday_compensation'), { label: 'Birthday compensation', symbol: 'cakeSlice', chip: 'chip-rose' })
+    assert.equal(filterOf({ kind: 'birthday_compensation' }), 'birthday')
+    assert.deepEqual(statusInfo({ status: 'placed', statusLabel: '' }), { label: 'Placed', chip: 'chip-success', live: false })
+    assert.equal(statusInfo({ status: 'lapsed', statusLabel: '' }).label, 'Lapsed')
+    // The birthday group says what a worked birthday gives now, whether or not the employee claims for themselves.
+    for (const canClaim of [true, false]) {
+      const g = groupItems(p.items, { canClaim }).find((x) => x.id === 'birthday')!
+      assert.equal(g.title, 'Birthday')
+      assert.match(g.hint, /1\.00 day of Birthday Compensation to place/)
+      assert.doesNotMatch(g.hint, /claim/)
+    }
   })
 
   test('group words change when the employee claims for themselves', () => {

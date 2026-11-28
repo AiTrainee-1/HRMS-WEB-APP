@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import { EASE_OUT, SkeletonBlock, useReducedMotion } from '@/components/kit'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
+import { InProgressNote } from '@/components/employee/InProgressNote'
+import { inProgressView } from '@/lib/day-progress'
 import { useMinuteNow } from '@/hooks/useHomeSources'
 import { dateKey } from '@/lib/home-attention'
 import {
@@ -105,6 +107,8 @@ export function PhoneTodayPanel({
   })
   const steps = punchTimeline(record?.punches, { shiftStart: start, shiftEnd: end })
   const dayOff = carried ? null : dayOffOf(record)
+  // Today while its shift is still running (owner 2026-11-26): "In progress", shifts "—", when it will be counted.
+  const dayProgress = carried ? null : inProgressView(record, now)
   const win = shiftWindow(start, end)
   const nowAxis = axisNow(nowMin, carried)
   const progress = win ? (carried ? shiftProgressAt(win, nowAxis) : shiftProgressToday(start, end, nowMin)) : null
@@ -149,6 +153,7 @@ export function PhoneTodayPanel({
             {presenceLineFor(steps, { dayOff, shiftStart: start, shiftEnd: end, nowMinutes: nowMin })}
           </p>
         )}
+        {!failed && !loading && dayProgress && <InProgressNote view={dayProgress} className="max-md:mt-2.5" />}
         {!failed && markers.length > 0 && <DayMarkerChips markers={markers} className="max-md:mt-2.5" />}
 
         {shift ? (

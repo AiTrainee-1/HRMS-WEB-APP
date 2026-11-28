@@ -107,7 +107,7 @@ function defaultLabel(t: Pick<NormalizedTarget, 'kind' | 'id' | 'date' | 'role' 
     case 'compensation':
       return 'View compensation'
     case 'advance':
-      return 'View advance'
+      return 'View Loan & Advance'
     case 'resignation':
       return 'View resignation'
     case 'chat':
@@ -207,11 +207,14 @@ const MY_REQUESTS_MODULE: Partial<Record<ApprovalCategory, string>> = { attendan
  *   salary_slip -> /employee/salary/<id> (the list without an id)
  *   compensation -> staff only; ?focus=hw-<claim id> (every compensation claim kind shares the Holiday-work table, so
  *                   "hw-<id>": the page finds it in the year timeline, else under Claims -> My claims) &date=
+ *                   A Birthday Compensation notice (notification `type` "birthday_compensation", 2026-11-25) names a
+ *                   placement, not a claim: ?tab=birthday&focus=bdcu-<use id> (the Birthday view's list)
  *   my_requests -> My Requests ?focus=<module>-<id> (category "attendance" -> "attendance_correction-<id>")
  *   request -> My Requests ?focus=request-<id>
  *   documents / id_card / resignation / chat / shift / holidays / profile -> the page
+ * `type` is the notification's own type (it tells a Birthday Compensation placement's id from a claim's).
  */
-export function targetLink(t: NormalizedTarget, viewer?: NotificationLinkViewer | null): NotificationTarget | null {
+export function targetLink(t: NormalizedTarget, viewer?: NotificationLinkViewer | null, type?: string | null): NotificationTarget | null {
   const label = t.label ?? defaultLabel(t)
 
   if (t.role === 'approver' || t.kind === 'approvals') {
@@ -235,6 +238,9 @@ export function targetLink(t: NormalizedTarget, viewer?: NotificationLinkViewer 
     case 'salary_slip':
       return { href: t.id ? `/employee/salary/${t.id}` : '/employee/salary', label }
     case 'compensation':
+      if (isBirthdayCompType(type)) {
+        return { href: withQuery('/employee/compensation?tab=birthday', { focus: t.id ? `bdcu-${t.id}` : null }), label }
+      }
       return { href: withQuery('/employee/compensation', { focus: t.id ? `hw-${t.id}` : null, date: t.date }), label }
     case 'my_requests':
     case 'request': {
@@ -269,6 +275,12 @@ export function targetOf(n: NotificationLike | null | undefined): NormalizedTarg
 export function notificationLink(n: NotificationLike, viewer?: NotificationLinkViewer | null): NotificationTarget | null {
   if (n.target === null) return null
   const t = normalizeTarget(n.target)
-  if (t) return targetLink(t, viewer)
+  if (t) return targetLink(t, viewer, n.type)
   return notificationTarget(n.type, viewer, n.message)
+}
+
+/** A Birthday Compensation notice (2026-11-25): the employee's step / decision notices and the head's "waiting for
+ *  your approval" all carry this type. */
+function isBirthdayCompType(type: string | null | undefined): boolean {
+  return typeof type === 'string' && type.trim().toLowerCase() === 'birthday_compensation'
 }

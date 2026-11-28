@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { normalizeTarget, notificationLink, targetLink, targetOf, withQuery, type NormalizedTarget } from './notification-target.ts'
+import { notificationKindTitle } from './notification-list.ts'
 
 const t = (over: Partial<NormalizedTarget>): NormalizedTarget => ({
   kind: 'leave',
@@ -222,5 +223,48 @@ describe('enquiry (2026-11-24)', () => {
 
   test('an older server without a target: the type still opens the page', () => {
     assert.deepEqual(notificationLink({ type: 'enquiry', message: 'HR replied.' }), { href: '/employee/enquiries', label: 'View enquiry' })
+  })
+})
+
+describe('Birthday Compensation (2026-11-25)', () => {
+  test('the head asked to decide one: Approvals, its own category', () => {
+    // notification_targets.py: type birthday_compensation + "waiting for your approval" -> approver, no id
+    const n = {
+      type: 'birthday_compensation',
+      message: "Comp BDC1's Birthday Compensation (first half of Tuesday 3 Mar 2026) is waiting for your approval.",
+      target: { kind: 'approvals', id: null, date: null, role: 'approver', category: 'birthday_compensation', label: 'Open approvals' },
+    }
+    assert.deepEqual(notificationLink(n, { isManager: true }), { href: '/employee/approvals?category=birthday_compensation', label: 'Open approvals' })
+    assert.equal(notificationLink(n, { isManager: false }), null)
+    // With an id (a reminder for one placement): that row is focused.
+    assert.equal(
+      notificationLink({ ...n, target: { ...n.target, id: 14 } }, { isManager: true })?.href,
+      '/employee/approvals?category=birthday_compensation&focus=14',
+    )
+  })
+
+  test('the employee\'s own notice opens the Birthday view; a decision names the placement, not a claim', () => {
+    // The WhatsApp decision ("wa:approval:birthday_compensation:<use id>:approved") -> kind compensation, id = the use.
+    const decided = { type: 'birthday_compensation', message: 'Request Approved', target: { kind: 'compensation', id: 9, date: '2026-03-03', role: 'self', label: 'View compensation' } }
+    assert.deepEqual(notificationLink(decided, { isStaff: true }), { href: '/employee/compensation?tab=birthday&focus=bdcu-9', label: 'View compensation' })
+    // The step notice (after the head approved) and HR's "placed for you": no id.
+    const step = { type: 'birthday_compensation', message: 'Approved by your Department Head', target: { kind: 'compensation', id: null, role: 'self' } }
+    assert.equal(notificationLink(step)?.href, '/employee/compensation?tab=birthday')
+    // A compensation CLAIM keeps its "hw-<id>" link.
+    assert.equal(notificationLink({ ...decided, type: 'compensation' })?.href, '/employee/compensation?focus=hw-9&date=2026-03-03')
+    // Compensation is for staff.
+    assert.equal(notificationLink(decided, { isStaff: false }), null)
+  })
+
+  test('an older server without a target, and the words', () => {
+    assert.deepEqual(notificationLink({ type: 'birthday_compensation', message: 'Approved by your Department Head' }), {
+      href: '/employee/compensation?tab=birthday',
+      label: 'View birthday compensation',
+    })
+    assert.equal(
+      notificationLink({ type: 'birthday_compensation', message: 'It is waiting for your approval.' }, { isManager: true })?.href,
+      '/employee/approvals',
+    )
+    assert.equal(notificationKindTitle('birthday_compensation'), 'Birthday compensation')
   })
 })

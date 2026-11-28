@@ -4,6 +4,8 @@ import { Clock, Coffee, DoorOpen, Fingerprint, Home, LogIn, LogOut, MapPin, Rota
 import { Button } from '@/components/ui/button'
 import { GlassCard, SkeletonBlock, StatusPill, EASE_OUT, TONE_SOFT, useReducedMotion, type Tone } from '@/components/kit'
 import { DayMarkerChips } from '@/components/employee/DayMarkerChips'
+import { InProgressNote } from '@/components/employee/InProgressNote'
+import type { InProgressView } from '@/lib/day-progress'
 import { useMinuteNow } from '@/hooks/useHomeSources'
 import { minutesOf, presenceLine, punchStory, shiftProgress, to12h, type PunchKind, type PunchStep } from '@/lib/home-punches'
 import type { DayMarkerHit } from '@/lib/attendance-flags'
@@ -50,11 +52,14 @@ export function TodayPanel({
   punches,
   shift,
   markers,
+  dayProgress = null,
   loading,
 }: {
   punches: AttendancePunch[]
   shift: AssignedShift | null | undefined
   markers: DayMarkerHit[]
+  /** Today while its shift is still running (lib/day-progress.ts): "In progress", shifts "—", when it is counted. */
+  dayProgress?: InProgressView | null
   loading: boolean
 }) {
   const now = useMinuteNow()
@@ -122,6 +127,7 @@ export function TodayPanel({
           ) : (
             !loading && <p className="text-[13px] text-muted-foreground">No shift is assigned to you yet.</p>
           )}
+          {!loading && dayProgress && <InProgressNote view={dayProgress} />}
           <DayMarkerChips markers={markers} />
         </div>
 

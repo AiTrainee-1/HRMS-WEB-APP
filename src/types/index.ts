@@ -9,6 +9,8 @@ export type ApprovalRole = 'hod' | 'hr'
 export type ApprovalWorkflowKey =
   | 'leave' | 'permission' | 'casual_leave' | 'missing_punch' | 'on_duty' | 'on_duty_punch'
   | 'attendance_correction' | 'outpass' | 'request' | 'resignation' | 'advance' | 'holiday_work'
+  // Birthday Compensation placed on a chosen date (2026-11-25): Employee or HR -> HOD -> HR, fixed.
+  | 'birthday_compensation'
 export type ApprovalStepState = 'approved' | 'skipped' | 'pending' | 'waiting' | 'rejected'
 
 export interface ApprovalStep {
@@ -470,6 +472,11 @@ export interface DayLateFlags {
   compensationMinutes?: number | null
   // One plain sentence from the server explaining the marker.
   compensationNote?: string | null
+  // 2026-11-26: TODAY's day is still open (the shift is running, so the server's Present / 1 shift is provisional and
+  // judged again after the shift's end + grace). Absent on an older server; read through lib/day-progress.ts.
+  inProgress?: boolean | null
+  // When that day is judged again (ISO datetime with offset), or null.
+  provisionalUntil?: string | null
 }
 
 // ── HR attendance edits (owner 2026-11-02) ──
@@ -710,22 +717,6 @@ export interface Holiday {
   description?: string
 }
 
-// One row per advance/loan — the backend has no single "final settlement"
-// concept, it's a list of Advance records (self-scoped to the caller).
-export interface Advance {
-  id: string
-  advanceType: string
-  amount: number
-  purpose?: string
-  status: string
-  approvedAt?: string | null
-  disbursedAt?: string | null
-  emiAmount: number
-  totalRepaid: number
-  outstanding: number
-  createdAt: string
-}
-
 export interface ManagerFlags {
   isManager: boolean
   canApproveLeaves?: boolean
@@ -735,10 +726,13 @@ export interface ManagerFlags {
   canApproveResignations?: boolean
   canApproveOnDuty?: boolean
   canApproveMissingPunch?: boolean
-  /** Compensation claims of every kind (raised by HR or by the employee; the Department Head approves). Absent on an older backend. */
+  /** Compensation claims of every kind (raised by HR or by the employee; the Department Head approves), and Birthday
+   * Compensation placements (2026-11-25; the head first, then HR). Absent on an older backend. */
   canApproveCompensation?: boolean
   /** Already inside pendingApprovalsCount. */
   pendingCompensationCount?: number
+  /** Birthday Compensation placements waiting for this head (2026-11-25). Already inside pendingApprovalsCount. */
+  pendingBirthdayCompensationCount?: number
   pendingApprovalsCount: number
   /** The pipelines in force, same shape as GET /approval-summary; absent on an older backend. */
   approvalWorkflows?: ApprovalSummary
@@ -854,6 +848,9 @@ export interface PendingRequestsResponse {
   casualLeaves: PendingCasualLeaveRequest[]
   /** Absent on an older backend; empty when the head's "approve compensation" switch is off. */
   holidayWorkClaims?: PendingHolidayWorkClaim[]
+  /** Birthday Compensation placements this head can decide now (2026-11-25; read by lib/birthday-compensation.ts
+   * parseUse). Absent on an older backend; empty when the "approve compensation" switch is off. */
+  birthdayCompensationUses?: Record<string, unknown>[]
   onDutySessions: PendingOnDutySession[]
   missingPunchRequests: PendingMissingPunchRequest[]
   outpassRequests: PendingOutpassRequest[]

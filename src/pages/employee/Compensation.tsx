@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useSearch } from 'wouter'
-import { CalendarClock, Hand, HandCoins, History, Info, MessageCircleQuestion, RefreshCw, Sparkles, UserCheck, Wallet } from 'lucide-react'
+import { CakeSlice, CalendarClock, Hand, HandCoins, History, Info, MessageCircleQuestion, RefreshCw, Sparkles, UserCheck, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   EmptyState,
@@ -25,8 +25,11 @@ import {
   SourceFilterChips,
 } from '@/components/pay/CompensationParts'
 import { ClaimDialog, ClaimsPanel, ClaimsReadyBanner, UseBalanceDialog } from '@/components/pay/CompensationClaims'
+import { BirthdayPanel, BirthdayReadyBanner, PlaceBirthdayDialog } from '@/components/pay/BirthdayCompensation'
 import { useCompensation } from '@/hooks/useCompensation'
 import { useMyCompensationClaims } from '@/hooks/useCompensationClaims'
+import { useBirthdayEntitlement, useBirthdayUses } from '@/hooks/useBirthdayCompensation'
+import { bdcReady } from '@/lib/birthday-compensation'
 import { useFocusItem } from '@/hooks/useFocusItem'
 import { useCompensationHistory } from '@/hooks/usePayCompensation'
 import { STAFF_ONLY_MESSAGE, type CompensationItem, type CompensationPayload } from '@/lib/compensation'
@@ -37,16 +40,28 @@ import { dayText } from '@/lib/my-requests'
 import { formatINR } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
-type Mode = 'year' | 'recent' | 'claims' | 'ask'
+type Mode = 'year' | 'recent' | 'claims' | 'birthday' | 'ask'
+
+/** The view a link opens: ?tab=claims / ?tab=birthday, else the year timeline. */
+function modeFromSearch(search: string): Mode {
+  const tab = new URLSearchParams(search).get('tab')
+  return tab === 'claims' || tab === 'birthday' ? tab : 'year'
+}
 
 export default function Compensation() {
   // A notification's View button opens ?focus=hw-<claim id> (a compensation claim: every kind shares the Holiday-work
   // table, hence "hw-") and/or ?date=<the day>: the year of that day, the item scrolled to and ringed; a claim the year
   // timeline does not list (an overtime or birthday claim, a day off from the balance) is looked for under Claims.
-  // ?tab=claims opens the Claims view.
+  // ?tab=claims opens the Claims view; ?tab=birthday the Birthday view, where ?focus=bdcu-<use id> (a Birthday
+  // Compensation placement, 2026-11-25) is looked for.
   const search = useSearch()
   const focusParams = React.useMemo(() => readFocusParams(search), [search])
-  const [mode, setMode] = React.useState<Mode>(() => (new URLSearchParams(search).get('tab') === 'claims' ? 'claims' : 'year'))
+  const [mode, setMode] = React.useState<Mode>(() => modeFromSearch(search))
+  // A link followed while the page is already open (a notification's View) still opens the view it names.
+  const linkedMode = modeFromSearch(search)
+  React.useEffect(() => {
+    if (linkedMode !== 'year') setMode(linkedMode)
+  }, [linkedMode])
   const [year, setYear] = React.useState<number | null>(() => (focusParams.date ? Number(focusParams.date.slice(0, 4)) : null))
   const [filter, setFilter] = React.useState<SourceFilter>('all')
   const history = useCompensationHistory(year)
@@ -62,8 +77,6 @@ export default function Compensation() {
   const onClaim = canClaim ? setClaimItem : undefined
   const onUse = canClaim ? () => setUseOpen(true) : undefined
   const readyCount = claimableItems(r).length
-  // The Claims view needs the server's say-so; while the 90-day answer loads it waits, without it it falls back.
-  const shownMode: Mode = mode === 'claims' && r && !canClaim ? 'year' : mode
 
   // The years stay pickable even when one year fails to load.
   const [years, setYears] = React.useState<number[]>([])
@@ -71,6 +84,26 @@ export default function Compensation() {
   const shownYear = year ?? h?.year ?? years[0]
 
   const notStaff = h?.isStaff === false || r?.isStaff === false
+
+  // Birthday Compensation on a chosen date (2026-11-25): this year's birthday, every placement, "Use my birthday day".
+  // `data` null = a server without the routes: no Birthday view.
+  const birthdayLink = !!focusParams.focus?.startsWith('bdcu-')
+  const bday = useBirthdayEntitlement(!notStaff)
+  const bdayOn = !!bday.data && bday.data.isStaff
+  const bdayUses = useBirthdayUses(!notStaff && (mode === 'birthday' || birthdayLink))
+  const [placeOpen, setPlaceOpen] = React.useState(false)
+  // A worked birthday's item (and the banner) opens the Birthday view, and the day picker straight away when it can be placed.
+  const onPlace = bdayOn
+    ? () => {
+        setMode('birthday')
+        if (bdcReady(bday.data)) setPlaceOpen(true)
+      }
+    : undefined
+
+  // The Claims view needs the server's say-so; while the 90-day answer loads it waits, without it it falls back. The
+  // Birthday view likewise needs the server's birthday routes.
+  const shownMode: Mode =
+    (mode === 'claims' && r && !canClaim) || (mode === 'birthday' && (bday.data === null || bday.data?.isStaff === false)) ? 'year' : mode
   const staffMessage = h?.message ?? r?.message ?? STAFF_ONLY_MESSAGE
   const balanceShifts = h?.balance?.shifts ?? r?.balanceShifts ?? 0
   const switching = history.isFetching && history.isPlaceholderData
@@ -86,7 +119,8 @@ export default function Compensation() {
     rows: h && !history.isPlaceholderData ? h.items : undefined,
     idOf: (i) => i.key,
     dateOf: (i) => i.workDate ?? i.date,
-    enabled: !notStaff,
+    // A Birthday Compensation placement is never in the timeline: it is looked for in the Birthday view (below).
+    enabled: !notStaff && !birthdayLink,
     reveal: () => {
       setMode('year')
       setFilter('all')
@@ -109,8 +143,17 @@ export default function Compensation() {
     enabled: claimFallback,
     reveal: () => setMode('claims'),
   })
+  // A Birthday Compensation placement (?focus=bdcu-<id>): the Birthday view's list, scrolled to and ringed.
+  const birthdayFocus = useFocusItem({
+    scope: 'bdc',
+    rows: birthdayLink && bdayUses.data ? bdayUses.data : undefined,
+    idOf: (u) => u.key,
+    enabled: birthdayLink && !notStaff,
+    reveal: () => setMode('birthday'),
+  })
   const showMissing =
-    focus.missing && !recent.isPending && !claimFocus.found && (!claimFallback || claimFocus.missing || (claimsQuery.isError && !claimsQuery.data))
+    (focus.missing && !recent.isPending && !claimFocus.found && (!claimFallback || claimFocus.missing || (claimsQuery.isError && !claimsQuery.data))) ||
+    birthdayFocus.missing
 
   const counts = sourceCounts(h?.items ?? [])
   const groups = h ? groupByMonth(h.items, h.otPayByMonth, filter) : []
@@ -148,6 +191,8 @@ export default function Compensation() {
                   void history.refetch()
                   void recent.refetch()
                   if (canClaim) void claimsQuery.refetch()
+                  void bday.refetch()
+                  if (mode === 'birthday' || birthdayLink) void bdayUses.refetch()
                 }}
                 disabled={history.isFetching || recent.isFetching}
               >
@@ -194,6 +239,7 @@ export default function Compensation() {
               { value: 'year', label: 'Year timeline', icon: History },
               { value: 'recent', label: 'Last 90 days', icon: CalendarClock },
               ...(canClaim || shownMode === 'claims' ? [{ value: 'claims' as const, label: 'Claims', icon: Hand }] : []),
+              ...(bdayOn || shownMode === 'birthday' ? [{ value: 'birthday' as const, label: 'Birthday', icon: CakeSlice }] : []),
               { value: 'ask', label: 'Ask HR', icon: MessageCircleQuestion },
             ]}
           />
@@ -204,6 +250,7 @@ export default function Compensation() {
             onDismiss={() => {
               focus.dismiss()
               claimFocus.dismiss()
+              birthdayFocus.dismiss()
             }}
           >
             {focus.missingBy === 'date' && focus.requested
@@ -214,6 +261,8 @@ export default function Compensation() {
 
         {/* Something to claim (self-claims): a way to the Claims view from every other view. */}
         {!notStaff && canClaim && shownMode !== 'claims' && <ClaimsReadyBanner count={readyCount} onOpen={() => setMode('claims')} />}
+        {/* Birthday Compensation to place (2026-11-25): a way to the day picker from every other view. */}
+        {!notStaff && bdayOn && shownMode !== 'birthday' && <BirthdayReadyBanner ent={bday.data} onOpen={() => onPlace?.()} />}
 
         {/* Time-sensitive (today's / next working day's allowance, features switched off): on top in every view. */}
         {!notStaff && r && <CompensationAlerts payload={r} />}
@@ -221,7 +270,9 @@ export default function Compensation() {
         {notStaff ? null : shownMode === 'ask' ? (
           <AskHrPanel payload={r} onOpenClaims={canClaim ? () => setMode('claims') : undefined} />
         ) : shownMode === 'recent' ? (
-          <RecentPanel query={recent} onAsk={() => setMode('ask')} onClaim={onClaim} />
+          <RecentPanel query={recent} onAsk={() => setMode('ask')} onClaim={onClaim} onPlace={onPlace} />
+        ) : shownMode === 'birthday' ? (
+          <BirthdayPanel entQuery={bday} usesQuery={bdayUses} onPlace={() => setPlaceOpen(true)} />
         ) : shownMode === 'claims' ? (
           r ? (
             <ClaimsPanel payload={r} claimsQuery={claimsQuery} onClaim={setClaimItem} onUseBalance={() => setUseOpen(true)} />
@@ -236,7 +287,7 @@ export default function Compensation() {
             {years.length > 0 && shownYear != null && <YearPicker years={years} value={shownYear} onChange={setYear} ariaLabel="Show the year" />}
             <ErrorState error={history.error} what="your compensation for this year" onRetry={() => history.refetch()} retrying={history.isFetching} />
             <SectionHeader icon={CalendarClock} title="Your last 90 days" description="While the year cannot load, here is what the last 90 days hold." />
-            <RecentPanel query={recent} onAsk={() => setMode('ask')} onClaim={onClaim} />
+            <RecentPanel query={recent} onAsk={() => setMode('ask')} onClaim={onClaim} onPlace={onPlace} />
           </div>
         ) : !h ? (
           <SkeletonList variant="cards" count={3} label="Loading your compensation" />
@@ -286,7 +337,7 @@ export default function Compensation() {
                 />
               ) : (
                 // Keyed by the filter too, so a new filter replays the months' entrance (capped stagger).
-                groups.map((g, i) => <MonthSection key={`${filter}-${h.year}-${g.month}`} group={g} index={i} onClaim={onClaim} />)
+                groups.map((g, i) => <MonthSection key={`${filter}-${h.year}-${g.month}`} group={g} index={i} onClaim={onClaim} onPlace={onPlace} />)
               )}
             </section>
           </div>
@@ -296,6 +347,8 @@ export default function Compensation() {
       {/* Self-claims: claim one item; ask to use the balance (both go to the Department Head). */}
       <ClaimDialog item={claimItem} onClose={() => setClaimItem(null)} />
       <UseBalanceDialog open={useOpen} onOpenChange={setUseOpen} payload={r} />
+      {/* Birthday Compensation: the day, the part, a reason (the Department Head, then HR, approve it). */}
+      <PlaceBirthdayDialog open={placeOpen} onOpenChange={setPlaceOpen} ent={bday.data} />
     </>
   )
 }
@@ -304,10 +357,12 @@ function RecentPanel({
   query,
   onAsk,
   onClaim,
+  onPlace,
 }: {
   query: ReturnType<typeof useCompensation>
   onAsk: () => void
   onClaim?: (item: CompensationItem) => void
+  onPlace?: (item: CompensationItem) => void
 }) {
   const payload: CompensationPayload | undefined = query.data
   if (query.isPending) return <SkeletonList variant="cards" count={3} label="Loading the last 90 days" />
@@ -319,7 +374,7 @@ function RecentPanel({
       {query.isError && (
         <ErrorState title="Could not refresh" error={query.error} what="your compensation" onRetry={() => query.refetch()} retrying={query.isFetching} compact />
       )}
-      <RecentCompensation payload={payload} onAsk={onAsk} onClaim={onClaim} />
+      <RecentCompensation payload={payload} onAsk={onAsk} onClaim={onClaim} onPlace={onPlace} />
     </div>
   )
 }

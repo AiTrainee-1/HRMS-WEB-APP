@@ -1,4 +1,4 @@
-import { Bed, Cake, Gift, HandCoins, Hourglass, PartyPopper, Sunrise, Sunset, Timer, type LucideIcon } from 'lucide-react'
+import { Bed, Cake, CakeSlice, Gift, HandCoins, Hourglass, PartyPopper, Sunrise, Sunset, Timer, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MarkerSymbolName } from '@/lib/attendance-flags'
 
@@ -7,6 +7,7 @@ const SYMBOLS: Record<MarkerSymbolName, LucideIcon> = {
   sunrise: Sunrise,
   sunset: Sunset,
   cake: Cake,
+  cakeSlice: CakeSlice,
   bed: Bed,
   hourglass: Hourglass,
   handCoins: HandCoins,

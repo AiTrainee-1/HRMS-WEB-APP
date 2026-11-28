@@ -19,6 +19,8 @@ import {
   type ApprovalStatus,
 } from '@/lib/approvals-history'
 import {
+  birthdayFacts,
+  birthdayUse,
   claimFacts,
   empCode,
   empDepartment,
@@ -31,6 +33,7 @@ import {
   onDutyPunches,
 } from '@/lib/approvals-items'
 import { describeClaim } from '@/lib/holiday-work'
+import { placementApproveText } from '@/lib/birthday-compensation'
 import { REJECT_REMARK_MIN, cleanRejectRemark, rejectRemarkProblem } from '@/lib/reject-remark'
 import { cn } from '@/lib/utils'
 import type { PendingHolidayWorkClaim } from '@/types'
@@ -126,7 +129,9 @@ export function DecisionDialog({
   const first = name.split(/\s+/)[0]
   // A compensation claim says what approving does (adds to the balance / applies the allowance / takes the day off).
   const claimView = item && category === 'holiday_work' ? describeClaim(item as unknown as PendingHolidayWorkClaim) : null
-  const effect = claimView?.approveText ?? approveEffect(approval, 'hod')
+  // Birthday Compensation: HR decides after the head, then the day (or half) is paid like a Casual Leave.
+  const birthdayEffect = item && category === 'birthday_compensation' ? placementApproveText(birthdayUse(item)) : null
+  const effect = claimView?.approveText ?? birthdayEffect ?? approveEffect(approval, 'hod')
   const meta = CATEGORY_META[category]
   const Icon = meta.icon
   const journeyId = item && category === 'on_duty' ? onDutyJourneyId(item) : null
@@ -184,6 +189,8 @@ export function DecisionDialog({
         ['Waiting', pending && item.createdAt ? (waitingFor(item.createdAt, now)?.replace(/^Waiting /, '') ?? null) : null],
         // A compensation claim: who raised it (the employee or HR), the overtime times, the allowance, the shifts.
         ...(category === 'holiday_work' ? claimFacts(item) : []),
+        // Birthday Compensation: who placed it, the birthday, the day and the part.
+        ...(category === 'birthday_compensation' ? birthdayFacts(item) : []),
       ]
     : []
 

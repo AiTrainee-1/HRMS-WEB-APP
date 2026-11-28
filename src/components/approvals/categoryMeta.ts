@@ -1,4 +1,5 @@
 import {
+  CakeSlice,
   CalendarCheck,
   CalendarClock,
   DoorOpen,
@@ -24,6 +25,7 @@ export const CATEGORY_META: Record<ApprovalCategory, { icon: LucideIcon; tone: T
   on_duty: { icon: MapPin, tone: 'sapphire' },
   outpass: { icon: DoorOpen, tone: 'slate' },
   holiday_work: { icon: HandCoins, tone: 'violet' },
+  birthday_compensation: { icon: CakeSlice, tone: 'violet' },
   resignation: { icon: FileSignature, tone: 'rose' },
 }
 

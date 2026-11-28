@@ -1,6 +1,8 @@
 // Compensation self-claims (2026-11-19): the employee claims what the system found for them (Sunday / holiday work, a
-// late-in allowance, extra hours, a worked birthday) and asks to use their balance as a day off; their Department Head
-// approves each one. The server (backend/api/employee_compensation_views.py + compensation_claims.py):
+// late-in allowance, extra hours) and asks to use their balance as a day off; their Department Head approves each one.
+// A worked birthday is no longer a credit to claim (2026-11-25): it gives Birthday Compensation to place on chosen dates
+// (lib/birthday-compensation.ts); birthday claims raised before that stay readable here.
+// The server (backend/api/employee_compensation_views.py + compensation_claims.py):
 //
 //   GET    /employee/compensation                 items carry claimable / claimKind / claim / suggestedShifts; the
 //                                                 payload carries canClaim, claimWindowDays, useBalance (lib/compensation.ts)
@@ -111,7 +113,7 @@ export interface ClaimDraft {
   choices: number[]
   /** The pick to start with (null without a picker). */
   defaultShifts: number | null
-  /** The amount when there is nothing to pick (a birthday: 1.00), else null. */
+  /** The amount when there is nothing to pick, else null (no kind has one since birthday credits ended, 2026-11-25). */
   fixedShifts: number | null
   /** The allowance minutes (ot_allowance). */
   minutes: number | null
@@ -129,7 +131,7 @@ export interface ClaimDraft {
  *   ot_shift      pick 0.25 .. the suggested credit (the quarters rule), never above it; starting AT it. Without a
  *                 suggestion there is no picker and the server works the shifts out
  *   ot_allowance  no shifts: the allowance minutes apply on the next working day once approved
- *   birthday      one full shift, nothing to pick
+ * A worked birthday is never claimed (2026-11-25): its Birthday Compensation is placed on chosen dates instead.
  */
 export function claimDraft(item: CompensationItem): ClaimDraft | null {
   const kind = item.claimKind
@@ -184,16 +186,8 @@ export function claimDraft(item: CompensationItem): ClaimDraft | null {
         effect: `Once your Department Head approves it, you may arrive up to ${formatMinutes(minutes) || 'the allowance'} later on your next working day after ${day} without being marked late.`,
       }
     }
-    case 'birthday':
-      return {
-        ...base,
-        choices: [],
-        defaultShifts: null,
-        fixedShifts: 1,
-        what: `You worked on your birthday, ${day}`,
-        effect: adds(formatShifts(1)),
-      }
   }
+  return null
 }
 
 export interface ClaimBody {

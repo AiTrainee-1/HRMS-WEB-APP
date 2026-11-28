@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { COMPENSATION_MARKER, DAY_STATUS_LABEL, getDayMarkers } from '@/lib/attendance-flags'
 import { useReducedMotion } from '@/components/kit'
+import { IN_PROGRESS_STATUS, displayStatus } from '@/lib/day-progress'
 import type { AttendanceDay, ShiftPolicy } from '@/types'
 
 // Horizontal gap between markers stacked on one bar (a bar is ~18 units wide).
@@ -14,6 +15,8 @@ const STATUS_FILL: Record<string, string> = {
   holiday: 'var(--brand-violet)',
   future: 'var(--muted-foreground)',
   no_record: 'var(--muted-foreground)',
+  // Today while the shift is still running (lib/day-progress.ts): neutral, no verdict yet.
+  [IN_PROGRESS_STATUS]: 'var(--muted-foreground)',
 }
 
 // Phones (< 768px): the same hues as the phone calendar (the mobile app's DAY_TONES solids). A CSS fill beats the SVG
@@ -34,6 +37,7 @@ const STATUS_HEIGHT_RATIO: Record<string, number> = {
   holiday: 0.3,
   future: 0.06,
   no_record: 0.06,
+  [IN_PROGRESS_STATUS]: 0.5,
 }
 
 /** One bar per day of the month (already fetched for the calendar, so no extra request): tall = present, half = half
@@ -49,11 +53,13 @@ export function AttendanceTrendChart({ records, policy }: { records: AttendanceD
     return <p className="py-6 text-center text-sm text-muted-foreground">No attendance for this month yet.</p>
   }
 
+  const statusOf = (r: AttendanceDay) => displayStatus(r)
   const counts = records.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] ?? 0) + 1
+    const s = statusOf(r)
+    acc[s] = (acc[s] ?? 0) + 1
     return acc
   }, {})
-  const summary = (['present', 'half_shift', 'absent', 'on_leave', 'holiday'] as const)
+  const summary = (['present', 'half_shift', 'absent', 'on_leave', 'holiday', IN_PROGRESS_STATUS] as const)
     .filter((s) => counts[s])
     .map((s) => `${counts[s]} ${DAY_STATUS_LABEL[s].toLowerCase()}`)
     .join(', ')
@@ -71,7 +77,8 @@ export function AttendanceTrendChart({ records, policy }: { records: AttendanceD
         aria-label={`Days this month: ${summary || 'nothing recorded yet'}`}
       >
         {records.map((r, i) => {
-          const ratio = STATUS_HEIGHT_RATIO[r.status] ?? 0.06
+          const status = statusOf(r)
+          const ratio = STATUS_HEIGHT_RATIO[status] ?? 0.06
           const barH = Math.max(3, chartH * ratio - 8)
           const x = i * (barW + gap)
           const y = chartH - barH
@@ -79,12 +86,12 @@ export function AttendanceTrendChart({ records, policy }: { records: AttendanceD
           return (
             <g key={r.date}>
               <motion.rect
-                className={PHONE_FILL[r.status]}
+                className={PHONE_FILL[status]}
                 x={x}
                 width={barW}
                 rx={2}
-                fill={STATUS_FILL[r.status] ?? 'var(--muted-foreground)'}
-                fillOpacity={r.status === 'future' || r.status === 'no_record' ? 0.3 : 0.9}
+                fill={STATUS_FILL[status] ?? 'var(--muted-foreground)'}
+                fillOpacity={status === 'future' || status === 'no_record' ? 0.3 : status === IN_PROGRESS_STATUS ? 0.45 : 0.9}
                 initial={reduced ? false : { height: 0, y: chartH }}
                 animate={{ height: barH, y }}
                 transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: reduced ? 0 : Math.min(i, 31) * 0.012 }}

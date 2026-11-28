@@ -13,6 +13,7 @@ import { MonthYearPicker, PhoneMonthBar } from '@/components/employee/MonthYearP
 import { AttendanceCalendarGrid } from '@/components/employee/AttendanceCalendarGrid'
 import { AttendanceTrendChart } from '@/components/employee/AttendanceTrendChart'
 import { DayDetailPanel } from '@/components/employee/DayDetailPanel'
+import { settledSummary } from '@/lib/day-progress'
 import { GeoPunchCard } from '@/components/employee/GeoPunchCard'
 import { FocusMissNote } from '@/components/requests/FocusMissNote'
 import { attendanceApi, casualLeaveApi } from '@/api/resources'
@@ -82,7 +83,8 @@ export default function Attendance() {
     staleTime: 5 * 60_000,
   })
 
-  const summary = data?.summary
+  // Today's day while its shift is still running is not counted until it is final (lib/day-progress.ts).
+  const summary = settledSummary(data?.summary, data?.records)
   const clEligible = eligibility ? isCasualLeaveEligible(eligibility) : false
   // 2026-11-02: the Casual Leave yearly balance (12 a year, resets on 1 Jan); null on an older server.
   const clBalance = eligibility && eligibility.rule !== 'one_per_month' ? readBalance(eligibility.balance) : null

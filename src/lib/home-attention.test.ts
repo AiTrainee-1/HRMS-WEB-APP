@@ -165,7 +165,7 @@ describe('advances', () => {
   })
   test('open window', () => {
     const row = advanceAttention(readAdvanceEligibility(reply()))!
-    assert.equal(row.title, 'Advance & loan applications are open')
+    assert.equal(row.title, 'Loan & Advance applications are open')
     assert.equal(row.detail, 'Open until 5 Nov')
     assert.equal(row.tone, 'money')
   })
@@ -191,6 +191,13 @@ describe('advances', () => {
     assert.equal(advanceAttention(readAdvanceEligibility(reply({ workflowEnabled: false }))), null)
     assert.equal(advanceAttention(readAdvanceEligibility(reply({ salaryAdvance: null, termLoan: null }))), null)
     assert.equal(readAdvanceEligibility({}), null)
+  })
+  test('a production employee (applyAvailable false, 2026-11-28) never gets the row; an older server is unchanged', () => {
+    assert.equal(readAdvanceEligibility(reply())!.applyAvailable, true)
+    const prod = readAdvanceEligibility(reply({ applyAvailable: false, applyUnavailableReason: 'Loan & Advance is for staff on a monthly salary.' }))!
+    assert.equal(prod.applyAvailable, false)
+    assert.equal(advanceAttention(prod), null)
+    assert.ok(advanceAttention(readAdvanceEligibility(reply({ applyAvailable: true }))))
   })
 })
 
@@ -286,6 +293,21 @@ describe('month snapshot', () => {
     assert.equal(s.leaveDays, 1)
     assert.equal(s.attendancePercent, 38)
     assert.equal(monthSnapshot([], '2026-10-31').attendancePercent, null)
+  })
+  test("today's day still in progress is not counted until it is final (2026-11-26)", () => {
+    const now = new Date('2026-11-26T06:00:00Z')
+    const records = [
+      { date: '2026-11-25', status: 'present' },
+      { date: '2026-11-26', status: 'present', firstPunch: '09:06', inProgress: true, provisionalUntil: '2026-11-26T18:10:00+05:30' },
+    ]
+    const s = monthSnapshot(records, '2026-11-26', now)
+    assert.equal(s.workingDays, 1)
+    assert.equal(s.presentDays, 1)
+    assert.equal(s.attendancePercent, 100)
+    // once the server has judged it, it counts
+    const final = monthSnapshot([records[0], { ...records[1], inProgress: false }], '2026-11-26', now)
+    assert.equal(final.workingDays, 2)
+    assert.equal(final.presentDays, 2)
   })
   test('dayCountText', () => {
     assert.equal(dayCountText(21), '21')

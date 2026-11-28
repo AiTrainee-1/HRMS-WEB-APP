@@ -1,16 +1,20 @@
 // Withdraw one of my own requests while it still waits for an answer (owner 2026-11-24): Leave, Permission and Casual
-// Leave only. POST /my/requests/<module>/<id>/withdraw (backend api/mobile_withdraw_views.py) removes the request; the
-// server refuses (409 code "not_pending") once it was fully decided, and 404 for a request that is not the caller's.
+// Leave; since 2026-11-26 also a Salary Advance / Term Loan application (module "advance", shown as "Delete request" on
+// the application's details while it is still with HR: `canWithdraw` of the application, lib/advances.ts).
+// POST /my/requests/<module>/<id>/withdraw (backend api/mobile_withdraw_views.py) removes the request; the server
+// refuses (409 code "not_pending") once it was fully decided, an advance HR forwarded for approval (409 "in_workflow")
+// or raised itself (409 "recorded_by_hr"), and 404 for a request that is not the caller's.
 // On-Duty, missing punch and outpass are deliberately NOT withdrawable; Compensation claims have their own withdraw.
 // Pure, no imports: unit-tested in withdraw.test.ts. The mobile app has the same rules (src/hooks/useWithdraw.ts).
 
-export type WithdrawModule = 'leave' | 'permission' | 'casual_leave'
+export type WithdrawModule = 'leave' | 'permission' | 'casual_leave' | 'advance'
 
 /** What the request is called in the question and the confirmation ("Your leave request was withdrawn."). */
 export const WITHDRAW_WHAT: Record<WithdrawModule, string> = {
   leave: 'leave request',
   permission: 'permission request',
   casual_leave: 'Casual Leave request',
+  advance: 'advance application',
 }
 
 /** A request in this state may be withdrawn: still waiting at any step (the server says "pending" until the final decision). */
@@ -32,9 +36,10 @@ export function showWithdraw(row: { id: unknown; status: unknown; source?: unkno
   return canWithdraw(row.status) && withdrawId(row.id) !== null && row.source !== 'hr_edit'
 }
 
-/** The question's sentence under "Withdraw this request?". */
+/** The question's sentence under "Withdraw this request?" ("Delete this request?" for an advance application). */
 export function withdrawQuestion(module: WithdrawModule, label?: string | null): string {
   const what = label?.trim() || WITHDRAW_WHAT[module]
+  if (module === 'advance') return `Your ${what} will be deleted and HR will not be asked to decide it. You can apply again later.`
   return `Your ${what} will be taken back and nobody will be asked to decide it. You can apply again later.`
 }
 
@@ -43,6 +48,15 @@ export function withdrawDoneText(module: WithdrawModule, result: unknown): strin
   const message = typeof result === 'object' && result !== null ? (result as { message?: unknown }).message : null
   if (typeof message === 'string' && message.trim()) return message.trim()
   return `Your ${WITHDRAW_WHAT[module]} was withdrawn.`
+}
+
+/**
+ * A refusal that will not change on a retry: 409 (decided meanwhile `not_pending`, raised by HR `recorded_by_hr`, or - an
+ * advance application - forwarded for approval `in_workflow`, 2026-11-26) or 404 (gone). The screen then shows the
+ * server's sentence where the button was and asks the lists again, so the button disappears.
+ */
+export function isFinalWithdrawRefusal(err: { status?: number } | null | undefined): boolean {
+  return err?.status === 409 || err?.status === 404
 }
 
 /**

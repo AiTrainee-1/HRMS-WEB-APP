@@ -44,7 +44,8 @@ import { phoneChipClass, phoneCountClass } from './phone'
 
 const errorText = (err: unknown, fallback: string) => claimErrorText(err instanceof ApiError ? err : null, fallback)
 
-/** The item kind whose chip and symbol a claim kind borrows (a birthday claim looks like the birthday credit it is for). */
+/** The item kind whose chip and symbol a claim kind borrows (an older birthday claim, from before Birthday Compensation
+ *  replaced it on 2026-11-25, looks like the birthday credit it is for). */
 const CLAIM_ITEM_KIND: Record<string, string> = { birthday: 'birthday_credit' }
 
 // ---- the "ready to claim" note at the top of the page -------------------------------------------------------------
@@ -603,7 +604,7 @@ export function ClaimsPanel({
               icon={Hand}
               tone="emerald"
               title="Nothing to claim right now"
-              description="When you work past your shift end, on a Sunday or a company holiday, or on your birthday, it shows up here to claim."
+              description="When you work past your shift end, or on a Sunday or a company holiday, it shows up here to claim. A worked birthday is not claimed: place its day under Birthday."
             />
           ) : (
             ready.map((item, i) => (

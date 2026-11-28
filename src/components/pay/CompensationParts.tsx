@@ -38,7 +38,7 @@ import { phoneChipClass, phoneCountClass } from './phone'
 /** What the balance is and who can use it: HR only (an older backend), or the employee too (self-claims, `canClaim`). */
 function balanceMeaning(canClaim: boolean | undefined): string {
   return canClaim
-    ? 'Shifts credited to you for approved claims (extra hours, Sunday / holiday work, a worked birthday), less the days off already taken from it. Use it with "Use my balance": your Department Head approves.'
+    ? 'Shifts credited to you for approved claims (extra hours, Sunday / holiday work), less the days off already taken from it. Use it with "Use my balance": your Department Head approves. A worked birthday is not added here: it is placed on a day of your birthday month (Birthday).'
     : 'Shifts credited to you (mainly from approved Sunday / holiday work), less the compensation days HR already gave you. Only HR can use your balance: ask HR to give you the day.'
 }
 
@@ -204,7 +204,18 @@ export function SourceFilterChips({
 
 /** One month of the year timeline: a month marker on the thread, the overtime pay (linking to its slip), the items.
  *  Phones: the app's month block - a dot, the month, the count at the right, the cards on a thin rail. */
-export function MonthSection({ group, index, onClaim }: { group: MonthGroup; index: number; onClaim?: (item: CompensationItem) => void }) {
+export function MonthSection({
+  group,
+  index,
+  onClaim,
+  onPlace,
+}: {
+  group: MonthGroup
+  index: number
+  onClaim?: (item: CompensationItem) => void
+  /** A worked birthday's "Use my birthday day" (2026-11-25). */
+  onPlace?: (item: CompensationItem) => void
+}) {
   const id = `comp-month-${group.month}`
   const n = group.items.length
   return (
@@ -250,7 +261,7 @@ export function MonthSection({ group, index, onClaim }: { group: MonthGroup; ind
         {/* Each item can be pointed at by a link (?focus=<item key>, e.g. "hw-2421": useFocusItem scope "comp"). */}
         {group.items.map((item) => (
           <div key={item.key} data-focus-key={focusKey('comp', item.key)}>
-            <CompensationItemCard item={item} source={item.source} onClaim={onClaim} />
+            <CompensationItemCard item={item} source={item.source} onClaim={onClaim} onPlace={onPlace} />
           </div>
         ))}
       </div>
@@ -359,11 +370,14 @@ export function RecentCompensation({
   payload,
   onAsk,
   onClaim,
+  onPlace,
 }: {
   payload: CompensationPayload
   onAsk?: () => void
   /** Self-claims: the Claim button on claimable items (only passed while the server says `canClaim`). */
   onClaim?: (item: CompensationItem) => void
+  /** A worked birthday's "Use my birthday day" (2026-11-25). */
+  onPlace?: (item: CompensationItem) => void
 }) {
   const [filter, setFilter] = React.useState<CompensationFilterId>('all')
   const options = filterOptions(payload.items)
@@ -380,7 +394,7 @@ export function RecentCompensation({
           title="Nothing in the last 90 days"
           description={
             payload.canClaim
-              ? 'When you work past your shift end, on a Sunday or a company holiday, or on your birthday, it shows up here to claim. If you think something is missing, ask HR.'
+              ? 'When you work past your shift end, or on a Sunday or a company holiday, it shows up here to claim; a worked birthday shows up with its Birthday Compensation to place. If you think something is missing, ask HR.'
               : 'When you work past your shift end, or on a Sunday or a company holiday, it shows up here. If you think something is missing, ask HR.'
           }
           action={
@@ -421,7 +435,7 @@ export function RecentCompensation({
               <SectionHeader id={`comp-group-${group.id}`} as="h3" title={group.title} count={group.items.length} description={group.hint} />
               {group.items.map((item, i) => (
                 <motion.div key={item.key} {...listItem(i)}>
-                  <CompensationItemCard item={item} onClaim={onClaim} />
+                  <CompensationItemCard item={item} onClaim={onClaim} onPlace={onPlace} />
                 </motion.div>
               ))}
             </section>

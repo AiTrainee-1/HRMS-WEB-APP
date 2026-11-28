@@ -16,6 +16,7 @@ import {
   compensationLine, countEarlyOuts, dayHeadline, earlyOutShown, getDayFlags, getDayMarkers, halfDayRule, lateInShown,
 } from '@/lib/attendance-flags'
 import { minutesOf, to12h } from '@/lib/home-punches'
+import { isDayInProgress, settledDays } from '@/lib/day-progress'
 import { dayCountText } from '@/lib/home-attention'
 import { useEmploymentType } from '@/hooks/useEmploymentType'
 import { cn } from '@/lib/utils'
@@ -115,7 +116,8 @@ export default function MyShift() {
           {/* Phones: the app's "This Month's Summary" card (the desktop KPI row's figures). */}
           <PhoneMonthSummary
             items={[
-              { key: 'present', label: 'Present', value: data.dailyLogs.filter((d) => !!d.firstPunch).length, icon: CheckCircle2, tone: 'max-md:bg-approved-bg max-md:text-approved' },
+              // Today's day while its shift is still running is not counted until it is final (lib/day-progress.ts).
+              { key: 'present', label: 'Present', value: settledDays(data.dailyLogs).filter((d) => !!d.firstPunch).length, icon: CheckCircle2, tone: 'max-md:bg-approved-bg max-md:text-approved' },
               { key: 'absent', label: 'Absent', value: data.absentCount, icon: XCircle, tone: 'max-md:bg-rejected-bg max-md:text-rejected' },
               ...(showLateIn
                 ? [{ key: 'late', label: 'Days flagged late', value: data.lateCount, icon: Timer, tone: 'max-md:bg-waiting-bg max-md:text-waiting' }]
@@ -155,13 +157,15 @@ export default function MyShift() {
                         {data.dailyLogs.map((log) => {
                           const reason = getDayFlags(log).lateReason
                           const comp = compensationLine(log)
+                          // Today, its shift still running: a neutral live "In progress", never a final verdict.
+                          const live = isDayInProgress(log)
                           return (
                             <tr key={log.date} className="border-b hairline transition-colors last:border-b-0 hover:bg-foreground/[0.03]">
                               <td className="px-4 py-3 font-medium whitespace-nowrap">{format(parseISO(log.date), 'EEE, d MMM')}</td>
                               <td className="px-4 py-3 tabular-nums">{log.firstPunch ? to12h(log.firstPunch) : '—'}</td>
                               <td className="px-4 py-3 tabular-nums">{log.lastPunch ? to12h(log.lastPunch) : '—'}</td>
                               <td className="px-4 py-3">
-                                <StatusPill size="sm" tone={STATUS_TONE[log.status] ?? 'neutral'} icon={false} dot={false}>
+                                <StatusPill size="sm" tone={live ? 'neutral' : (STATUS_TONE[log.status] ?? 'neutral')} icon={false} dot={live}>
                                   {dayHeadline(log)}
                                 </StatusPill>
                               </td>
@@ -356,7 +360,8 @@ function PhoneDayRows({ logs, policy }: { logs: ShiftDailyLog[]; policy: ShiftPo
           const d = parseISO(log.date)
           const today = log.date === todayKey
           const markers = getDayMarkers(log, policy)
-          const flagged = markers.length > 0 && (log.status === 'present' || log.status === 'half_shift')
+          const live = isDayInProgress(log, now)
+          const flagged = !live && markers.length > 0 && (log.status === 'present' || log.status === 'half_shift')
           const reason = getDayFlags(log).lateReason
           const comp = compensationLine(log)
           return (
@@ -391,9 +396,14 @@ function PhoneDayRows({ logs, policy }: { logs: ShiftDailyLog[]; policy: ShiftPo
               <span
                 className={cn(
                   'max-md:max-w-[38%] max-md:shrink-0 max-md:truncate max-md:rounded-full max-md:px-[9px] max-md:py-1 max-md:text-[10px] max-md:font-[800]',
-                  flagged ? 'max-md:bg-waiting-bg max-md:text-waiting' : (DAY_PILL[log.status] ?? 'max-md:bg-card max-md:text-muted-foreground'),
+                  live
+                    ? 'max-md:inline-flex max-md:items-center max-md:gap-1 max-md:bg-neutral-bg max-md:text-neutral'
+                    : flagged
+                      ? 'max-md:bg-waiting-bg max-md:text-waiting'
+                      : (DAY_PILL[log.status] ?? 'max-md:bg-card max-md:text-muted-foreground'),
                 )}
               >
+                {live && <span className="pulse-ring max-md:size-1.5 max-md:shrink-0 max-md:rounded-full max-md:bg-current" aria-hidden="true" />}
                 {flagged ? markers[0].label : dayHeadline(log)}
               </span>
             </li>

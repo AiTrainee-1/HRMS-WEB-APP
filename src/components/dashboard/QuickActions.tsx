@@ -17,6 +17,9 @@ interface Action {
   icon: LucideIcon
   tone: Tone
   staffOnly?: boolean
+  /** An applying entry (Loan & Advance): left out when this employee cannot apply (owner 2026-11-28: a production
+   *  employee keeps the page in the menu for the history, but gets no apply quick action). */
+  applying?: boolean
 }
 
 const ACTIONS: Action[] = [
@@ -27,7 +30,7 @@ const ACTIONS: Action[] = [
   { label: 'Missing Punch', hint: 'Fix a missed punch', href: '/employee/missing-punch', icon: Fingerprint, tone: 'rose' },
   { label: 'Outpass', hint: 'Step out with a QR', href: '/employee/outpass', icon: DoorOpen, tone: 'sapphire' },
   { label: 'Salary Slips', hint: 'Month by month', href: '/employee/salary', icon: Wallet, tone: 'emerald' },
-  { label: 'Advances & Loans', hint: 'Apply and repayments', href: '/employee/settlement', icon: HandCoins, tone: 'amber' },
+  { label: 'Loan & Advance', hint: 'Apply and repayments', href: '/employee/settlement', icon: HandCoins, tone: 'amber', applying: true },
   { label: 'Documents', hint: 'Your HR records', href: '/employee/documents', icon: FolderOpen, tone: 'slate' },
   { label: 'Digital ID', hint: 'Show at the gate', href: '/employee/id-card', icon: BadgeCheck, tone: 'sapphire' },
   { label: 'Holidays', hint: 'This year', href: '/employee/holidays', icon: PartyPopper, tone: 'violet' },
@@ -35,9 +38,20 @@ const ACTIONS: Action[] = [
   { label: 'Enquiries', hint: 'Ask HR a question', href: '/employee/enquiries', icon: MessageCircleQuestion, tone: 'sapphire' },
 ]
 
-/** The things people open most, one click each. Casual Leave only for staff; Manager Approvals for heads (with a count). */
-export function QuickActions({ isStaff, isManager, pendingApprovals }: { isStaff: boolean; isManager: boolean; pendingApprovals: number }) {
-  const list: (Action & { badge?: number })[] = ACTIONS.filter((a) => !a.staffOnly || isStaff)
+/** The things people open most, one click each. Casual Leave only for staff; Manager Approvals for heads (with a count);
+ *  Loan & Advance not when `applyHidden` (an employee who cannot apply). */
+export function QuickActions({
+  isStaff,
+  isManager,
+  pendingApprovals,
+  applyHidden = false,
+}: {
+  isStaff: boolean
+  isManager: boolean
+  pendingApprovals: number
+  applyHidden?: boolean
+}) {
+  const list: (Action & { badge?: number })[] = ACTIONS.filter((a) => (!a.staffOnly || isStaff) && (!a.applying || !applyHidden))
   if (isManager) {
     list.unshift({
       label: 'Manager Approvals',
@@ -106,6 +120,8 @@ interface PhoneAction {
   /** Left out for a production employee, as in the app (its Apply Leave / Permission tiles are `staffOnly`); shown while
    * the profile is still loading. */
   notForProduction?: boolean
+  /** An applying entry (Loan & Advance): left out when this employee cannot apply (`applyHidden`, owner 2026-11-28). */
+  applying?: boolean
 }
 
 const PHONE_ACTIONS: PhoneAction[] = [
@@ -120,7 +136,7 @@ const PHONE_ACTIONS: PhoneAction[] = [
   { label: 'Attendance', href: '/employee/attendance', icon: CalendarCheck, color: '#059669', bg: '#ECFDF5' },
   { label: 'Attendance Request', href: '/employee/attendance-request', icon: MapPin, color: '#0369A1', bg: '#DBEAFE' },
   { label: 'My Shift', href: '/employee/shift', icon: Clock, color: '#E67E22', bg: '#FDEEE3' },
-  { label: 'Advances', href: '/employee/settlement', icon: Landmark, color: '#7F8C8D', bg: '#F1F5F9' },
+  { label: 'Loan & Advance', href: '/employee/settlement', icon: Landmark, color: '#7F8C8D', bg: '#F1F5F9', notForProduction: true, applying: true },
   { label: 'Digital ID Card', href: '/employee/id-card', icon: IdCard, color: '#2C3E50', bg: '#F1F5F9' },
   { label: 'My Documents', href: '/employee/documents', icon: Folder, color: '#00897B', bg: '#E1F4F2' },
   { label: 'Holidays', href: '/employee/holidays', icon: Flag, color: '#C0392B', bg: '#FFF1F2' },
@@ -138,9 +154,19 @@ const PHONE_ACTIONS: PhoneAction[] = [
 /** First tiles visible, like the app (two rows of three). */
 const PHONE_VISIBLE = 6
 
-export function QuickActionsPhone({ isStaff, isProduction }: { isStaff: boolean; isProduction: boolean }) {
+export function QuickActionsPhone({
+  isStaff,
+  isProduction,
+  applyHidden = false,
+}: {
+  isStaff: boolean
+  isProduction: boolean
+  applyHidden?: boolean
+}) {
   const [showAll, setShowAll] = React.useState(false)
-  const list = PHONE_ACTIONS.filter((a) => (!a.staffOnly || isStaff) && (!a.notForProduction || !isProduction))
+  const list = PHONE_ACTIONS.filter(
+    (a) => (!a.staffOnly || isStaff) && (!a.notForProduction || !isProduction) && (!a.applying || !applyHidden),
+  )
   const visible = showAll ? list : list.slice(0, PHONE_VISIBLE)
   return (
     <section aria-labelledby="m-quick-title" className="hidden max-md:mb-[18px] max-md:block">

@@ -270,7 +270,7 @@ header (`header` + `backBtn`), the web page shows the same title/subtitle in Pag
 | Salary | `app/salary/index.tsx` (+ `SalarySlipCard`) | "Salary Slips" / "What you were given, what you earned, what you lost"; year chips; charts; "All salary slips" list title; slip cards. |
 | SalaryDetail | `app/salary/[id].tsx` | Month title + subtitle; sections "Changed by HR after this slip", "Earnings on the slip", "Deductions & Recoveries", "How your pay was worked out". |
 | Compensation | `app/compensation/index.tsx` | Title + "Everything detected for you and given by HR"; one section per kind with its cards. |
-| Settlement | `app/settlement/index.tsx`, `apply.tsx`, `[id].tsx` (+ `settlement/RecordCard`) | "Advances & Loans" / "Salary Advance · Term Loan"; "My applications" list (figure labels 10.5px uppercase muted); apply and details as sheets / sections. |
+| Settlement | `app/settlement/index.tsx`, `apply.tsx`, `[id].tsx` (+ `settlement/RecordCard`) | "Loan & Advance" (both apps, 2026-11-28) / "Salary Advance · Term Loan"; "My applications" list (figure labels 10.5px uppercase muted); apply and details as sheets / sections. |
 | Documents | `app/documents/index.tsx` (+ `DocumentCategoryCard`, `documents/*`) | Gradient hero card (avatar, name, meta, "Private to you" lock, stat row with dividers incl. "Last added"); Save / Share tip banner; stale banner; category cards. |
 | IdCard | `app/idcard/index.tsx` (+ `idcard/*`) | "Digital ID Card" / "Show this when someone asks for your ID"; title row with the UKT mark; warning line; the flip card full width; hint under it. |
 | Holidays | `app/holidays/index.tsx` | "Company Holidays" / "Annual Holiday Calendar"; month-grouped holiday cards. |
@@ -290,7 +290,7 @@ header (`header` + `backBtn`), the web page shows the same title/subtitle in Pag
   `matchMedia('(width < 48rem)')` matches) would match the app; it is a behaviour change, so phase A did not make it.
 - **Drawer labels.** The app's words where the page is the same page (Home, Permissions, Salary Slips, Digital ID Card,
   My Documents, Notifications, My Profile ...); the web's 2026-10-31 labels where the web page differs or was renamed
-  (Geo Punch / On-Duty, Outpass & Tea Break, My Department Head, Advances & Settlement, About UKTextiles). One file:
+  (Geo Punch / On-Duty, Outpass & Tea Break, My Department Head, Loan & Advance, About UKTextiles). One file:
   `layout/mobile/phone-nav.ts`.
 - **SectionHeader on phones** follows the app's real section titles (16px semibold, mixed case). The app's small
   uppercase label exists too (Profile "SECURITY & ACCOUNT", drawer groups) - use `label-caps` for that.

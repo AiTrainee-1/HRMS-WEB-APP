@@ -7,7 +7,7 @@
 // early-out times, compensation days), plus the overtime pay each month's salary slip paid. This file reads that reply
 // defensively and groups it; every figure and sentence is the server's.
 
-import { formatMinutes, formatShifts, isoDateOrNull, parseClaimFields, type CompensationItem } from './compensation.ts'
+import { formatMinutes, formatShifts, isoDateOrNull, parseBirthdayCompFields, parseClaimFields, type CompensationItem } from './compensation.ts'
 import { formatINR } from './money.ts'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -82,18 +82,25 @@ function prettify(value: string): string {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : ''
 }
 
+/** Kinds HR never gives, whatever `source` says: Birthday Compensation is earned by working the birthday and placed by the
+ *  employee (2026-11-25; the server's year timeline does not know the kind yet and tags it "hr"). */
+const NEVER_FROM_HR = new Set(['birthday_compensation'])
+
 function readItem(raw: unknown, index: number): HistoryItem | null {
   if (!isObject(raw)) return null
   const kind = str(raw.kind)
   const status = str(raw.status)
   const rawSource = str(raw.source)
-  const source: Source = (SOURCES as string[]).includes(rawSource) ? (rawSource as Source) : 'hr'
+  const known: Source = (SOURCES as string[]).includes(rawSource) ? (rawSource as Source) : 'hr'
+  const source: Source = NEVER_FROM_HR.has(kind) && known === 'hr' ? 'automatic' : known
   const date = isoDateOrNull(raw.date)
   const month = str(raw.month)
   const key = str(raw.key) || `item-${index}`
   return {
     // Self-claim keys (2026-11-19): only if the server ever sends them here too; absent = not claimable.
     ...parseClaimFields(raw, kind, key),
+    // A worked birthday's Birthday Compensation (2026-11-25): whether it can be placed now, and where its 1.00 day stands.
+    ...parseBirthdayCompFields(raw, kind),
     key,
     kind,
     group: str(raw.group) || 'other',
@@ -112,7 +119,7 @@ function readItem(raw: unknown, index: number): HistoryItem | null {
     time: str(raw.time) || null,
     source,
     sourceLabel: SOURCE_LABELS[source],
-    givenByHr: typeof raw.givenByHr === 'boolean' ? raw.givenByHr : source !== 'automatic',
+    givenByHr: source !== known ? false : typeof raw.givenByHr === 'boolean' ? raw.givenByHr : source !== 'automatic',
   }
 }
 

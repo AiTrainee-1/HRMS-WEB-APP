@@ -25,14 +25,19 @@ export type CompensationKind =
   | 'window_early_out'
   | 'birthday'
   | 'birthday_credit'
+  | 'birthday_compensation'
   | 'use_balance'
   | 'compensation_day'
   | 'balance_credit'
   | 'alternative_day'
 
-/** What an employee may claim themselves (POST /employee/compensation/claims `kind`). */
-export type ClaimKind = 'holiday_work' | 'ot_allowance' | 'ot_shift' | 'birthday'
-export const CLAIM_KINDS: readonly ClaimKind[] = ['holiday_work', 'ot_allowance', 'ot_shift', 'birthday']
+/**
+ * What an employee may claim themselves (POST /employee/compensation/claims `kind`). A worked birthday is no longer
+ * claimed as a credit (2026-11-25, 400 use_birthday_compensation): it gives Birthday Compensation to place on chosen
+ * dates (lib/birthday-compensation.ts). Old birthday claims stay readable (MyClaim.kind is a plain string).
+ */
+export type ClaimKind = 'holiday_work' | 'ot_allowance' | 'ot_shift'
+export const CLAIM_KINDS: readonly ClaimKind[] = ['holiday_work', 'ot_allowance', 'ot_shift']
 
 /** The claim an item already has (the latest one), as GET /employee/compensation sends it on each item. */
 export interface ItemClaim {
@@ -80,6 +85,25 @@ export interface CompensationItem {
   suggestedShifts: number | null
   /** The overtime record an ot_allowance / ot_shift item is about (`overtimeRecordId`, else read from the key "ot-<id>"). */
   overtimeRecordId: number | null
+  /** A worked birthday (kind birthday_compensation): there is Birthday Compensation to place now. Always false elsewhere. */
+  canPlace: boolean
+  /** A worked birthday (kind birthday_compensation): where its 1.00 day stands; null elsewhere. */
+  birthdayComp: BirthdayCompBlock | null
+}
+
+/** The `birthdayCompensation` block of a worked birthday's item (2026-11-25). */
+export interface BirthdayCompBlock {
+  /** available | placed | lapsed | credit_claim (anything else is drawn generically) */
+  state: string
+  /** "Placed: 3 Mar (first half, approved), 16 Mar (second half, pending)" */
+  label: string
+  total: number
+  held: number
+  used: number
+  available: number
+  lapsed: number
+  /** 'YYYY-MM-DD': what is not placed by then lapses. */
+  lapsesOn: string | null
 }
 
 /** Asking to use the balance as a day off (POST /employee/compensation/use): what the server allows right now. */
@@ -210,7 +234,6 @@ const CLAIM_KIND_OF_ITEM: Record<string, ClaimKind> = {
   holiday_work: 'holiday_work',
   ot_allowance: 'ot_allowance',
   ot_shift: 'ot_shift',
-  birthday_credit: 'birthday',
 }
 
 function parseItemClaim(raw: unknown): ItemClaim | null {
@@ -248,6 +271,33 @@ export function parseClaimFields(raw: Record<string, unknown>, kind: string, key
   }
 }
 
+export type BirthdayCompFields = Pick<CompensationItem, 'canPlace' | 'birthdayComp'>
+
+/**
+ * A worked birthday's keys (kind birthday_compensation, key "bdc-<birthday>", 2026-11-25): `canPlace` and the
+ * `birthdayCompensation` block. Every other item (and an older backend): not placeable, no block.
+ */
+export function parseBirthdayCompFields(raw: Record<string, unknown>, kind: string): BirthdayCompFields {
+  if (kind !== 'birthday_compensation') return { canPlace: false, birthdayComp: null }
+  const b = isObject(raw.birthdayCompensation) ? raw.birthdayCompensation : null
+  const n = (v: unknown) => Math.max(0, numberOrNull(v) ?? 0)
+  return {
+    canPlace: raw.canPlace === true,
+    birthdayComp: b
+      ? {
+          state: text(b.state),
+          label: text(b.label),
+          total: n(b.total),
+          held: n(b.held),
+          used: n(b.used),
+          available: n(b.available),
+          lapsed: n(b.lapsed),
+          lapsesOn: isoDateOrNull(b.lapsesOn),
+        }
+      : null,
+  }
+}
+
 function parseUseBalance(raw: unknown, balance: number): UseBalanceInfo | null {
   if (!isObject(raw)) return null
   const balanceShifts = numberOrNull(raw.balanceShifts) ?? balance
@@ -270,6 +320,7 @@ function parseItem(raw: unknown): CompensationItem | null {
   const key = text(raw.key) || `${kind}-${date ?? 'undated'}`
   return {
     ...parseClaimFields(raw, kind, key),
+    ...parseBirthdayCompFields(raw, kind),
     key,
     kind,
     group: text(raw.group) || 'other',
@@ -404,8 +455,12 @@ const KIND_INFO: Record<CompensationKind, KindInfo> = {
   window_late_in: { label: 'Company late-in time', symbol: 'sunrise', chip: 'chip-sky' },
   window_early_out: { label: 'Company early-out time', symbol: 'sunset', chip: 'chip-indigo' },
   birthday: { label: 'Birthday leave', symbol: 'cake', chip: 'chip-pink' },
-  // A birthday the employee worked (present or half day): one shift to claim (2026-11-19 birthday rule).
+  // A birthday the employee worked (present or half day): one shift to claim (2026-11-19 birthday rule; only the claims
+  // raised before 2026-11-25 still show it).
   birthday_credit: { label: 'Birthday credit', symbol: 'cake', chip: 'chip-pink' },
+  // A birthday the employee worked (2026-11-25): 1.00 day to place on days of the birthday month (the attendance
+  // calendar's "Birthday compensation" marker has the same colour and symbol).
+  birthday_compensation: { label: 'Birthday compensation', symbol: 'cakeSlice', chip: 'chip-rose' },
   use_balance: { label: 'Day off from balance', symbol: 'bed', chip: 'chip-fuchsia' },
   // Only the year timeline (GET /my/compensation-history) sends these three.
   compensation_day: { label: 'Compensation day', symbol: 'party', chip: 'chip-teal' },
@@ -458,6 +513,9 @@ const STATUS_LABEL: Record<string, string> = {
   claim_pending: 'Claim waiting for your Department Head',
   claim_approved: 'Claim approved',
   claim_rejected: 'Claim not approved',
+  // Birthday Compensation (2026-11-25).
+  placed: 'Placed',
+  lapsed: 'Lapsed',
 }
 
 const STATUS_CHIP: Record<string, string> = {
@@ -483,6 +541,8 @@ const STATUS_CHIP: Record<string, string> = {
   not_used: 'chip-muted',
   not_applicable: 'chip-muted',
   auto: 'chip-muted',
+  placed: 'chip-success',
+  lapsed: 'chip-muted',
 }
 
 const LIVE_STATUSES = new Set(['pending', 'pending_hod', 'detected', 'upcoming', 'today', 'scheduled', 'claimable', 'claim_pending'])
@@ -628,9 +688,15 @@ const SELF_CLAIM_GROUPS: Record<string, { title: string; hint: string }> = {
   },
   birthday: {
     title: 'Birthday',
-    hint: 'Absent or on leave on your birthday: a paid birthday leave. Worked on your birthday: one shift you can claim.',
+    hint: 'Absent or on leave on your birthday: a paid birthday leave. Worked on your birthday: 1.00 day of Birthday Compensation to place on days of your birthday month.',
   },
   balance: { title: 'Compensation days taken', hint: 'Days off taken from your compensation balance.' },
+}
+
+/** The birthday group once it holds a worked birthday's Birthday Compensation (whatever `canClaim` says). */
+const BIRTHDAY_COMP_GROUP = {
+  title: 'Birthday',
+  hint: 'Absent or on leave on your birthday: a paid birthday leave. Worked on your birthday: 1.00 day of Birthday Compensation to place on days of your birthday month; your Department Head, then HR, approve it.',
 }
 
 /** Newest date first, undated last; stable for equal dates (the server's own order is kept). */
@@ -652,11 +718,11 @@ export function sortNewestFirst(items: CompensationItem[]): CompensationItem[] {
  */
 export function groupItems(items: CompensationItem[], opts: { canClaim?: boolean } = {}): ItemGroup[] {
   const known = new Set(GROUPS.map((g) => g.id))
-  const out: ItemGroup[] = GROUPS.map((g) => ({
-    ...g,
-    ...(opts.canClaim ? own(SELF_CLAIM_GROUPS, g.id) : undefined),
-    items: sortNewestFirst(items.filter((i) => i.group === g.id)),
-  }))
+  const out: ItemGroup[] = GROUPS.map((g) => {
+    const list = sortNewestFirst(items.filter((i) => i.group === g.id))
+    const words = g.id === 'birthday' && list.some((i) => i.kind === 'birthday_compensation') ? BIRTHDAY_COMP_GROUP : undefined
+    return { ...g, ...(opts.canClaim ? own(SELF_CLAIM_GROUPS, g.id) : undefined), ...words, items: list }
+  })
   out.push({ ...OTHER_GROUP, items: sortNewestFirst(items.filter((i) => !known.has(i.group))) })
   return out.filter((g) => g.items.length > 0)
 }
@@ -671,7 +737,7 @@ const FILTERS: { id: Exclude<CompensationFilterId, 'all' | 'other'>; label: stri
   { id: 'holiday_work', label: 'Sunday / holiday work', kinds: ['holiday_work'] },
   { id: 'redemption', label: 'Days taken', kinds: ['redemption', 'use_balance'] },
   { id: 'window', label: 'Company times', kinds: ['window_late_in', 'window_early_out'] },
-  { id: 'birthday', label: 'Birthday', kinds: ['birthday', 'birthday_credit'] },
+  { id: 'birthday', label: 'Birthday', kinds: ['birthday', 'birthday_credit', 'birthday_compensation'] },
 ]
 
 const KNOWN_KINDS = new Set(FILTERS.flatMap((f) => f.kinds))
